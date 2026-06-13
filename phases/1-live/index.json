@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-06-13T23:29:41+0900",
       "summary": "/meeting 자리표시를 실제 룸으로 교체. page.tsx(RSC: getSession+getActiveSession+members 주입)·loading.tsx(룸 스켈레톤) + components/live: live-room.tsx('use client' 섬 — 빈 상태+[라이브 시작], 발표자 뷰=송출 자격증명(복사 버튼, 본인만)+[라이브 종료](확인 다이얼로그), 시청자 뷰=join→HLS+[나가기], 409→입장 안내, 참가자 목록 색+텍스트)·hls-player.tsx(네이티브 HLS/hls.js 동적 import, URL 부재·실패 graceful). live는 useLive() 전역만(화면 미보관). live-banner를 /meeting 링크로 연결. hls.js 의존성 추가. 테스트 신규 5종(RTL 4: 빈/발표자/시청자/409 + HlsPlayer graceful 1)·E2E 1종. 키 없이 build/test/lint/E2E 통과.",
-      "completed_at": "2026-06-13T23:40:00+0900"
+      "completed_at": "2026-06-13T23:40:17+0900"
     }
   ],
   "created_at": "2026-06-13T23:17:44+0900"
