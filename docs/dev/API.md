@@ -45,6 +45,7 @@
 | POST | `/api/papers/:id/notes` | 섹션 노트 추가 `{sectionId, lens, title, body}` | 🔒 |
 | DELETE | `/api/notes/:id` | 노트 삭제 | ✍️ |
 | POST | `/api/papers/:id/reanalyze` | 분석 재시도(실패/대기 시) | 🔒 |
+| DELETE | `/api/papers/:id` | 논문 삭제(분석·figure·노트·원문 PDF 정리) | ✍️ |
 
 - **CRITICAL: 업로드는 `application/pdf`만 허용.** 그 외 Content-Type → `415`. arXiv URL은 서버가 PDF를 가져온다.
 - **CRITICAL: 업로드 성공과 분석 성공을 분리한다.** `POST /api/papers`는 분석이 실패해도 `Paper`를 저장하고 `analysisStatus: pending|failed`로 응답한다. UI는 논문을 열고 분석 섹션만 재시도 상태로 보인다(→ [`./ENV.md`](./ENV.md), [`../design/SCREENS.md`](../design/SCREENS.md)). 원문 PDF 다운로드는 분석 상태와 무관하게 동작.
@@ -60,6 +61,7 @@
 | POST | `/api/presentations/:id/comments` | 댓글 작성 `{body, slide?}` | 🔒 |
 | POST | `/api/comments/:id/reactions` | 반응 토글 `{emoji}` | 🔒 |
 | DELETE | `/api/comments/:id` | 댓글 삭제 | ✍️ |
+| DELETE | `/api/presentations/:id` | 발표 자료 삭제(에셋·버전·댓글 정리) | ✍️ |
 
 - `@멘션`은 본문 파싱으로 추출 → 알림 트리거(→ [`../agent/ISSUES.md`](../agent/ISSUES.md) 알림 채널 미결).
 
