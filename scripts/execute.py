@@ -236,10 +236,13 @@ class StepExecutor:
             print(f"  ERROR: {step_file} not found")
             sys.exit(1)
 
-        prompt = preamble + step_file.read_text()
+        prompt = preamble + step_file.read_text(encoding="utf-8")
+        # 프롬프트는 stdin으로 전달한다. CLI 인자로 넘기면 가드레일(CLAUDE.md+docs)이 커서
+        # Windows CreateProcess 인자 길이 한계(~32K)를 넘어 WinError 206이 난다.
         result = subprocess.run(
-            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
-            cwd=self._root, capture_output=True, text=True, timeout=1800,
+            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json"],
+            cwd=self._root, capture_output=True, text=True, encoding="utf-8",
+            timeout=1800, input=prompt,
         )
 
         if result.returncode != 0:
@@ -253,7 +256,7 @@ class StepExecutor:
             "stdout": result.stdout, "stderr": result.stderr,
         }
         out_path = self._phase_dir / f"step{step_num}-output.json"
-        with open(out_path, "w") as f:
+        with open(out_path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
         return output

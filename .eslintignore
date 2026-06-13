@@ -1,0 +1,6 @@
+src/
+scripts/
+phases/
+docs/
+node_modules/
+.next/

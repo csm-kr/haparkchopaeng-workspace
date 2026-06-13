@@ -1,0 +1,10 @@
+// 모델은 step3(db-schema)에서 추가한다. 여기서는 datasource/generator 골격만 둔다.
+// SQLite 시작, Postgres 이전 경로 유지 (ADR-010).
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}

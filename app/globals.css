@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/*
+ * 디자인 토큰 진입점 — 메커니즘만 (전체 토큰 이식은 step1: design-system).
+ * 라이트/다크는 [data-theme] 오버라이드만으로 동작한다 (DESIGN_GUIDE / R20).
+ */
+:root {
+  --bg: #fbfaf7;
+  --fg: #1a1814;
+  --accent: oklch(0.58 0.2 280);
+}
+
+[data-theme="dark"] {
+  --bg: #16151a;
+  --fg: #f0eee9;
+  --accent: oklch(0.68 0.18 280);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
