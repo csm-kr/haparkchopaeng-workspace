@@ -88,7 +88,7 @@
       "status": "completed",
       "started_at": "2026-06-13T19:25:45+0900",
       "summary": "스케줄 화면 RSC: lib/schedule-logic(prisma-free 순수: ROTATION[ha,bak,jo,paeng]·saturdaysOf·draftMonth 순번배정·nextPointer·currentWeekIndex 파생·deriveFineSummary 파생·ensureVersion 409 낙관적락). lib/schedule(getMonth→null=빈달 R15/ADR-006·getFines 장부원자료·getScheduleMembers·resolveStartIdx 서버순번, Prisma직접 ADR-015). actions.ts Server Action: draftMonthAction(초안 미저장 R16)·saveMonth(트랜잭션 영속화+순번전진 서버원자적+ensureVersion 409 R35, 게스트❌, SaveMonthResult 판별유니온)·updateFines(requireRole관리자 👑). components/schedule: schedule-board('use client' 빈/편집/확정 3상태·편집중 월이동잠금 R27·취소변경분확인·저장에러 입력보존·상태알약 done/current(파생)/upcoming 색+텍스트 R29·입장/자료/미리보기 링크) + fines-panel(벌금설정 관리자수정·로테이션·연도별표 파생 즉시재계산 R29 완납/미납). page.tsx ?y=&m= 월선택 기본현재월·try/catch 에러카드, loading.tsx 스켈레톤(R26). 토큰만(R20). tests/e2e/schedule(로그인→빈달→일정짜기→편집진입). build·lint·test(87, 신규 19: 순수로직 13·보드 빈/편집/확정/월잠금 4·파생벌금/관리자게이트 3)·E2E(4) 통과",
-      "completed_at": "2026-06-13T19:41:00+0900"
+      "completed_at": "2026-06-13T19:40:46+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
