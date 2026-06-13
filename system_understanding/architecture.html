@@ -92,7 +92,7 @@ flowchart TB
           <tr><td><span class="badge">읽기 (조회)</span></td><td>서버 컴포넌트(RSC)에서 <code>lib/</code> 서버 함수로 Prisma 직접 조회</td><td>클라이언트가 DB를 직접 보지 않음 → 규칙 충족. 초기 페인트 빠름</td></tr>
           <tr><td><span class="badge">쓰기 (변이)</span></td><td>Server Action 또는 route handler (<code>app/api/**</code>)</td><td>zod 검증·권한·작성자 주입 여기서. 변이 후 <code>revalidatePath/Tag</code></td></tr>
           <tr><td><span class="badge gray">인터랙티브 섬</span></td><td>클라이언트 컴포넌트 (<code>"use client"</code>)</td><td>live룸·관점토글·스케줄편집·업로드모달·명령팔레트만</td></tr>
-          <tr><td><span class="badge gray">실시간 수신</span></td><td>SSE 구독</td><td>폴링 대신 푸시</td></tr>
+          <tr><td><span class="badge gray">실시간 수신</span></td><td>Supabase Realtime 구독</td><td>폴링 대신 푸시(ADR-014→016)</td></tr>
         </tbody>
       </table>
 
@@ -150,7 +150,7 @@ flowchart LR
         </div>
         <div class="card">
           <h4>⏱️ Durable 잡 러너</h4>
-          <p class="muted">Inngest/Trigger.dev/QStash. 분석·arXiv·녹화 후처리를 실행(ADR-016). 재시도·멱등·관찰성 내장. Vercel route handler가 enqueue, 러너가 Anthropic 호출.</p>
+          <p class="muted"><strong>Inngest 확정</strong>(ISSUES I-15; Trigger.dev/QStash 검토 대상이었음). 분석·arXiv·녹화 후처리를 실행(ADR-016). 재시도·멱등·관찰성 내장. Vercel route handler가 enqueue, 러너가 Anthropic 호출.</p>
         </div>
         <div class="card">
           <h4>☁️ Cloudflare Stream Live</h4>
@@ -193,7 +193,7 @@ flowchart LR
       <pre>app/
 ├── (auth)/          # 로그인 · 초대 합류
 ├── (app)/           # 인증 후 워크스페이스 화면 (RSC)
-├── api/             # route handler (쓰기·웹훅·SSE·프리사인)
+├── api/             # route handler (쓰기·웹훅·프리사인)
 └── layout.tsx
 components/ui/       # shadcn 기반 디자인 시스템
 lib/                 # prisma.ts · 서버 조회 함수 · 유틸

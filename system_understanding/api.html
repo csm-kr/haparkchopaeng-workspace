@@ -52,6 +52,8 @@
           <tr><td><span class="m m-get">GET</span></td><td><code>/api/me</code></td><td>현재 사용자</td><td>🔒</td></tr>
           <tr><td><span class="m m-patch">PATCH</span></td><td><code>/api/me</code></td><td>프로필·알림·테마 수정</td><td>🔒</td></tr>
           <tr><td><span class="m m-get">GET</span></td><td><code>/api/members</code></td><td>멤버 목록</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/auth/google</code></td><td>Google OAuth 시작(Supabase Auth)</td><td>—</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/auth/callback</code></td><td>OAuth 콜백 → 초대 게이트 → 세션 발급</td><td>— (게이트)</td></tr>
         </tbody>
       </table>
 
@@ -127,7 +129,7 @@
         <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
         <tbody>
           <tr><td><span class="m m-get">GET</span></td><td><code>/api/live</code></td><td>현재 세션(없으면 null)</td><td>🔒</td></tr>
-          <tr><td><span class="m m-get">GET</span></td><td><code>/api/live/stream</code></td><td><strong>SSE</strong> — live.started/ended · @멘션 푸시</td><td>🔒</td></tr>
+          <tr><td><span class="badge">구독</span></td><td><code>Supabase Realtime 채널</code></td><td>live.started/ended · @멘션 — 클라가 직접 구독(폴링 아님)</td><td>🔒</td></tr>
           <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/start</code></td><td>Cloudflare Live Input 생성 → 세션 시작</td><td>🔒</td></tr>
           <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/:id/join</code></td><td>참가 등록 + 시청용 HLS</td><td>🔒</td></tr>
           <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/:id/leave</code></td><td>본인 퇴장</td><td>🔒</td></tr>
@@ -138,7 +140,7 @@
         <span class="ci">🔥</span>
         <div><strong><code>/start</code> 응답(발표자 전용):</strong> <code>{ rtmps, srt, playback{hls} }</code> — <strong>Stream Key는 발표자 본인에게만</strong>.
         <strong><code>/join</code> 응답(시청자):</strong> 재생용 <code>{ playback{hls} }</code>만 — 송출 자격증명 절대 미포함.
-        <strong>동시 active 1개</strong> — 이미 있으면 <span class="badge danger">409</span>. <strong><code>/end</code>만 전역 종료</strong>, <code>/leave</code>는 본인만. 전이 전파는 SSE.</div>
+        <strong>동시 active 1개</strong> — 이미 있으면 <span class="badge danger">409</span>. <strong><code>/end</code>만 전역 종료</strong>, <code>/leave</code>는 본인만. 전이 전파는 Supabase Realtime(ADR-014→016).</div>
       </div>
 
       <h3>업로드 / 스토리지 · 웹훅</h3>
