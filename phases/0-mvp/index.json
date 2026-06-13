@@ -1,0 +1,7 @@
+{
+  "project": "하박조팽",
+  "phase": "0-mvp",
+  "steps": [
+    { "step": 0, "name": "project-setup", "status": "pending" }
+  ]
+}
