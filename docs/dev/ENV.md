@@ -24,6 +24,7 @@
 | `APP_BASE_URL` | 초대 링크·OAuth 리디렉트 | 예: `http://localhost:3000` |
 | `SUPABASE_STORAGE_BUCKET` | PDF·에셋·figure 스토리지 | 비공개 버킷 + 서명 URL(→ [`../security/SECURITY.md`](../security/SECURITY.md)) |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_STREAM_API_TOKEN` | 라이브(Stream Live) | **비밀.** ADR-002 |
+| `CLOUDFLARE_WEBHOOK_SECRET` | 녹화 완료 등 Stream Live 웹훅 HMAC 검증 | **비밀.** 세션 인증 아님 — 서명 검증(S4.6) |
 
 ## 인증 (Google OAuth via Supabase Auth)
 
@@ -38,7 +39,7 @@ PRD는 "AI 자동 요약을 핵심 기능으로 내세우는 것"을 폐기했�
 ```
 PDF 업로드/arXiv → 스토리지 저장(pdfUrl) → Paper 저장(analysisStatus=pending) + Job 적재 → 즉시 응답
    ↓ (외부 durable 잡 러너)
-   잡 러너가 Claude에 PDF document 블록 + 구조화 출력 스키마로 호출
+   잡 러너가 Gemini에 PDF inlineData + responseSchema(구조화 출력)로 호출
    → Analysis(research)/Analysis(repro) payload + Figure[] 저장, analysisStatus=ready|failed
    → 사람이 섹션 노트로 검수·보강
 ```

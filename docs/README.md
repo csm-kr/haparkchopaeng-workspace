@@ -20,6 +20,7 @@
 | [SEQUENCE_DIAGRAM](./dev/SEQUENCE_DIAGRAM.md) | 주요 동작의 컴포넌트 호출 순서 |
 | [CODING_CONVENTION](./dev/CODING_CONVENTION.md) | 스택·네이밍·타입·금지 규칙 |
 | [ENV](./dev/ENV.md) | 환경 변수·논문 분석 LLM 파이프라인 |
+| [DEPLOY](./dev/DEPLOY.md) | 배포 런북(Vercel·Supabase·Cloudflare·Inngest) |
 
 ### 🎨 디자이너 — `design/`
 | 문서 | 내용 |
