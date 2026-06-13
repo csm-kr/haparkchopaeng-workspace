@@ -263,7 +263,8 @@ model Job {
   claimedAt   DateTime?               // 워커가 원자적으로 claim(중복 처리 방지)
   createdAt   DateTime @default(now())
   @@index([status, runAfter])
-  // 분석 등 분 단위 작업은 요청 경로가 아니라 이 잡으로 처리(ADR-013).
+  // 분 단위 작업은 외부 durable 잡 러너(Inngest/Trigger.dev/QStash)가 실행하고,
+  // 이 테이블은 그 상태 미러(멱등·재시도·실패 보존)로 둔다(ADR-013→016).
 }
 ```
 

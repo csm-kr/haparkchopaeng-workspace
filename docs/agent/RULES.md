@@ -11,10 +11,10 @@
 
 ## 런타임 아키텍처
 
-- **R31. 긴 작업을 요청 경로에서 인라인으로 돌리지 마라.** 논문 분석·arXiv fetch·녹화 후처리는 백그라운드 잡/워커로. API는 잡 적재 후 즉시 응답. 이유: 분 단위 작업이 HTTP 타임아웃을 넘는다. (ADR-013, [`../dev/ARCHITECTURE.md`](../dev/ARCHITECTURE.md))
+- **R31. 긴 작업을 요청 경로에서 인라인으로 돌리지 마라.** 논문 분석·arXiv fetch·녹화 후처리는 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash)로. API는 잡 적재 후 즉시 응답. 이유: 분 단위 작업이 서버리스 함수 시간 제한·HTTP 타임아웃을 넘는다. `Job` 모델·"업로드≠분석" 원칙 유지. (ADR-013→016, [`../dev/ARCHITECTURE.md`](../dev/ARCHITECTURE.md))
 - **R32. 읽기는 RSC 서버 조회, 쓰기는 Server Action/route handler.** 클라이언트 컴포넌트에서 fetch로 자체 API를 부르는 건 인터랙티브 섬에 한정. 클라이언트가 DB·외부 서비스를 직접 보지 않는다. (ADR-015)
-- **R33. `live` 전이는 SSE로 푸시한다.** 클라이언트 폴링 금지 — `/api/live/stream` 구독으로 배지·배너·룸을 동시 갱신. (ADR-014)
-- **R34. 서버리스로 배포하지 마라.** 상시 구동 Node 서버 단일 인스턴스(인-프로세스 워커 + SQLite 파일). (ADR-012)
+- **R33. `live` 전이는 Supabase Realtime으로 푸시한다.** 클라이언트 폴링 금지 — Realtime 구독으로 배지·배너·룸을 동시 갱신(인-프로세스 SSE 버스 가정 금지). (ADR-014→016)
+- **R34. 배포는 Vercel 서버리스 + Supabase다.** "상시 Node 서버·SQLite 파일·인-프로세스 워커"를 가정하지 마라. DB=Supabase Postgres(로컬은 SQLite), 스토리지=Supabase Storage, 실시간=Supabase Realtime, 잡=외부 러너. (ADR-016)
 - **R35. 스케줄 저장은 낙관적 락으로 동시 편집을 막는다.** `ScheduleMonth.version` 불일치 시 `409`. (ADR-006, [`../dev/DB.md`](../dev/DB.md))
 - **R36. 대용량 업로드는 프리사인 직접 업로드.** PDF는 클라이언트→스토리지 직접, 서버는 서명만. 다운로드는 서명 URL. ([`../dev/API.md`](../dev/API.md), [`../security/SECURITY.md`](../security/SECURITY.md))
 

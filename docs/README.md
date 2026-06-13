@@ -48,10 +48,11 @@
 - **라이브:** Cloudflare Stream Live, MVP 포함 (ADR-002)
 - **논문 분석:** Claude API 보조 추출, 키는 `.env`(서버 전용) (ADR-011, [ENV](./dev/ENV.md))
 
-### 런타임 아키텍처 (ADR-012~015 → [ARCHITECTURE](./dev/ARCHITECTURE.md))
-- **배포:** 상시 구동 Node 서버 단일 인스턴스(서버리스 아님) — 인-프로세스 워커 + SQLite 파일 (ADR-012)
-- **긴 작업:** 분석·arXiv·녹화는 백그라운드 `Job`/워커로, 요청 경로 인라인 금지 (ADR-013)
-- **실시간:** `live` 전이·@멘션은 SSE 푸시(`/api/live/stream`), 폴링 아님 (ADR-014)
+### 런타임 아키텍처 (ADR-015·016 → [ARCHITECTURE](./dev/ARCHITECTURE.md))
+- **배포:** **Vercel(Next.js 15) + Supabase** (ADR-016이 ADR-010/012 개정). 로컬 dev는 SQLite, 운영 DB는 Supabase Postgres
+- **긴 작업:** 분석·arXiv·녹화는 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash)로, 요청 경로 인라인 금지 (ADR-013→016)
+- **실시간:** `live` 전이·@멘션은 **Supabase Realtime** 푸시, 폴링 아님 (ADR-014→016)
+- **인증:** Google OAuth (Supabase Auth) + 초대 게이트 (ADR-017)
 - **데이터 흐름:** 읽기=RSC 서버 조회, 쓰기=Server Action/route handler (ADR-015)
 
 ## UX 관점 (전 문서 적용)

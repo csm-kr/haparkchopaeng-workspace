@@ -21,20 +21,22 @@
 
 ## 프로덕션 런타임 아키텍처
 
-> 프로토타입은 단일 클라이언트 SPA지만, 프로덕션은 **상시 구동 서버 + 백그라운드 워커 + 외부 서비스**가 얽힌다. 아래는 그 토폴로지와 경계다. 결정 근거: [`../agent/ADR.md`](../agent/ADR.md) ADR-012~015.
+> 프로토타입은 단일 클라이언트 SPA지만, 프로덕션은 **Vercel(앱) + Supabase(데이터·인증·스토리지·실시간) + 외부 잡 러너 + Cloudflare(영상)**가 얽힌다. 결정 근거: [`../agent/ADR.md`](../agent/ADR.md) **ADR-016(배포·ADR-010/012/013/014 개정)** · ADR-015 · ADR-017.
 
-### 배포 토폴로지 (ADR-012)
+### 배포 토폴로지 (ADR-016)
 ```
-[브라우저] ──HTTP/SSE──> [Next.js 상시 서버 (Node, 서버리스 아님)]
-                              │  ├─ RSC 렌더 + route handler/Server Action
-                              │  ├─ 인-프로세스 워커(잡 폴링)  ← MVP
-                              │  └─ Prisma → [SQLite 파일]
-                              ├──> [Cloudflare Stream Live]  (Live Input·HLS·녹화)
-                              ├──> [객체 스토리지]  (PDF·에셋·figure, 서명 URL)
-                              └──> [Anthropic API]  (분석, 워커에서만)
+[브라우저] ──HTTP──> [Vercel: Next.js 15]
+   │  └─Realtime구독─┐    ├─ RSC 렌더 + route handler/Server Action
+   │                 │    └─ Prisma → [Supabase Postgres]  (로컬 dev = SQLite)
+   │                 │
+   ├──< 푸시 ────[Supabase Realtime]   (live 전이·@멘션 broadcast)
+   │
+[외부 durable 잡 러너] ──> [Anthropic API]  (분석; Vercel 함수 시간제한 밖)
+        ↑ 잡 적재(Job)            └──> [Supabase Storage]  (PDF·에셋·figure, 서명 URL)
+[Vercel route handler]      ──webhook──< [Cloudflare Stream Live]  (Live Input·HLS·녹화)
 ```
-- **CRITICAL: 서버리스 함수가 아니라 상시 구동 Node 서버.** 이유: ① 분 단위 분석/녹화 후처리를 인-프로세스 워커로 돌려야 하고 ② SQLite 파일은 영속 디스크가 필요하다. 서버리스는 둘 다 깨진다.
-- 4인 단일 인스턴스 가정. 수평 확장은 비범위(Postgres+외부 큐로 이전 시 재검토 → [`../agent/ISSUES.md`](../agent/ISSUES.md)).
+- **앱은 Vercel 서버리스.** "상시 Node 서버·SQLite 파일·인-프로세스 워커"를 가정하지 않는다(ADR-016이 ADR-010/012 개정).
+- 로컬 개발은 SQLite(Prisma) 유지 — `DATABASE_URL`만 Supabase Postgres로 교체하면 운영.
 
 ### 데이터 흐름 — 읽기 vs 쓰기 (ADR-015)
 CLAUDE.md "서버 로직은 route handler/서버에서만"을 RSC 시대에 맞게 구체화한다.
@@ -44,33 +46,34 @@ CLAUDE.md "서버 로직은 route handler/서버에서만"을 RSC 시대에 맞�
 | **읽기(조회)** | 서버 컴포넌트(RSC)에서 `lib/`의 서버 함수로 Prisma 직접 조회 | 클라이언트가 DB를 직접 보지 않음 → 규칙 충족. 초기 페인트 빠름 |
 | **쓰기(변이)** | Server Action 또는 route handler(`app/api/**`) | zod 검증·권한·작성자 주입은 여기서. 변이 후 `revalidatePath`/`revalidateTag` |
 | **인터랙티브 섬** | 클라이언트 컴포넌트(`"use client"`) | live 룸·관점 토글·스케줄 편집·업로드 모달·명령 팔레트만. 나머지는 RSC |
-| **실시간 수신** | SSE 구독(아래) | 폴링 대신 푸시 |
+| **실시간 수신** | Supabase Realtime 구독(아래) | 폴링 대신 푸시 |
 
 > 즉 **읽기는 서버에서 직접, 쓰기는 서버 액션/route handler.** 클라이언트 컴포넌트에서 fetch로 자체 API를 부르는 건 인터랙티브 섬에 한정한다.
 
-### 백그라운드 작업 (ADR-013) — CRITICAL
-**분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인으로 돌리지 않는다.** 이유: Claude 분석은 분 단위라 HTTP 타임아웃을 넘는다([`./ENV.md`](./ENV.md)).
+### 백그라운드 작업 (ADR-013→016) — CRITICAL
+**분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인으로 돌리지 않는다.** 이유: Claude 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다([`./ENV.md`](./ENV.md)).
 ```
-POST /api/papers → Paper 저장(analysisStatus=pending) + Job 적재 → 즉시 201 응답
+POST /api/papers → Paper 저장(analysisStatus=pending) + 잡 트리거 → 즉시 201 응답
                                               │
-인-프로세스 워커 폴링 ──> Anthropic 분석 ──> Analysis/Figure 저장, analysisStatus=ready|failed
-클라이언트는 SSE 또는 재조회로 ready 전환을 받는다 (/reanalyze로 재시도)
+외부 durable 잡 러너 ──> Anthropic 분석 ──> Analysis/Figure 저장, analysisStatus=ready|failed
+클라이언트는 Realtime 또는 재조회로 ready 전환을 받는다 (/reanalyze로 재시도)
 ```
-- 잡은 DB `Job` 테이블 + 인-프로세스 폴링 워커로 시작(외부 큐 불필요, [`./DB.md`](./DB.md)). 멱등·재시도·실패 보존.
+- 실행 주체는 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash 등). `Job` 모델(멱등·재시도·실패 보존)은 큐의 상태 미러로 유지([`./DB.md`](./DB.md)).
 - **업로드 성공 ≠ 분석 성공**을 아키텍처로 강제한다(분리된 잡).
 
-### 실시간 동기화 (ADR-014) — `live`·알림
-`live`는 **모두에게 즉시** 일관돼야 한다(ADR-001). 폴링 대신 **SSE 푸시**로 전이를 브로드캐스트한다.
+### 실시간 동기화 (ADR-014→016) — `live`·알림
+`live`는 **모두에게 즉시** 일관돼야 한다(ADR-001). 폴링 대신 **Supabase Realtime**으로 전이를 브로드캐스트한다.
 ```
-GET /api/live/stream (SSE) ── live.started / live.ended / mention 이벤트 ──> 모든 클라
+Supabase Realtime 채널 ── live.started / live.ended / mention ──> 구독 중인 모든 클라
   → 사이드바 LIVE 배지·홈 배너·meeting 룸을 동시에 갱신
 ```
-- 단일 인스턴스라 인-프로세스 이벤트 버스로 충분. 다중 인스턴스로 가면 Redis pub/sub 등 필요(비범위).
-- @멘션·라이브 시작 알림 채널(인앱/이메일/푸시)은 미결 → ISSUES I-5. 인앱(SSE)은 기본으로 둔다.
+- broadcast 또는 `postgres_changes`(LiveSession 변화)로 구독. Vercel 서버리스/다중 리전에서도 성립(인-프로세스 버스 가정 금지).
+- @멘션·라이브 시작 알림 채널(인앱/이메일/푸시)은 미결 → ISSUES I-5. 인앱(Realtime)은 기본.
 
 ### 외부 서비스 경계
-- **Cloudflare Stream Live:** 앱은 Live Input 생성·권한 체크·플레이어 노출만(ADR-002). **녹화 완료는 Cloudflare 웹훅**으로 수신 → 발표 자료 아카이브 여부 결정(미결 I-3). 송출 자격증명은 발표자에게만([`../security/SECURITY.md`](../security/SECURITY.md)).
-- **객체 스토리지:** PDF/에셋은 **프리사인 업로드**(클라이언트→스토리지 직접, 서버는 서명만)로 큰 파일이 서버를 거치지 않게 한다. 다운로드는 단기 **서명 URL**. arXiv는 서버(워커)가 가져온다(SSRF 화이트리스트).
+- **Cloudflare Stream Live:** 앱은 Live Input 생성·권한 체크·플레이어 노출만(ADR-002). **녹화 완료는 Cloudflare 웹훅**으로 Vercel route handler가 수신(HMAC 검증) → 발표 자료 아카이브 여부(미결 I-3). 송출 자격증명은 발표자에게만([`../security/SECURITY.md`](../security/SECURITY.md)).
+- **Supabase Storage:** PDF/에셋은 **프리사인 업로드**(클라이언트→Storage 직접, 서버는 서명만). 다운로드는 단기 **서명 URL**(비공개 버킷). arXiv는 잡 러너가 가져온다(SSRF 화이트리스트).
+- **Supabase Auth:** Google OAuth + 초대 게이트(ADR-017). service role 키는 서버 전용.
 
 ### 동시성·멱등성
 - **라이브:** 동시 active 1개 — `/start`가 이미 있으면 `409`(ADR-001).
@@ -113,8 +116,8 @@ src/
 프로덕션 (의도):
   읽기: RSC(서버) → Prisma 직접 조회 → HTML 스트리밍
   쓰기: 클라이언트 인터랙티브 섬 → Server Action/route handler → DB/외부 → revalidate
-  긴 작업: 요청은 즉시 응답(pending) + 잡 적재 → 워커 처리 → SSE/재조회로 반영
-  라이브: Live Input 생성 → 발표자 RTMPS/SRT 송출 → 시청자 HLS/Player; 전이는 SSE로 전 클라 동기화
+  긴 작업: 요청은 즉시 응답(pending) + 잡 트리거 → 외부 durable 잡 러너 처리 → Realtime/재조회로 반영
+  라이브: Live Input 생성 → 발표자 RTMPS/SRT 송출 → 시청자 HLS/Player; 전이는 Supabase Realtime로 전 클라 동기화
 ```
 > 상세는 위 §프로덕션 런타임 아키텍처. 클라이언트가 DB·외부 서비스를 직접 보지 않는다는 원칙은 유지하되, 읽기는 RSC 서버 조회, 쓰기는 Server Action/route handler로 구체화한다.
 

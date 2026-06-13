@@ -31,9 +31,8 @@
 ### I-6 ✅ 인증 = 초대 전용 + Google OAuth
 - 확정: 공개 가입 없음, 초대 링크 전용(ADR-007). **인증 수단 = Google OAuth (Supabase Auth)**, 초대 게이트(ADR-017). 인증 수단 미결 해소.
 
-### I-19 🟡 분석 워커 런타임 (Supabase 통합 후)
-- **질문:** Supabase로 DB/Auth/Storage/Realtime를 빼면 앱은 서버리스(Vercel) 가능하지만, **분 단위 분석 워커(ADR-013)는 서버리스에서 못 돈다.** 별도 워커 서비스(상시 컨테이너)인가, 큐(Supabase pg-boss/외부)인가, Edge Function(시간 제한) 인가?
-- **현재 방향:** 워커는 상시 런타임 필요 → 별도 워커 프로세스 권장. 구체 미정.
+### I-19 ✅ 분석 워커 런타임 = 외부 durable 잡 러너
+- 확정: 분 단위 분석은 **외부 durable 잡 러너**(ADR-016). 제품 선택은 I-15에서. Edge Function(시간 제한)·인-프로세스는 폐기.
 
 ### I-20 🟢 Supabase DB 이전 시점 + RLS
 - **질문:** SQLite→Supabase Postgres 이전 시점? Prisma 권한 체크를 유지하므로 RLS는 끄는데(ADR-016), 추후 RLS 병행 여부?
@@ -75,21 +74,18 @@
 
 ## 아키텍처 유래
 
-### I-15 🟡 잡 인프라 (DB 잡 → 외부 큐 전환 시점)
-- **질문:** 인-프로세스 DB 잡 워커로 충분한가, 언제 BullMQ/Redis 등 외부 큐로?
-- **현재 방향:** 단일 인스턴스 + DB `Job` 폴링으로 시작(ADR-013). 다중 인스턴스/높은 처리량이 필요해지면 전환.
+### I-15 🟡 잡 러너 제품 선택 (ADR-016으로 방향 확정)
+- **확정:** 인-프로세스 폴링 워커 폐기 → **외부 durable 잡 러너**(ADR-016). 남은 선택: Inngest / Trigger.dev / QStash 중 택1. 무료 한도·Vercel 연동·관찰성 기준으로 결정.
 
-### I-16 🟡 실시간 전송 (SSE → 분산 버스)
-- **질문:** SSE + 인-프로세스 버스가 단일 인스턴스 전제다. 다중 인스턴스 시 Redis pub/sub로?
-- **현재 방향:** 단일 인스턴스 SSE(ADR-014). 확장 시 분산 버스. WebSocket 양방향이 필요한 기능(예: 라이브 채팅)이 생기면 재검토.
+### I-16 ✅ 실시간 전송 = Supabase Realtime
+- 확정: 인-프로세스 SSE 버스 폐기 → **Supabase Realtime**(broadcast/`postgres_changes`)(ADR-014→016). WebSocket 양방향이 필요한 기능(라이브 채팅)이 생기면 Realtime presence/broadcast로 확장.
 
-### I-17 🟡 배포 호스트
-- **질문:** 상시 Node 서버를 어디에(자체 VM/Fly.io/Render 등)? SQLite 영속 볼륨·백업 전략은?
-- **현재 방향:** 영속 디스크가 있는 단일 인스턴스 PaaS 권장(ADR-012). 구체 호스트·백업 미정.
+### I-17 ✅ 배포 호스트 = Vercel + Supabase
+- 확정: **Vercel(앱) + Supabase(DB/Auth/Storage/Realtime)**(ADR-016). SQLite 영속 볼륨 고민 소멸(관리형 Postgres). 백업은 Supabase 자동 백업.
 
 ### I-18 🟢 캐시 무효화 전략
-- **질문:** 변이 후 `revalidatePath`/`revalidateTag` 범위? 실시간 SSE와 RSC 캐시의 정합?
-- **현재 방향:** 변이 핸들러에서 관련 경로/태그 무효화(ADR-015). 세부 매핑은 구현 시.
+- **질문:** 변이 후 `revalidatePath`/`revalidateTag` 범위? Realtime 푸시와 RSC 캐시의 정합?
+- **현재 방향:** 변이 핸들러에서 관련 경로/태그 무효화(ADR-015). Realtime 이벤트 수신 시 클라가 router.refresh()로 재검증. 세부 매핑은 구현 시.
 
 ## 처리 규칙
 

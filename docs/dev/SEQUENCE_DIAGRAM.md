@@ -25,7 +25,7 @@ sequenceDiagram
   A->>D: Job 적재(type=analyze_paper, {paperId})
   A-->>U: { data: paper, analysisStatus: "pending" }  (201)  ← 즉시
   U->>U: navigate('paper') · 분석 섹션 스켈레톤("읽는 중")
-  Note over W: 폴링 워커가 Job claim (원자적)
+  Note over W: 외부 durable 잡 러너가 Job 실행(멱등·재시도)
   opt arXiv
     W->>S: arxiv PDF fetch → 저장
   end
@@ -37,7 +37,7 @@ sequenceDiagram
     W->>D: analysisStatus=failed, Job.lastError
     Note over U: "분석 못 끝냄" + [다시 분석] (POST /reanalyze → Job 재적재)
   end
-  U->>A: (SSE 또는 재조회) ready 전환 수신
+  U->>A: (Realtime 또는 재조회) ready 전환 수신
 ```
 
 - ※ **CRITICAL: 분석은 요청 경로가 아니라 워커에서.** Claude 호출은 분 단위 → HTTP 타임아웃을 넘으므로 API는 잡만 적재하고 즉시 응답한다(ADR-013, [`./ARCHITECTURE.md`](./ARCHITECTURE.md)).
@@ -77,7 +77,7 @@ sequenceDiagram
   A->>D: LiveSession 생성(active=true, cloudflareLiveInputId)
   A-->>P: { rtmps, srt, playback }  ※ Stream Key는 발표자에게만
   Note over P: OBS 등으로 RTMPS/SRT 송출
-  A->>A: 이벤트 버스에 live.started 발행 → SSE 구독자에게 푸시 (S4.5)
+  A->>A: Supabase Realtime 채널에 live.started broadcast → 구독자에게 푸시 (S4.5)
 ```
 
 ## S4. 라이브 입장(시청자) vs 나가기 vs 종료
@@ -100,27 +100,26 @@ sequenceDiagram
     V->>A: POST /api/live/:id/end
     A->>C: Live Input 정리
     A->>D: LiveSession active=false, endedAt
-    A->>A: 이벤트 버스에 live.ended 발행 → SSE 푸시
+    A->>A: Supabase Realtime에 live.ended broadcast
     A-->>V: ok
   end
 ```
 
-## S4.5 라이브 전이 실시간 전파 (SSE) — CRITICAL
+## S4.5 라이브 전이 실시간 전파 (Supabase Realtime) — CRITICAL
 
-`live`는 모두에게 즉시 일관돼야 한다(ADR-001). 폴링이 아니라 SSE 푸시.
+`live`는 모두에게 즉시 일관돼야 한다(ADR-001). 폴링이 아니라 Realtime 푸시(ADR-014→016).
 
 ```mermaid
 sequenceDiagram
   participant C1 as 모든 클라이언트
-  participant A as API (/api/live/stream)
-  participant B as 인-프로세스 이벤트 버스
-  C1->>A: GET /api/live/stream (SSE 구독)
-  Note over A,B: /start·/end 핸들러가 live.started/ended 발행
-  B-->>A: live.started | live.ended | mention
-  A-->>C1: SSE 이벤트
+  participant R as Supabase Realtime
+  participant A as Vercel route handler (/live/start·end)
+  C1->>R: 채널 구독 (live)
+  A->>R: live.started | live.ended | mention broadcast
+  R-->>C1: 이벤트 푸시
   C1->>C1: 사이드바 LIVE 배지 · 홈 배너 · meeting 룸 동시 갱신
 ```
-- 단일 인스턴스라 인-프로세스 버스로 충분(다중 인스턴스 → Redis pub/sub, 비범위). @멘션 알림 채널은 미결(ISSUES I-5).
+- 서버리스/다중 리전에서도 성립(인-프로세스 버스 가정 금지). `LiveSession` 변경을 `postgres_changes`로 구독하는 방식도 가능. @멘션 알림 채널은 미결(ISSUES I-5).
 
 ## S4.6 녹화 완료 웹훅 (Cloudflare → 앱)
 

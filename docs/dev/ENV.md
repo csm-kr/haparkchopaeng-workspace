@@ -36,13 +36,13 @@ PRD는 "AI 자동 요약을 핵심 기능으로 내세우는 것"을 폐기했�
 
 ```
 PDF 업로드/arXiv → 스토리지 저장(pdfUrl) → Paper 저장(analysisStatus=pending) + Job 적재 → 즉시 응답
-   ↓ (백그라운드 워커)
-   워커가 Claude에 PDF document 블록 + 구조화 출력 스키마로 호출
+   ↓ (외부 durable 잡 러너)
+   잡 러너가 Claude에 PDF document 블록 + 구조화 출력 스키마로 호출
    → Analysis(research)/Analysis(repro) payload + Figure[] 저장, analysisStatus=ready|failed
    → 사람이 섹션 노트로 검수·보강
 ```
 
-> **CRITICAL: 분석은 요청 경로(route handler)에서 인라인으로 돌리지 않는다.** Claude 분석은 분 단위라 HTTP 타임아웃을 넘는다. 반드시 **백그라운드 잡/워커**에서 처리한다(→ [`./ARCHITECTURE.md`](./ARCHITECTURE.md) §백그라운드 작업, ADR-013). `POST /api/papers`는 잡만 적재하고 즉시 응답한다.
+> **CRITICAL: 분석은 요청 경로(route handler)에서 인라인으로 돌리지 않는다.** Claude 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다. 반드시 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash)에서 처리한다(→ [`./ARCHITECTURE.md`](./ARCHITECTURE.md) §백그라운드 작업, ADR-013→016). `POST /api/papers`는 잡만 트리거하고 즉시 응답한다.
 
 ### 구현 지침 (시그니처 수준)
 
@@ -64,7 +64,7 @@ export async function extractAnalysis(pdf: Buffer, lens: "research" | "repro"): 
 }
 ```
 
-- **CRITICAL: 워커에서 실행.** `extractAnalysis`는 백그라운드 워커가 호출한다 — route handler 인라인 호출 금지(타임아웃, ADR-013). route handler는 잡만 적재.
+- **CRITICAL: 잡 러너에서 실행.** `extractAnalysis`는 외부 durable 잡 러너가 호출한다 — route handler 인라인 호출 금지(타임아웃, ADR-013→016). route handler는 잡만 트리거.
 - **CRITICAL: 비용·실패 처리.** 분석 실패가 업로드 자체를 막지 않게 한다 — Paper는 저장되고 `analysisStatus=failed`로 재시도 가능. `stop_reason`을 확인하고 `refusal`/`max_tokens`를 처리한다.
 - **CRITICAL: 키는 서버에서만.** 클라이언트는 절대 Anthropic을 직접 호출하지 않는다. 클라이언트는 `/api/papers`만 호출한다(→ [`./CODING_CONVENTION.md`](./CODING_CONVENTION.md)).
 

@@ -65,17 +65,20 @@
 ### ADR-012: 배포는 상시 구동 Node 서버 (서버리스 아님)
 **결정**: 프로덕션은 서버리스 함수가 아니라 **상시 구동 Node 서버 단일 인스턴스**로 배포한다.
 **이유**: ① 분 단위 분석/녹화 후처리를 인-프로세스 워커로 돌려야 하고 ② SQLite 파일은 영속 디스크가 필요하다. 서버리스는 둘 다 깨진다. 4인 단일 그룹엔 단일 인스턴스로 충분.
-**트레이드오프**: 수평 확장 포기. 트래픽이 커지면 Postgres + 외부 큐 + 다중 인스턴스로 이전(→ [`./ISSUES.md`](./ISSUES.md)).
+**트레이드오프**: 수평 확장 포기.
+**🔁 개정됨 → ADR-016**: 배포는 **Vercel 서버리스 + Supabase**로 변경. "상시 Node 서버·SQLite 파일" 전제는 폐기. 아래 결정은 ADR-016 기준으로 읽는다.
 
 ### ADR-013: 긴 작업은 백그라운드 잡으로 (요청 경로 금지)
 **결정**: 논문 분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인 실행하지 않고 **DB `Job` 테이블 + 인-프로세스 폴링 워커**로 처리한다. API는 잡만 적재하고 즉시 응답.
 **이유**: Claude 분석은 분 단위라 HTTP 타임아웃을 넘는다. "업로드 성공 ≠ 분석 성공"을 아키텍처로 강제해 부분 실패를 격리한다.
-**트레이드오프**: 즉시 결과가 아니라 pending→ready 전이. 외부 큐(BullMQ 등)는 단일 인스턴스 단계에선 과투자라 DB 잡으로 시작.
+**트레이드오프**: 즉시 결과가 아니라 pending→ready 전이.
+**🔁 개정됨 → ADR-016**: 실행 주체는 인-프로세스 폴링 워커가 아니라 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash 등)로 변경. `Job` 모델(멱등·재시도·실패 보존)과 "업로드 성공 ≠ 분석 성공" 원칙은 유지 — 실행 주체만 외부 큐.
 
 ### ADR-014: 실시간 동기화는 SSE 푸시 (폴링 아님)
 **결정**: `live` 전이·@멘션은 `/api/live/stream`(SSE)로 푸시한다. 클라이언트는 폴링하지 않는다.
 **이유**: `live`는 모두에게 즉시 일관돼야 한다(ADR-001). 폴링은 지연·낭비. 단일 인스턴스라 인-프로세스 이벤트 버스로 충분.
-**트레이드오프**: 다중 인스턴스로 가면 Redis pub/sub 등 분산 버스 필요. WebSocket이 아니라 단방향 SSE로 시작(서버→클라 알림이면 충분).
+**트레이드오프**: WebSocket이 아니라 단방향 푸시면 충분.
+**🔁 개정됨 → ADR-016**: 전송 메커니즘은 인-프로세스 SSE 버스가 아니라 **Supabase Realtime**(broadcast/`postgres_changes`)로 변경. "폴링 금지, 즉시 푸시" 의도(ADR-001)는 유지 — Vercel 서버리스/다중 인스턴스에서도 성립.
 
 ### ADR-015: 읽기는 RSC 서버 조회, 쓰기는 Server Action/route handler
 **결정**: 조회는 서버 컴포넌트(RSC)에서 `lib/` 서버 함수로 Prisma 직접 호출, 변이는 Server Action 또는 route handler로 처리한다. 클라이언트 컴포넌트는 인터랙티브 섬(live·관점 토글·스케줄 편집·업로드·명령 팔레트)에 한정.
@@ -107,11 +110,6 @@
 - 인증은 자체 서명 세션(ADR-007/SECURITY) 유지 또는 Supabase Auth로 이관 중 택1 — **단일 테넌트·초대 전용 원칙은 불변**. 본 ADR 범위 밖, 별도 결정 필요.
 - Cloudflare Stream Live(ADR-002)는 영향 없음. 녹화 완료 웹훅은 Vercel route handler가 그대로 수신(HMAC 검증).
 - 다중 인스턴스 환경이 되므로 인-프로세스 상태(이벤트 버스 등)에 의존하던 코드는 전부 외부 서비스(Realtime/잡 러너)로 빠져야 한다.
-
-### ADR-016: 운영 플랫폼은 Supabase로 통합
-**결정**: 운영 인프라를 **Supabase**(Postgres + Auth + Storage + Realtime)로 통합한다. ADR-010의 DB 결정을 개정한다 — **로컬 개발은 SQLite 유지, 운영 DB는 Supabase Postgres**(Prisma `DATABASE_URL`/`DIRECT_URL` 교체). 스토리지는 Supabase Storage(서명 URL), 실시간(`live`·@멘션)은 Supabase Realtime로 ADR-014의 인-프로세스 SSE 버스를 대체할 수 있다.
-**이유**: 4인 그룹이 DB·인증·스토리지·실시간을 각각 운영하는 부담을 줄인다. 인증 수단 미결(ISSUES I-7 계열)을 Supabase Auth로 해소.
-**트레이드오프**: Supabase 종속. ADR-012(상시 Node 서버)는 **부분 완화** — DB/Auth/Storage/Realtime가 매니지드라 앱은 서버리스(Vercel) 배포가 가능해진다. 단 **분 단위 분석 워커(ADR-013)는 서버리스에서 못 돈다** → 별도 워커 런타임/큐가 여전히 필요(→ [`./ISSUES.md`](./ISSUES.md)). Prisma는 그대로 두되 RLS는 사용하지 않고 서버 권한 체크를 유지한다(RLS vs Prisma 중복 회피).
 
 ### ADR-017: 인증은 Google OAuth (Supabase Auth) + 초대 게이트
 **결정**: 로그인은 **Supabase Auth의 Google OAuth**로 한다(미결이던 인증 수단 확정). **초대 전용은 유지**(ADR-007) — Google 로그인에 성공해도, 그 이메일이 **수락된 멤버이거나 유효한 초대**가 있을 때만 합류/세션이 발급된다. 비초대 이메일은 거부 + 로그아웃.

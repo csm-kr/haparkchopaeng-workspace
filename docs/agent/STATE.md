@@ -23,12 +23,12 @@
 | `stage` | auth/onboarding/app | 전체 게이팅 |
 
 ### `live`가 앱 레벨인 이유 (CRITICAL)
-`live`는 세 표면이 절대 어긋나면 안 되므로 화면(`MeetingScreen`)이 아니라 앱 레벨에 둔다. `MeetingScreen`은 `onSetLive`로 위로 올린다. 프로덕션에선 서버 `LiveSession.active`가 진실의 원천이고, 클라이언트는 **SSE(`/api/live/stream`)로 전이를 받아** 동기화한다(폴링 아님, 동시 1개 — ADR-001/014).
+`live`는 세 표면이 절대 어긋나면 안 되므로 화면(`MeetingScreen`)이 아니라 앱 레벨에 둔다. `MeetingScreen`은 `onSetLive`로 위로 올린다. 프로덕션에선 서버 `LiveSession.active`가 진실의 원천이고, 클라이언트는 **Supabase Realtime 구독으로 전이를 받아** 동기화한다(폴링 아님, 동시 1개 — ADR-001/014→016).
 
 ```
 프로토타입:  MeetingScreen ──onSetLive──> app.jsx(live) ──props──> Sidebar·Dashboard·Meeting
-프로덕션:    /api/live/{start|end} ──> LiveSession.active + 이벤트 발행
-                                   ──> SSE 푸시 ──> 모든 클라 배지·배너·룸 동시 갱신
+프로덕션:    /api/live/{start|end} ──> LiveSession.active + Realtime broadcast
+                                   ──> 모든 구독 클라 배지·배너·룸 동시 갱신
 ```
 
 ## 서버 영속 상태 (도메인)

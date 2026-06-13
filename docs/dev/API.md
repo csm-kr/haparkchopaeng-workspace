@@ -81,7 +81,7 @@
 | 메서드 | 경로 | 설명 | 권한 |
 |---|---|---|---|
 | GET | `/api/live` | 현재 세션(없으면 `null`) | 🔒 |
-| GET | `/api/live/stream` | **SSE** — live.started/ended·@멘션 푸시 | 🔒 |
+| (구독) | **Supabase Realtime 채널** | live.started/ended·@멘션 — 클라가 직접 구독 | 🔒 |
 | POST | `/api/live/start` | Cloudflare Live Input 생성 → 세션 시작 | 🔒 |
 | POST | `/api/live/:id/join` | 참가 등록 + 시청용 HLS/재생 정보 | 🔒 |
 | POST | `/api/live/:id/leave` | 본인 퇴장 | 🔒 |
@@ -91,7 +91,7 @@
 - **`/join` 응답**(시청자): 재생용 `{ playback: { hls } }`만. 송출 자격증명 절대 미포함.
 - **CRITICAL: 동시 active 세션 1개.** `/start`는 이미 active 세션이 있으면 `409`. 앱 전역 `live`와 1:1(ADR-001).
 - **`/end`만 전역 종료.** `/leave`는 본인 `Participant`만 닫는다.
-- **CRITICAL: 전이 전파는 SSE로.** 클라이언트는 폴링하지 않고 `/api/live/stream`을 구독해 배지·배너·룸을 동시 갱신한다(ADR-014).
+- **CRITICAL: 전이 전파는 Supabase Realtime으로.** `/start`·`/end` 핸들러가 Realtime 채널에 broadcast(또는 `LiveSession` 변경→`postgres_changes`)하고, 클라이언트는 폴링 없이 그 채널을 구독해 배지·배너·룸을 동시 갱신한다(ADR-014→016).
 
 ### 업로드 / 스토리지
 | 메서드 | 경로 | 설명 | 권한 |
