@@ -28,8 +28,16 @@
 - **질문:** 인앱 전용인가, 라이브 시작·@멘션에 이메일/푸시?
 - **차단 이유:** API의 댓글/멘션·라이브 시작 알림 트리거 설계에 영향(→ [`../dev/API.md`](../dev/API.md), S6). MVP 범위에서 인앱 only로 시작할지 결정 필요.
 
-### I-6 ✅ 인증 = 초대 전용
-- 확정: 공개 가입 없음, 초대 링크 전용(ADR-007). 미결 아님 — 기록만.
+### I-6 ✅ 인증 = 초대 전용 + Google OAuth
+- 확정: 공개 가입 없음, 초대 링크 전용(ADR-007). **인증 수단 = Google OAuth (Supabase Auth)**, 초대 게이트(ADR-017). 인증 수단 미결 해소.
+
+### I-19 🟡 분석 워커 런타임 (Supabase 통합 후)
+- **질문:** Supabase로 DB/Auth/Storage/Realtime를 빼면 앱은 서버리스(Vercel) 가능하지만, **분 단위 분석 워커(ADR-013)는 서버리스에서 못 돈다.** 별도 워커 서비스(상시 컨테이너)인가, 큐(Supabase pg-boss/외부)인가, Edge Function(시간 제한) 인가?
+- **현재 방향:** 워커는 상시 런타임 필요 → 별도 워커 프로세스 권장. 구체 미정.
+
+### I-20 🟢 Supabase DB 이전 시점 + RLS
+- **질문:** SQLite→Supabase Postgres 이전 시점? Prisma 권한 체크를 유지하므로 RLS는 끄는데(ADR-016), 추후 RLS 병행 여부?
+- **현재 방향:** 로컬 SQLite 유지, 운영 Postgres. RLS 미사용(서버 권한 체크로 일원화).
 
 ## 맥락설계 과정 유래
 

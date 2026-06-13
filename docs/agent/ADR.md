@@ -81,3 +81,13 @@
 **결정**: 조회는 서버 컴포넌트(RSC)에서 `lib/` 서버 함수로 Prisma 직접 호출, 변이는 Server Action 또는 route handler로 처리한다. 클라이언트 컴포넌트는 인터랙티브 섬(live·관점 토글·스케줄 편집·업로드·명령 팔레트)에 한정.
 **이유**: CLAUDE.md "서버 로직은 서버에서만"을 RSC 시대에 맞게 구체화. 클라이언트가 DB를 직접 보지 않으면서 초기 페인트가 빠르다.
 **트레이드오프**: RSC/클라이언트 경계 설계 필요. 변이 후 `revalidatePath`/`revalidateTag`로 캐시 무효화를 신경 써야 한다.
+
+### ADR-016: 운영 플랫폼은 Supabase로 통합
+**결정**: 운영 인프라를 **Supabase**(Postgres + Auth + Storage + Realtime)로 통합한다. ADR-010의 DB 결정을 개정한다 — **로컬 개발은 SQLite 유지, 운영 DB는 Supabase Postgres**(Prisma `DATABASE_URL`/`DIRECT_URL` 교체). 스토리지는 Supabase Storage(서명 URL), 실시간(`live`·@멘션)은 Supabase Realtime로 ADR-014의 인-프로세스 SSE 버스를 대체할 수 있다.
+**이유**: 4인 그룹이 DB·인증·스토리지·실시간을 각각 운영하는 부담을 줄인다. 인증 수단 미결(ISSUES I-7 계열)을 Supabase Auth로 해소.
+**트레이드오프**: Supabase 종속. ADR-012(상시 Node 서버)는 **부분 완화** — DB/Auth/Storage/Realtime가 매니지드라 앱은 서버리스(Vercel) 배포가 가능해진다. 단 **분 단위 분석 워커(ADR-013)는 서버리스에서 못 돈다** → 별도 워커 런타임/큐가 여전히 필요(→ [`./ISSUES.md`](./ISSUES.md)). Prisma는 그대로 두되 RLS는 사용하지 않고 서버 권한 체크를 유지한다(RLS vs Prisma 중복 회피).
+
+### ADR-017: 인증은 Google OAuth (Supabase Auth) + 초대 게이트
+**결정**: 로그인은 **Supabase Auth의 Google OAuth**로 한다(미결이던 인증 수단 확정). **초대 전용은 유지**(ADR-007) — Google 로그인에 성공해도, 그 이메일이 **수락된 멤버이거나 유효한 초대**가 있을 때만 합류/세션이 발급된다. 비초대 이메일은 거부 + 로그아웃.
+**이유**: 비밀번호 컬럼 없이(`Member`에 password 미추가) 안전한 외부 인증. Supabase가 OAuth·토큰·리프레시를 관리.
+**트레이드오프**: Supabase 프로젝트 + Google Cloud OAuth 클라이언트 필요(키 없으면 OAuth 왕복 검증 불가 → 해당 step `blocked`). step4의 dev 이메일 로그인은 키 없을 때의 **로컬 테스트 폴백**으로만 남긴다(프로덕션 경로 아님). Supabase `auth.users` ↔ 우리 `Member`를 이메일로 매핑한다.

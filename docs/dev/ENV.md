@@ -13,12 +13,20 @@
 |---|---|---|
 | `ANTHROPIC_API_KEY` | 논문 분석 LLM 호출 | **비밀.** 서버 전용 |
 | `ANALYSIS_MODEL` | 분석 모델 ID | 기본 `claude-opus-4-8` |
-| `DATABASE_URL` | Prisma 연결 | 개발 `file:./dev.db`(SQLite), 운영 Postgres |
+| `DATABASE_URL` | Prisma 연결 | 개발 `file:./dev.db`(SQLite), 운영 Supabase Postgres(ADR-016) |
+| `DIRECT_URL` | Prisma 마이그레이션 직결 | 운영(Supabase) 시 |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL | 공개 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon 키 | 공개(클라이언트 OK) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase 서버 권한 키 | **비밀! 서버 전용** — 클라 노출 금지 |
 | `AUTH_SECRET` | 세션 서명 | **비밀** |
-| `INVITE_TOKEN_SECRET` | 초대 토큰 서명 | **비밀** (초대 전용 가입, ADR-007) |
-| `APP_BASE_URL` | 초대 링크 생성 | 예: `http://localhost:3000` |
-| `STORAGE_*` | PDF·에셋·figure 스토리지 | 다운로드는 서명 URL만(→ [`../security/SECURITY.md`](../security/SECURITY.md)) |
+| `INVITE_TOKEN_SECRET` | 초대 토큰 서명 | **비밀** (초대 전용, ADR-007) |
+| `APP_BASE_URL` | 초대 링크·OAuth 리디렉트 | 예: `http://localhost:3000` |
+| `SUPABASE_STORAGE_BUCKET` | PDF·에셋·figure 스토리지 | 비공개 버킷 + 서명 URL(→ [`../security/SECURITY.md`](../security/SECURITY.md)) |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_STREAM_API_TOKEN` | 라이브(Stream Live) | **비밀.** ADR-002 |
+
+## 인증 (Google OAuth via Supabase Auth)
+
+로그인은 **Supabase Auth의 Google OAuth**(ADR-017). **초대 전용 유지**(ADR-007) — Google 로그인 성공 이메일이 수락된 `Member`이거나 유효한 초대일 때만 합류/세션. Google OAuth 클라이언트(Client ID/Secret)는 앱이 아니라 **Supabase 대시보드 Auth > Providers > Google**에 입력한다. `SUPABASE_SERVICE_ROLE_KEY`는 서버에서만. 키가 없을 땐 step4의 dev 이메일 로그인이 로컬 폴백.
 
 ## 논문 분석 파이프라인 (LLM)
 
