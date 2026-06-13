@@ -34,7 +34,14 @@
       "summary": "DB.md Prisma 19모델 구현(SQLite enum→String·배열→Json, @@unique·@@index·Cascade·CRITICAL 주석, analysisStatus·Job·version). src/data.js 멱등 시드(워크스페이스1·멤버4·초대2·논문5·분석8·figure6·노트5·발표3+에셋/댓글·6월 스케줄·2026 벌금/장부) — 빈 달·active 라이브 미시드(ADR-006/001). migrate init·seed·build·test(26)·lint 통과",
       "completed_at": "2026-06-13T18:11:35+0900"
     },
-    { "step": 4, "name": "auth-invite", "status": "pending" }
+    {
+      "step": 4,
+      "name": "auth-invite",
+      "status": "completed",
+      "started_at": "2026-06-13T18:13:07+0900",
+      "summary": "초대 전용 인증 서버 플럼빙: lib/sign(HMAC 토큰 코어)·auth(HTTP-only 서명 세션·requireAuth/requireRole)·invite(토큰 발급/검증)·http(ApiOk/ApiErr·HttpError). route handler 8종(auth/login(개발용 이메일 식별)·logout·me GET/PATCH·members·invites POST/GET·[id] DELETE·[id]/resend·accept) — zod 검증·진입부 권한(👑)·세션에서 ID(R3)·공개가입 없음(ADR-007). 비밀 서버 전용(.env). build·lint·test(42, 신규 16) 통과",
+      "completed_at": "2026-06-13T18:21:00+0900"
+    }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
 }
