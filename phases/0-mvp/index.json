@@ -64,7 +64,7 @@
       "status": "completed",
       "started_at": "2026-06-13T18:49:54+0900",
       "summary": "홈(대시보드) RSC: lib/dashboard.getDashboardData(Prisma 직접 조회 — 논문/발표 개수·최근 5건, ADR-015). components/dashboard QuickCards(논문→/library·발표→/presentations 카드)·RecentActivity(최근 논문→/papers/:id·발표→/presentations/:id 링크만 + 빈 상태 '첫 논문을 올려볼까요'). page.tsx: Topbar + LiveBanner(live===true일 때만, 화면 미보관 ADR-001/R5) + 카드/목록(RSC). 상태 3종: loading.tsx 스켈레톤·EmptyState·try/catch 에러카드(R26). 토큰만(R20). Playwright webServer(build+start) 가동 + tests/e2e/dashboard.spec(dev로그인→대시보드 렌더→live=false 배너없음, 핵심경로 1개). build·lint·test(56, 신규 5: 퀵카드·최근활동·빈상태·LIVE배너 on/off)·E2E 통과",
-      "completed_at": "2026-06-13T18:55:00+0900"
+      "completed_at": "2026-06-13T18:56:06+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
