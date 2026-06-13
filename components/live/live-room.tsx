@@ -55,6 +55,8 @@ export function LiveRoom({
   const [playback, setPlayback] = React.useState<{ hls: string } | null>(null);
   const [starting, setStarting] = React.useState(false);
   const [startError, setStartError] = React.useState<StartError>(null);
+  // 서버가 준 친절한 사유(예: 송출 미설정 503)를 그대로 보여준다(R30).
+  const [startErrorMsg, setStartErrorMsg] = React.useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = React.useState(false);
   const [ending, setEnding] = React.useState(false);
   const [endError, setEndError] = React.useState(false);
@@ -104,6 +106,7 @@ export function LiveRoom({
   async function handleStart() {
     setStarting(true);
     setStartError(null);
+    setStartErrorMsg(null);
     try {
       const r = await fetch("/api/live/start", { method: "POST" });
       if (r.status === 409) {
@@ -111,6 +114,11 @@ export function LiveRoom({
         return;
       }
       if (!r.ok) {
+        // 서버의 친절한 사유(503 송출 미설정 등)를 그대로 노출(R30).
+        const body = (await r.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setStartErrorMsg(body?.error?.message ?? null);
         setStartError("error");
         return;
       }
@@ -198,7 +206,8 @@ export function LiveRoom({
             </Button>
             {startError === "error" && (
               <p className="text-[12px] text-busy">
-                지금은 시작할 수 없어요. 잠깐 후 다시 시도해주세요.
+                {startErrorMsg ??
+                  "지금은 시작할 수 없어요. 잠깐 후 다시 시도해주세요."}
               </p>
             )}
           </div>

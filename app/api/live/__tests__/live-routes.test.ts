@@ -32,16 +32,19 @@ const {
   createLiveInputMock,
   deleteLiveInputMock,
   getLiveInputPlaybackMock,
+  isLiveConfiguredMock,
 } = vi.hoisted(() => ({
   createLiveInputMock: vi.fn(),
   deleteLiveInputMock: vi.fn(),
   getLiveInputPlaybackMock: vi.fn(),
+  isLiveConfiguredMock: vi.fn(),
 }));
 vi.mock("@/lib/cloudflare", () => ({
   createLiveInput: createLiveInputMock,
   deleteLiveInput: deleteLiveInputMock,
   getLiveInputPlayback: getLiveInputPlaybackMock,
   verifyWebhookSignature: vi.fn(),
+  isLiveConfigured: isLiveConfiguredMock,
 }));
 
 // 모킹 후 import — 라우트가 모킹된 의존성을 받도록.
@@ -55,9 +58,20 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isLiveConfiguredMock.mockReturnValue(true); // 기본: 송출 설정됨
 });
 
 describe("POST /api/live/start", () => {
+  it("송출(Cloudflare) 미설정이면 503 — 친절 안내(R30)", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
+    isLiveConfiguredMock.mockReturnValue(false);
+
+    const res = await startPOST();
+    expect(res.status).toBe(503);
+    expect(getActiveSessionMock).not.toHaveBeenCalled();
+    expect(createLiveInputMock).not.toHaveBeenCalled();
+  });
+
   it("이미 active 세션이 있으면 409", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     getActiveSessionMock.mockResolvedValue({

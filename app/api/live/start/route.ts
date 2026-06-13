@@ -1,7 +1,7 @@
 import { requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { createLiveInput } from "@/lib/cloudflare";
+import { createLiveInput, isLiveConfigured } from "@/lib/cloudflare";
 import { getActiveSession } from "@/lib/live";
 import { broadcastLive } from "@/lib/realtime";
 
@@ -12,6 +12,15 @@ import { broadcastLive } from "@/lib/realtime";
 export async function POST(): Promise<Response> {
   try {
     const session = await requireAuth();
+
+    // 송출(Cloudflare) 설정 전이면 친절히 안내 — 정체불명 500 대신 503(R30).
+    if (!isLiveConfigured()) {
+      return fail(
+        503,
+        "LIVE_UNCONFIGURED",
+        "세미나 라이브(송출)가 아직 연결되지 않았어요. 관리자가 Cloudflare 설정을 마치면 켜져요.",
+      );
+    }
 
     // 동시 1개 강제: 이미 active 세션이 있으면 시작하지 않는다(입장 안내는 UI에서, 409).
     const existing = await getActiveSession();

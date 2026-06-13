@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createLiveInput,
+  isLiveConfigured,
   verifyWebhookSignature,
 } from "@/lib/cloudflare";
 
@@ -66,6 +67,24 @@ describe("createLiveInput", () => {
     process.env.CLOUDFLARE_STREAM_API_TOKEN = "tok";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
     await expect(createLiveInput()).rejects.toThrow(/실패/);
+  });
+});
+
+describe("isLiveConfigured", () => {
+  it("키가 없거나 placeholder(xxxx)면 false", () => {
+    delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    delete process.env.CLOUDFLARE_STREAM_API_TOKEN;
+    expect(isLiveConfigured()).toBe(false);
+
+    process.env.CLOUDFLARE_ACCOUNT_ID = "xxxxxxxx";
+    process.env.CLOUDFLARE_STREAM_API_TOKEN = "xxxxxxxx";
+    expect(isLiveConfigured()).toBe(false);
+  });
+
+  it("실제 키가 둘 다 있으면 true", () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "real-account";
+    process.env.CLOUDFLARE_STREAM_API_TOKEN = "real-token";
+    expect(isLiveConfigured()).toBe(true);
   });
 });
 

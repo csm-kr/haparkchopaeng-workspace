@@ -13,6 +13,18 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/**
+ * 라이브(송출)가 실제로 켜질 수 있는 설정인지 — 키가 있고 placeholder가 아닌지.
+ * 라우트가 호출 전에 확인해 "아직 설정 안 됨"을 친절히 안내한다(정체불명 500 대신).
+ */
+export function isLiveConfigured(): boolean {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const token = process.env.CLOUDFLARE_STREAM_API_TOKEN;
+  const placeholder = (v: string | undefined) =>
+    !v || v.trim() === "" || /^x+$/i.test(v.trim());
+  return !placeholder(accountId) && !placeholder(token);
+}
+
 export interface LiveInput {
   liveInputId: string;
   /** 송출 자격증명 — 발표자 본인에게만 노출(SECURITY/R36). */
