@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>하박조팽 · 시스템 이해 — 개요</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">하박</div>
+      <div>
+        <h1>하박조팽</h1>
+        <div class="sub">System Understanding</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="group-label">시스템</div>
+      <a href="index.html"><span class="ic">🏠</span> 개요</a>
+      <a href="architecture.html"><span class="ic">🏗️</span> 아키텍처</a>
+      <a href="database.html"><span class="ic">🗄️</span> 데이터베이스</a>
+      <a href="api.html"><span class="ic">🔌</span> API 설계</a>
+      <div class="group-label">사용자</div>
+      <a href="userflow.html"><span class="ic">🧭</span> 워크플로우 · 저니</a>
+      <a href="sequence.html"><span class="ic">🔁</span> 시퀀스 다이어그램</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+      <div class="page-eyebrow">시니어 아키텍처 리뷰</div>
+      <h2 class="page-title">하박조팽 리서치 워크스페이스</h2>
+      <p class="lead">
+        매주 토요일 세미나를 진행하는 <strong>4인 리서치 그룹</strong>의 반복 활동 — 라이브 발표, 논문 두 관점 분석,
+        자료 아카이빙, 일정·책임 관리 — 을 하나의 따뜻하고 마찰 없는 <strong>비공개 워크스페이스</strong>로 모으는 단일 테넌트 제품입니다.
+      </p>
+
+      <div class="stats">
+        <div class="stat"><div class="n">4인</div><div class="l">단일 비공개 그룹 (멀티테넌트 아님)</div></div>
+        <div class="stat"><div class="n">6</div><div class="l">핵심 기능 도메인</div></div>
+        <div class="stat"><div class="n">19</div><div class="l">Prisma 데이터 모델</div></div>
+        <div class="stat"><div class="n">~35</div><div class="l">API 엔드포인트</div></div>
+      </div>
+
+      <div class="callout info">
+        <span class="ci">📦</span>
+        <div>
+          <strong>현재 코드 상태.</strong> 저장소는 <strong>고충실도 디자인 프로토타입</strong>(<code>src/*.jsx</code>, 빌드 없는 브라우저 Babel + <code>window.*</code> 목 데이터)과,
+          이를 실제 스택으로 재구축하기 위한 <strong>프로덕션 스캐폴딩</strong>(Next.js 15 · Prisma 스키마 · TypeScript 타입 · 풍부한 설계 문서)이 공존합니다.
+          이 문서는 <strong>의도된 프로덕션 시스템</strong>을 기준으로 정리합니다.
+        </div>
+      </div>
+
+      <h3>제품 한눈에</h3>
+      <div class="grid cols-3">
+        <div class="card feat">
+          <div class="icon">🔴</div>
+          <h4>세미나 라이브</h4>
+          <p class="muted">기본은 라이브 없음(빈 상태 + CTA). 시작하면 앱 전역이 <code>live</code>가 되어 사이드바 배지·홈 배너가 모두에게 동기화. Cloudflare Stream Live에 영상 위임.</p>
+        </div>
+        <div class="card feat">
+          <div class="icon">📄</div>
+          <h4>논문 두 관점 분석</h4>
+          <p class="muted">PDF/arXiv 업로드 → <strong>연구</strong> & <strong>재구현</strong> 두 관점 구조화 분석. Figure 분석은 공통 하단 고정. 섹션별 작성자 표기 협업 노트.</p>
+        </div>
+        <div class="card feat">
+          <div class="icon">💬</div>
+          <h4>발표 자료 · 회고</h4>
+          <p class="muted">발표 자료 아카이브 + @멘션·반응이 있는 스레드형 회고 댓글. 검색 가능한 한 곳에 토론을 축적.</p>
+        </div>
+        <div class="card feat">
+          <div class="icon">📅</div>
+          <h4>스케줄 · 책임</h4>
+          <p class="muted">매주 토요일 4인 순번제. 월 단위 <strong>절대 자동 채움 없음</strong> — 편집→저장(순번 전진)→확정 라이프사이클. 연도별 벌금 장부.</p>
+        </div>
+        <div class="card feat">
+          <div class="icon">👥</div>
+          <h4>팀 관리</h4>
+          <p class="muted">이메일 초대 + 역할(관리자/멤버/게스트), 초대 링크, 대기 초대 재전송/취소, 역할 변경·내보내기. 공개 가입 없음.</p>
+        </div>
+        <div class="card feat">
+          <div class="icon">⚙️</div>
+          <h4>설정</h4>
+          <p class="muted">프로필, 알림, 라이트/다크 테마(웜 화이트 + blurple 액센트), 법적 링크.</p>
+        </div>
+      </div>
+
+      <h3>페르소나 — 모두가 동등한 동료</h3>
+      <p class="muted">4인 모두 각자 발표자이자 청중입니다. 역할은 권한일 뿐 위계가 아닙니다.</p>
+      <table>
+        <thead><tr><th>멤버</th><th>역할</th><th>관심사</th><th>주로 하는 일</th></tr></thead>
+        <tbody>
+          <tr><td><span class="member"><span class="av" style="background:var(--ha)">하</span>하수현</span></td><td><span class="badge">관리자 / PI</span></td><td>팀 운영, 일정·책임</td><td>스케줄 편성, 팀 관리, 벌금 장부, 발표</td></tr>
+          <tr><td><span class="member"><span class="av" style="background:var(--bak)">박</span>박진희</span></td><td><span class="badge gray">멤버 / Vision</span></td><td>논문 깊게 읽기, 재구현</td><td>논문 분석, 섹션 노트, 발표</td></tr>
+          <tr><td><span class="member"><span class="av" style="background:var(--jo)">조</span>조성민</span></td><td><span class="badge gray">멤버 / RAG·평가</span></td><td>발표 준비, 회고</td><td>논문·자료 업로드, 라이브 발표</td></tr>
+          <tr><td><span class="member"><span class="av" style="background:var(--paeng)">팽</span>팽진욱</span></td><td><span class="badge gray">멤버 / Robotics</span></td><td>따라잡기(청중)</td><td>라이브 시청, 댓글·반응, 미리보기</td></tr>
+        </tbody>
+      </table>
+
+      <h3>주간 세미나 사이클 — 제품의 심장</h3>
+      <p class="muted">제품의 리듬은 매주 토요일 10:00 세미나를 중심으로 한 주를 돕니다.</p>
+      <div class="diagram">
+        <div class="cap">월 → 토 → 일: 한 주의 흐름</div>
+        <pre class="mermaid">
+flowchart LR
+  Mon["🗓️ 월<br/>이번 주 누구 차례?<br/>스케줄 확인"]
+  Tue["📄 화<br/>발표자가 논문 업로드<br/>→ 두 관점 분석"]
+  Wed["👥 수~금<br/>팀 협업 노트<br/>자료 준비·댓글"]
+  Sat["🔴 토 10:00<br/>라이브 입장→발표→종료"]
+  Sun["💬 토~일<br/>회고 댓글<br/>다음 발표자 확인"]
+  Mon --> Tue --> Wed --> Sat --> Sun --> Mon
+        </pre>
+      </div>
+
+      <h3>기술 스택 (확정)</h3>
+      <table>
+        <thead><tr><th>레이어</th><th>선택</th><th>근거</th></tr></thead>
+        <tbody>
+          <tr><td>프레임워크</td><td><strong>Next.js 15</strong> (App Router)</td><td>서버 로직 = route handler/Server Action 규칙과 정합 (ADR-009)</td></tr>
+          <tr><td>언어</td><td>TypeScript strict</td><td>타입 안전, 경계 검증</td></tr>
+          <tr><td>스타일</td><td>Tailwind + 토큰 + shadcn/ui</td><td>라이트/다크 oklch 토큰</td></tr>
+          <tr><td>DB / ORM</td><td><strong>Prisma + SQLite</strong></td><td>경량 시작, Postgres 이전 경로 유지 (ADR-010)</td></tr>
+          <tr><td>라이브</td><td><strong>Cloudflare Stream Live</strong></td><td>영상 인프라 위임 (ADR-002)</td></tr>
+          <tr><td>분석 LLM</td><td><strong>Anthropic Claude</strong> (워커 전용)</td><td>PDF→두 관점 구조화 추출, 사람 검수 보조 (ADR-011)</td></tr>
+          <tr><td>검증 / 테스트</td><td>zod · Vitest + RTL (TDD)</td><td>API 경계 검증, 테스트 우선</td></tr>
+        </tbody>
+      </table>
+
+      <h3>이 시스템을 규정하는 5가지 결정</h3>
+      <ul class="clean">
+        <li><strong>단일 테넌트 · 초대 전용</strong> (ADR-007) — 워크스페이스 row는 단 하나. 공개 가입 없음, 서명된 초대 토큰으로만 합류.</li>
+        <li><strong>업로드 성공 ≠ 분석 성공</strong> (ADR-013) — 분 단위 Claude 분석은 백그라운드 잡으로. 분석이 실패해도 논문·원문 PDF는 살아있고 재시도만.</li>
+        <li><strong><code>live</code>는 앱 전역 상태</strong> (ADR-001/014) — 동시 active 세션 1개, SSE 푸시로 모두에게 즉시 일관.</li>
+        <li><strong>스케줄 자동 생성 금지</strong> (ADR-006) — 빈 달은 진짜 비어 있음. 명시적 편집→저장→확정, 낙관적 락으로 동시 편집 보호.</li>
+        <li><strong>읽기=RSC 서버 조회, 쓰기=Server Action/route handler</strong> (ADR-015) — 클라이언트는 DB·외부 서비스를 직접 보지 않음.</li>
+      </ul>
+
+      <div class="footer-note">
+        근거 문서: <code>docs/dev/ARCHITECTURE.md · API.md · DB.md · SEQUENCE_DIAGRAM.md</code>, <code>docs/user/PRD.md · USER_FLOW.md · USER_JOURNEY.md</code>,
+        <code>docs/agent/ADR.md</code>, <code>docs/security/SECURITY.md</code>, <code>prisma/schema.prisma</code>, <code>types/*.ts</code>. ·
+        생성일 2026-06-13.
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

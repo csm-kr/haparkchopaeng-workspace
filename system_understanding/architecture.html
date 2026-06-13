@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>하박조팽 · 아키텍처</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">하박</div>
+      <div><h1>하박조팽</h1><div class="sub">System Understanding</div></div>
+    </div>
+    <nav class="nav">
+      <div class="group-label">시스템</div>
+      <a href="index.html"><span class="ic">🏠</span> 개요</a>
+      <a href="architecture.html"><span class="ic">🏗️</span> 아키텍처</a>
+      <a href="database.html"><span class="ic">🗄️</span> 데이터베이스</a>
+      <a href="api.html"><span class="ic">🔌</span> API 설계</a>
+      <div class="group-label">사용자</div>
+      <a href="userflow.html"><span class="ic">🧭</span> 워크플로우 · 저니</a>
+      <a href="sequence.html"><span class="ic">🔁</span> 시퀀스 다이어그램</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+      <div class="page-eyebrow">시스템 · 아키텍처</div>
+      <h2 class="page-title">아키텍처 & 토폴로지</h2>
+      <p class="lead">
+        프로토타입은 단일 클라이언트 SPA지만, 프로덕션은 <strong>상시 구동 Node 서버 + 인-프로세스 백그라운드 워커 + 외부 서비스</strong>가
+        얽힌 단일 인스턴스 시스템입니다. 아래는 그 토폴로지, 경계, 데이터 흐름입니다.
+      </p>
+
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>CRITICAL — 서버리스가 아니라 상시 구동 Node 서버.</strong> 이유: ① 분 단위 분석/녹화 후처리를 인-프로세스 워커로 돌려야 하고
+        ② SQLite 파일은 영속 디스크가 필요합니다. 서버리스는 둘 다 깨집니다 (ADR-012). 4인 단일 인스턴스 가정 — 수평 확장은 비범위.</div>
+      </div>
+
+      <h3>배포 토폴로지 (ADR-012)</h3>
+      <div class="diagram">
+        <div class="cap">브라우저 ↔ Next.js 상시 서버 ↔ 외부 서비스</div>
+        <pre class="mermaid">
+flowchart TB
+  subgraph Client["🌐 브라우저 (4인)"]
+    RSC["RSC로 받은 HTML"]
+    Islands["인터랙티브 섬<br/>live룸·관점토글·스케줄편집·업로드·⌘K"]
+  end
+
+  subgraph Server["🖥️ Next.js 15 상시 구동 Node 서버 (단일 인스턴스)"]
+    direction TB
+    RH["RSC 렌더 + route handler / Server Action"]
+    Bus["인-프로세스 이벤트 버스 (SSE)"]
+    Worker["인-프로세스 워커<br/>(Job 폴링)"]
+    Prisma["Prisma"]
+  end
+
+  DB[("🗄️ SQLite 파일<br/>영속 디스크")]
+  CF["☁️ Cloudflare Stream Live<br/>Live Input · HLS · 녹화"]
+  Store["📦 객체 스토리지<br/>PDF · 에셋 · figure"]
+  AI["🤖 Anthropic API<br/>(분석)"]
+
+  Client -- "HTTP / SSE" --> Server
+  RH --> Prisma --> DB
+  RH --> Bus -- "live.started/ended·mention" --> Client
+  RH --> CF
+  RH -- "프리사인 서명만" --> Store
+  Client -. "프리사인 직접 업/다운로드" .-> Store
+  Worker --> Prisma
+  Worker --> AI
+  Worker -- "arXiv fetch" --> Store
+  CF -- "녹화완료 웹훅(HMAC)" --> RH
+        </pre>
+      </div>
+
+      <h3>읽기 vs 쓰기 — 데이터 흐름 (ADR-015)</h3>
+      <p class="muted">CLAUDE.md의 "서버 로직은 서버에서만" 규칙을 RSC 시대에 맞게 구체화합니다.</p>
+      <table>
+        <thead><tr><th>경로</th><th>방법</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge">읽기 (조회)</span></td><td>서버 컴포넌트(RSC)에서 <code>lib/</code> 서버 함수로 Prisma 직접 조회</td><td>클라이언트가 DB를 직접 보지 않음 → 규칙 충족. 초기 페인트 빠름</td></tr>
+          <tr><td><span class="badge">쓰기 (변이)</span></td><td>Server Action 또는 route handler (<code>app/api/**</code>)</td><td>zod 검증·권한·작성자 주입 여기서. 변이 후 <code>revalidatePath/Tag</code></td></tr>
+          <tr><td><span class="badge gray">인터랙티브 섬</span></td><td>클라이언트 컴포넌트 (<code>"use client"</code>)</td><td>live룸·관점토글·스케줄편집·업로드모달·명령팔레트만</td></tr>
+          <tr><td><span class="badge gray">실시간 수신</span></td><td>SSE 구독</td><td>폴링 대신 푸시</td></tr>
+        </tbody>
+      </table>
+
+      <h3>백그라운드 작업 (ADR-013) — CRITICAL</h3>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인으로 돌리지 않습니다.</strong> Claude 분석은 분 단위라 HTTP 타임아웃을 넘기기 때문입니다.
+        업로드 성공과 분석 성공을 <em>아키텍처로</em> 분리합니다.</div>
+      </div>
+      <div class="diagram">
+        <div class="cap">즉시 201 응답 + 잡 적재 → 워커가 비동기 처리</div>
+        <pre class="mermaid">
+flowchart LR
+  A["POST /api/papers"] --> B["Paper 저장<br/>analysisStatus=pending"]
+  B --> C["Job 적재<br/>type=analyze_paper"]
+  C --> D["즉시 201 응답"]
+  C -. "폴링" .-> W["인-프로세스 워커<br/>(원자적 claim)"]
+  W --> E["Anthropic 분석"]
+  E -->|성공| F["Analysis/Figure 저장<br/>status=ready"]
+  E -->|실패| G["status=failed<br/>Job.lastError"]
+  F -. "SSE / 재조회" .-> H["클라이언트 갱신"]
+  G -. "POST /reanalyze" .-> C
+        </pre>
+      </div>
+      <ul class="clean">
+        <li>잡은 DB <code>Job</code> 테이블 + 인-프로세스 폴링 워커로 시작 — 외부 큐 불필요. 멱등·재시도(maxAttempts=3)·실패 보존.</li>
+        <li>워커는 잡을 <strong>원자적으로 claim</strong>(<code>claimedAt</code>)하여 중복 처리를 방지합니다.</li>
+      </ul>
+
+      <h3>실시간 동기화 (ADR-014) — SSE 푸시</h3>
+      <p class="muted"><code>live</code>는 모두에게 즉시 일관돼야 합니다(ADR-001). 폴링 대신 SSE로 전이를 브로드캐스트합니다.</p>
+      <div class="diagram">
+        <div class="cap">단일 인스턴스 → 인-프로세스 이벤트 버스로 충분</div>
+        <pre class="mermaid">
+flowchart LR
+  S1["/live/start"] --> Bus["인-프로세스<br/>이벤트 버스"]
+  S2["/live/:id/end"] --> Bus
+  S3["@멘션 작성"] --> Bus
+  Bus -- "GET /api/live/stream (SSE)" --> C1["사이드바 LIVE 배지"]
+  Bus --> C2["홈 배너"]
+  Bus --> C3["meeting 룸"]
+        </pre>
+      </div>
+      <p class="muted tiny">다중 인스턴스로 가면 Redis pub/sub 등 분산 버스가 필요(비범위). WebSocket이 아닌 단방향 SSE로 시작 — 서버→클라 알림이면 충분.</p>
+
+      <h3>외부 서비스 경계</h3>
+      <div class="grid cols-2">
+        <div class="card">
+          <h4>☁️ Cloudflare Stream Live</h4>
+          <p class="muted">앱은 Live Input 생성·권한 체크·플레이어 노출만(ADR-002). 인코딩/HLS/CDN/녹화는 위임. <strong>녹화 완료는 웹훅(HMAC)</strong>으로 수신. 송출 자격증명은 발표자에게만.</p>
+        </div>
+        <div class="card">
+          <h4>📦 객체 스토리지</h4>
+          <p class="muted">PDF·에셋은 <strong>프리사인 업로드</strong>(클라이언트→스토리지 직접, 서버는 서명만)로 큰 파일이 서버를 거치지 않게. 다운로드는 단기 <strong>서명 URL</strong>.</p>
+        </div>
+        <div class="card">
+          <h4>🤖 Anthropic API</h4>
+          <p class="muted">논문 분석. <strong>워커에서만</strong> 호출(분 단위). 사람이 검수·보강하는 보조 추출(ADR-011). 키는 서버 <code>.env</code> 전용.</p>
+        </div>
+        <div class="card">
+          <h4>🔗 arXiv</h4>
+          <p class="muted"><strong>워커</strong>가 <code>arxiv.org/pdf/{id}</code> PDF를 가져와 스토리지에 저장(요청 경로 아님). SSRF 화이트리스트.</p>
+        </div>
+      </div>
+
+      <h3>동시성 · 멱등성</h3>
+      <table>
+        <thead><tr><th>영역</th><th>전략</th></tr></thead>
+        <tbody>
+          <tr><td>라이브</td><td>동시 active 1개 — <code>/start</code>가 이미 있으면 <span class="badge danger">409</span> (ADR-001)</td></tr>
+          <tr><td>스케줄</td><td><code>ScheduleMonth.version</code> <strong>낙관적 락</strong> — 저장 시 <code>If-Match</code> 불일치면 <span class="badge danger">409</span> "다른 사람이 먼저 저장했어요"</td></tr>
+          <tr><td>잡</td><td>워커가 잡을 원자적 claim(중복 방지). 재시도는 멱등</td></tr>
+        </tbody>
+      </table>
+
+      <h3>프로토타입 → 프로덕션 교체표</h3>
+      <table>
+        <thead><tr><th>프로토타입 (현재 <code>src/</code>)</th><th>프로덕션 교체 대상</th></tr></thead>
+        <tbody>
+          <tr><td><code>@babel/standalone</code> 브라우저 트랜스파일</td><td>실제 빌드 (Next.js 15)</td></tr>
+          <tr><td><code>data.js</code>의 <code>window.*</code> 전역</td><td>API + 타입드 모델 / Prisma DB</td></tr>
+          <tr><td>파일별 로컬 <code>useState</code> 별칭</td><td>실제 상태 관리 + 서버 영속화</td></tr>
+          <tr><td><code>&lt;image-slot&gt;</code> 플레이스홀더</td><td>실제 이미지 업로드 / 렌더링된 PDF figure</td></tr>
+          <tr><td><code>getUserMedia</code> 프리뷰 + 정적 아바타</td><td>Cloudflare Stream Live</td></tr>
+          <tr><td><code>tweaks-panel.jsx</code></td><td><span class="badge danger">제거</span> (포팅 금지)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>의도된 디렉토리 구조 (프로덕션 골격)</h3>
+      <pre>app/
+├── (auth)/          # 로그인 · 초대 합류
+├── (app)/           # 인증 후 워크스페이스 화면 (RSC)
+├── api/             # route handler (쓰기·웹훅·SSE·프리사인)
+└── layout.tsx
+components/ui/       # shadcn 기반 디자인 시스템
+lib/                 # prisma.ts · 서버 조회 함수 · 유틸
+types/               # entities · enums · analysis · api DTO
+prisma/schema.prisma # 19개 모델 (단일 진실 공급원)
+worker/              # 인-프로세스 잡 폴링 워커</pre>
+
+      <div class="footer-note">근거: <code>docs/dev/ARCHITECTURE.md</code>, <code>docs/agent/ADR.md</code> (ADR-001·002·012~015).</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
