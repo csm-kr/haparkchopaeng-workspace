@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-06-13T17:57:29+0900",
       "summary": "types/ 공유 도메인 타입 모듈화(enums·analysis·entities·api + index 배럴). 유니온 리터럴 11종(Lens/NoteLens/Role/Presence/Availability/WeekStatus/AnalysisStatus/JobType/JobStatus/InviteStatus/AssetType), DB.md 대응 엔티티 DTO 18종(Paper.analysisStatus·ScheduleMonth.version·Job 포함, DateTime은 ISO 문자열), lens별로 좁혀지는 Analysis<L> payload(research/repro 구조), ApiOk/ApiErr 봉투 + 파생 MemberFineSummary(미저장). any 미사용, 파생값(누적벌금·미납·current·live) 저장 필드 제외. expectTypeOf 타입 테스트 6 + build/lint/test(16) 통과",
-      "completed_at": "2026-06-13T18:00:38+0900"
+      "completed_at": "2026-06-13T18:01:04+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
