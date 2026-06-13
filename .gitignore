@@ -4,6 +4,15 @@ out/
 next-env.d.ts
 tsconfig.tsbuildinfo
 
+# 환경 변수 (.env.example 은 커밋, 실제 키가 든 .env* 는 금지)
+.env
+.env.local
+.env.*.local
+
+# 로컬 SQLite DB
+*.db
+*.db-journal
+
 # phase execution outputs
 phases/**/phase*-output.json
 phases/**/step*-output.json
