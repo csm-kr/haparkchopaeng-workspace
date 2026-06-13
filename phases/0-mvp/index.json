@@ -57,8 +57,8 @@
       "started_at": "2026-06-13T18:31:09+0900",
       "summary": "영속 셸 + 라우팅 + 앱 레벨 상태: providers(ThemeProvider data-theme 토글·localStorage / LiveProvider 단일 live + useLiveStream SSE 구독 골격, 엔드포인트 부재 시 graceful no-op·폴링아님 R33 / AppProviders). shell(Sidebar 내비7 홈·논문·발표자료·아이디어·스케쥴·팀관리·세미나라이브 + collapsed + LIVE 알약(live시 count억제·텍스트병행·reduced-motion R29) + 멤버목록 + 테마토글 / Topbar crumbs·actions RSC / AppShell collapsed섬 / LiveBanner). (app)/layout RSC 인증가드(getSession→redirect)·멤버 Prisma조회→props(ADR-015). 자리표시 8화면(EmptyState). live는 화면 미보관(ADR-001/R5). build·lint·test(51, 신규 5: 내비순서·aria-current·LIVE알약 on/off·테마토글) 통과",
       "completed_at": "2026-06-13T18:40:08+0900"
-    }
+    },
+    { "step": 7, "name": "dashboard", "status": "pending" }
   ],
-  "created_at": "2026-06-13T17:38:14+0900",
-  "completed_at": "2026-06-13T18:40:08+0900"
+  "created_at": "2026-06-13T17:38:14+0900"
 }
