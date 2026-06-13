@@ -34,11 +34,11 @@
       <p class="lead">
         주요 동작의 <strong>컴포넌트 간 호출 순서</strong>입니다.
         참여자: <code>Client</code>(클라이언트 컴포넌트) · <code>API</code>(route handler/Server Action) · <code>DB</code>(Prisma) ·
-        <code>Storage</code>(파일) · <code>CF</code>(Cloudflare) · <code>Worker</code> · <code>Claude</code>.
+        <code>Storage</code>(파일) · <code>CF</code>(Cloudflare) · <code>Worker</code>(외부 durable 잡 러너=Inngest) · <code>Gemini</code>.
       </p>
 
       <h3>S1 · 논문 업로드 → 분석 생성</h3>
-      <div class="callout crit"><span class="ci">🔥</span><div>분석은 요청 경로가 아니라 <strong>워커</strong>에서. Claude 호출은 분 단위 → HTTP 타임아웃을 넘으므로 API는 잡만 적재하고 즉시 응답(ADR-013).</div></div>
+      <div class="callout crit"><span class="ci">🔥</span><div>분석은 요청 경로가 아니라 <strong>외부 durable 잡 러너</strong>에서. Gemini 호출은 분 단위 → HTTP 타임아웃을 넘으므로 API는 잡만 적재하고 즉시 응답(ADR-013→016).</div></div>
       <div class="diagram">
         <pre class="mermaid">
 sequenceDiagram
@@ -46,8 +46,8 @@ sequenceDiagram
   participant A as API (/api/papers)
   participant S as Storage
   participant D as DB
-  participant W as Worker
-  participant CL as Claude
+  participant W as Worker (Inngest)
+  participant CL as Gemini
   Note over U,S: (사전) 프리사인 업로드: Client → Storage 직접 (서버는 서명만)
   U->>A: POST { objectKey | arXiv URL }
   A->>A: Content-Type 검증 (PDF만, 아니면 415)
@@ -55,7 +55,7 @@ sequenceDiagram
   A->>D: Job 적재 (type=analyze_paper, {paperId})
   A-->>U: { data: paper, status: pending } (201) ← 즉시
   U->>U: navigate('paper') · 스켈레톤 '읽는 중'
-  Note over W: 폴링 워커가 Job claim (원자적)
+  Note over W: 외부 durable 잡 러너가 Job 실행 (멱등·재시도, ADR-016)
   opt arXiv
     W->>S: arxiv PDF fetch → 저장
   end
@@ -67,7 +67,7 @@ sequenceDiagram
     W->>D: status=failed, Job.lastError
     Note over U: '분석 못 끝냄' + [다시 분석] (POST /reanalyze)
   end
-  U->>A: (SSE 또는 재조회) ready 전환 수신
+  U->>A: (Realtime 또는 재조회) ready 전환 수신
         </pre>
       </div>
 
@@ -104,7 +104,7 @@ sequenceDiagram
   A->>D: LiveSession 생성 (active=true, cloudflareLiveInputId)
   A-->>P: { rtmps, srt, playback } ※ Stream Key는 발표자에게만
   Note over P: OBS 등으로 RTMPS/SRT 송출
-  A->>A: 이벤트 버스에 live.started 발행 → SSE 푸시 (S4.5)
+  A->>A: Supabase Realtime 채널에 live.started broadcast → 구독자에게 푸시 (S4.5)
         </pre>
       </div>
 
@@ -127,24 +127,24 @@ sequenceDiagram
     V->>A: POST /api/live/:id/end
     A->>C: Live Input 정리
     A->>D: LiveSession active=false, endedAt
-    A->>A: 이벤트 버스에 live.ended 발행 → SSE 푸시
+    A->>A: Supabase Realtime에 live.ended broadcast
     A-->>V: ok
   end
         </pre>
       </div>
 
-      <h3>S4.5 · 라이브 전이 실시간 전파 (SSE)</h3>
-      <div class="callout crit"><span class="ci">🔥</span><div><code>live</code>는 모두에게 즉시 일관돼야 함(ADR-001). 폴링이 아니라 SSE 푸시. 단일 인스턴스라 인-프로세스 버스로 충분.</div></div>
+      <h3>S4.5 · 라이브 전이 실시간 전파 (Supabase Realtime)</h3>
+      <div class="callout crit"><span class="ci">🔥</span><div><code>live</code>는 모두에게 즉시 일관돼야 함(ADR-001). 폴링이 아니라 Realtime 푸시(ADR-014→016). 서버리스/다중 리전에서도 성립 — 인-프로세스 버스 가정 금지.</div></div>
       <div class="diagram">
         <pre class="mermaid">
 sequenceDiagram
   participant C1 as 모든 클라이언트
-  participant A as API (/live/stream)
-  participant B as 인-프로세스 이벤트 버스
-  C1->>A: GET /api/live/stream (SSE 구독)
-  Note over A,B: /start·/end 핸들러가 live.started/ended 발행
-  B-->>A: live.started | live.ended | mention
-  A-->>C1: SSE 이벤트
+  participant A as API (/live 핸들러)
+  participant R as Supabase Realtime
+  C1->>R: Realtime 채널 구독
+  Note over A,R: /start·/end 핸들러가 Realtime에 broadcast
+  A->>R: live.started | live.ended | mention broadcast
+  R-->>C1: Realtime 이벤트 푸시
   C1->>C1: 사이드바 배지 · 홈 배너 · meeting 룸 동시 갱신
         </pre>
       </div>

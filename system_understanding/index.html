@@ -127,7 +127,7 @@ flowchart LR
           <tr><td>DB / ORM</td><td><strong>Prisma + Supabase Postgres</strong></td><td>관리형 DB·Storage·Realtime (ADR-016, ADR-010 개정)</td></tr>
           <tr><td>잡 러너</td><td><strong>Inngest</strong> (확정)</td><td>분 단위 분석을 서버리스 밖 durable 실행 (ADR-016, ISSUES I-15)</td></tr>
           <tr><td>라이브</td><td><strong>Cloudflare Stream Live</strong></td><td>영상 인프라 위임 (ADR-002)</td></tr>
-          <tr><td>분석 LLM</td><td><strong>Anthropic Claude</strong> (잡 러너 전용)</td><td>PDF→두 관점 구조화 추출, 사람 검수 보조 (ADR-011)</td></tr>
+          <tr><td>분석 LLM</td><td><strong>Google Gemini</strong> (<code>@google/genai</code>, 잡 러너 전용)</td><td>PDF→두 관점 구조화 추출, 사람 검수 보조 (ADR-011)</td></tr>
           <tr><td>검증 / 테스트</td><td>zod · Vitest + RTL (TDD)</td><td>API 경계 검증, 테스트 우선</td></tr>
         </tbody>
       </table>
@@ -135,8 +135,8 @@ flowchart LR
       <h3>이 시스템을 규정하는 5가지 결정</h3>
       <ul class="clean">
         <li><strong>단일 테넌트 · 초대 전용</strong> (ADR-007) — 워크스페이스 row는 단 하나. 공개 가입 없음, 서명된 초대 토큰으로만 합류.</li>
-        <li><strong>업로드 성공 ≠ 분석 성공</strong> (ADR-013) — 분 단위 Claude 분석은 durable 잡 러너로(ADR-016). 분석이 실패해도 논문·원문 PDF는 살아있고 재시도만.</li>
-        <li><strong><code>live</code>는 앱 전역 상태</strong> (ADR-001/014) — 동시 active 세션 1개, SSE 푸시로 모두에게 즉시 일관.</li>
+        <li><strong>업로드 성공 ≠ 분석 성공</strong> (ADR-013) — 분 단위 Gemini 분석은 durable 잡 러너로(ADR-016). 분석이 실패해도 논문·원문 PDF는 살아있고 재시도만.</li>
+        <li><strong><code>live</code>는 앱 전역 상태</strong> (ADR-001/014→016) — 동시 active 세션 1개, Supabase Realtime 푸시로 모두에게 즉시 일관.</li>
         <li><strong>스케줄 자동 생성 금지</strong> (ADR-006) — 빈 달은 진짜 비어 있음. 명시적 편집→저장→확정, 낙관적 락으로 동시 편집 보호.</li>
         <li><strong>읽기=RSC 서버 조회, 쓰기=Server Action/route handler</strong> (ADR-015) — 클라이언트는 DB·외부 서비스를 직접 보지 않음.</li>
       </ul>
