@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>하박조팽 · 데이터베이스</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">하박</div>
+      <div><h1>하박조팽</h1><div class="sub">System Understanding</div></div>
+    </div>
+    <nav class="nav">
+      <div class="group-label">시스템</div>
+      <a href="index.html"><span class="ic">🏠</span> 개요</a>
+      <a href="architecture.html"><span class="ic">🏗️</span> 아키텍처</a>
+      <a href="database.html"><span class="ic">🗄️</span> 데이터베이스</a>
+      <a href="api.html"><span class="ic">🔌</span> API 설계</a>
+      <div class="group-label">사용자</div>
+      <a href="userflow.html"><span class="ic">🧭</span> 워크플로우 · 저니</a>
+      <a href="sequence.html"><span class="ic">🔁</span> 시퀀스 다이어그램</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+      <div class="page-eyebrow">시스템 · 데이터</div>
+      <h2 class="page-title">데이터베이스 & 모델</h2>
+      <p class="lead">
+        Prisma + SQLite로 시작하며 Postgres 이전 경로를 유지합니다(ADR-010). 19개 모델이 6개 도메인으로 묶입니다.
+        SQLite 제약상 <strong>enum은 String</strong>(허용값은 주석/앱 검증), <strong>배열 스칼라는 Json</strong>으로 모델링합니다.
+      </p>
+
+      <div class="callout info">
+        <span class="ci">🗄️</span>
+        <div><strong>SQLite 제약 회피.</strong> 역할·관점·상태 등은 <code>String</code>(허용값 주석), <code>tags</code>·<code>keypoints</code>·<code>slides</code>·payload는 <code>Json</code>.
+        <code>DateTime</code>은 Prisma 타입이지만 API 경계 DTO에서는 ISO 8601 문자열로 직렬화합니다(ADR-015).</div>
+      </div>
+
+      <h3>전체 ER 다이어그램</h3>
+      <div class="diagram">
+        <div class="cap">19개 모델 · 관계 (Cascade 삭제는 굵은 관계)</div>
+        <pre class="mermaid">
+erDiagram
+  Workspace {
+    string id PK
+    string slug UK
+    int seats
+  }
+  Member {
+    string id PK
+    string handle UK
+    string email UK
+    string role "관리자|멤버|게스트"
+    string presence
+    string availability
+  }
+  Invite {
+    string id PK
+    string email
+    string role
+    string status "pending|accepted|revoked"
+    string invitedBy
+  }
+
+  Paper {
+    string id PK
+    string title
+    string pdfUrl
+    string uploadedBy
+    json tags
+    string analysisStatus "pending|ready|failed"
+  }
+  Analysis {
+    string id PK
+    string paperId FK
+    string lens "research|repro"
+    json payload
+  }
+  Figure {
+    string id PK
+    string paperId FK
+    int sourcePage
+    string imageUrl
+  }
+  SectionNote {
+    string id PK
+    string paperId FK
+    string sectionId
+    string lens "research|repro|any"
+    string authorId
+  }
+
+  Presentation {
+    string id PK
+    string presenterId
+    datetime date
+    json slides
+    json keypoints
+  }
+  PresentationAsset {
+    string id PK
+    string presentationId FK
+    string type "pdf|ppt|note"
+  }
+  PresentationVersion {
+    string id PK
+    string presentationId FK
+    string ver
+  }
+  Comment {
+    string id PK
+    string presentationId FK
+    string authorId
+    int slide
+  }
+  Reaction {
+    string id PK
+    string commentId FK
+    string memberId
+    string emoji
+  }
+
+  ScheduleMonth {
+    string id PK
+    int year
+    int month
+    int rotationPointerAfter
+    int version "낙관적락"
+  }
+  ScheduleWeek {
+    string id PK
+    string monthId FK
+    int week
+    string presenterId
+    string status "done|upcoming"
+  }
+  FineConfig {
+    int year PK
+    int finePresenter
+    int fineAbsent
+  }
+  MemberLedger {
+    string id PK
+    int year FK
+    string memberId
+    int count
+    int paid
+  }
+
+  LiveSession {
+    string id PK
+    bool active
+    string presenterId
+    string cloudflareLiveInputId
+    string recordingUrl
+  }
+  Participant {
+    string id PK
+    string liveSessionId FK
+    string memberId
+  }
+
+  Job {
+    string id PK
+    string type "analyze_paper|fetch_arxiv|process_recording"
+    string status "queued|running|done|failed"
+    json payload
+    int attempts
+  }
+
+  Paper ||--o{ Analysis : "관점별(2)"
+  Paper ||--o{ Figure : "공통"
+  Paper ||--o{ SectionNote : "섹션별"
+  Presentation ||--o{ PresentationAsset : ""
+  Presentation ||--o{ PresentationVersion : ""
+  Presentation ||--o{ Comment : ""
+  Comment ||--o{ Reaction : ""
+  ScheduleMonth ||--o{ ScheduleWeek : ""
+  FineConfig ||--o{ MemberLedger : ""
+  LiveSession ||--o{ Participant : ""
+        </pre>
+      </div>
+      <p class="muted tiny">
+        Member·Invite·Workspace·Job은 FK 관계 컬럼(<code>uploadedBy</code>, <code>authorId</code>, <code>presenterId</code>, <code>memberId</code> 등)으로 논리적으로만 연결됩니다 —
+        Prisma relation이 아니라 ID 참조(앱에서 무결성 관리). 작성자/소유자 ID는 항상 서버 세션에서 주입합니다.
+      </p>
+
+      <h3>도메인 1 · 워크스페이스 / 팀 / 인증</h3>
+      <div class="grid cols-3">
+        <div class="card">
+          <h4>Workspace</h4>
+          <p class="muted tiny"><span class="badge danger">CRITICAL</span> row는 단 하나만 존재 — 멀티테넌트 아님(ADR-007). <code>slug</code> unique.</p>
+        </div>
+        <div class="card">
+          <h4>Member</h4>
+          <p class="muted tiny"><code>id</code>는 "ha|bak|jo|paeng". <code>role</code>·<code>presence</code>·<code>availability</code>는 String(앱 검증). <code>color</code>는 CSS 토큰명.</p>
+        </div>
+        <div class="card">
+          <h4>Invite</h4>
+          <p class="muted tiny"><span class="badge danger">CRITICAL</span> 합류는 초대 토큰 검증을 통해서만 — 공개 가입 없음(ADR-007). status: pending/accepted/revoked.</p>
+        </div>
+      </div>
+
+      <h3>도메인 2 · 논문 / 분석</h3>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>업로드는 PDF 전용</strong>(ADR-003) — <code>kind</code> 같은 타입 필드를 두지 않습니다.
+        <strong>분석 실패가 Paper 저장을 막지 않습니다</strong> — <code>analysisStatus=failed</code>로 두고 <code>/reanalyze</code>로 재시도합니다.</div>
+      </div>
+      <table>
+        <thead><tr><th>모델</th><th>핵심</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Paper</strong></td><td><code>pdfUrl</code>(다운로드 유일 액션), <code>analysisStatus</code>(pending/ready/failed). <code>tags: Json</code>. <code>analyses</code>·<code>figures</code>·<code>notes</code> 보유.</td></tr>
+          <tr><td><strong>Analysis</strong></td><td><code>lens</code>는 <strong>research|repro 두 관점만</strong>(ADR-004). <code>@@unique([paperId, lens])</code>. payload는 관점별 구조화 필드 전체(Json).</td></tr>
+          <tr><td><strong>Figure</strong></td><td><strong>두 관점 공통</strong>(특정 lens 없음). <code>sourcePage</code>(PDF p.N 출처), <code>interpretation</code>(평이한 해석), <code>imageUrl?</code>(없으면 수동 업로드 대기).</td></tr>
+          <tr><td><strong>SectionNote</strong></td><td><code>{sectionId, lens}</code>로 스코프. figures 노트는 항상 <code>lens="any"</code>(ADR-005). <code>authorId</code> 표기 필수. <code>@@index([paperId, sectionId, lens])</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>도메인 3 · 발표 자료 / 회고</h3>
+      <table>
+        <thead><tr><th>모델</th><th>핵심</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Presentation</strong></td><td><code>slides: Json</code> [{title, subtitle?, body}], <code>keypoints: Json</code>, <code>summary</code>. assets·versions·comments 보유.</td></tr>
+          <tr><td><strong>PresentationAsset</strong></td><td>type: pdf|ppt|note, size, url.</td></tr>
+          <tr><td><strong>PresentationVersion</strong></td><td><code>ver</code>("v3"), <code>byId</code>, note — 자료 버전 이력.</td></tr>
+          <tr><td><strong>Comment</strong></td><td><code>@멘션</code>은 본문 토큰으로 보존. <code>slide?</code>(특정 슬라이드 참조). 회고 댓글은 <strong>발표 자료에 귀속</strong>(논문 상세엔 댓글 패널 없음, ADR-004).</td></tr>
+          <tr><td><strong>Reaction</strong></td><td><code>@@unique([commentId, memberId, emoji])</code> — 중복 반응 방지.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>도메인 4 · 스케줄 / 책임</h3>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>자동 생성 금지</strong>(ADR-006) — <code>@@unique([year, month])</code>이며 <strong>row 부재 = 빈 달</strong>. GET이 월을 만들지 않습니다.
+        <code>version</code>은 <strong>낙관적 락</strong> — 두 관리자 동시 편집 시 저장 충돌을 막습니다(저장 시 If-Match 불일치 → 409).</div>
+      </div>
+      <table>
+        <thead><tr><th>모델</th><th>핵심</th></tr></thead>
+        <tbody>
+          <tr><td><strong>ScheduleMonth</strong></td><td><code>rotationPointerAfter</code>(저장 후 다음 시작 인덱스 — 순번 전진 결과), <code>saved</code>, <code>version</code>. weeks 보유.</td></tr>
+          <tr><td><strong>ScheduleWeek</strong></td><td><code>week</code>·<code>date</code>·<code>time</code>·<code>presenterId?</code>·<code>topic?</code>·<code>confirmed</code>·<code>status</code>(done|upcoming, current는 파생)·<code>presentationId?</code>.</td></tr>
+          <tr><td><strong>FineConfig</strong></td><td><code>year</code> PK. finePresenter(발표자 불참, 기본 30000), fineAbsent(일반 불참, 기본 10000).</td></tr>
+          <tr><td><strong>MemberLedger</strong></td><td><code>@@unique([year, memberId])</code>. count(참여)·missedPresenter·missedAbsent·paid. <strong>누적 벌금은 파생 계산</strong>(저장 안 함).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>도메인 5 · 라이브</h3>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>동시 active 세션은 1개</strong> — 앱 전역 <code>live</code> 상태와 1:1 매핑(ADR-001). <code>/start</code>가 이미 active면 409.</div>
+      </div>
+      <table>
+        <thead><tr><th>모델</th><th>핵심</th></tr></thead>
+        <tbody>
+          <tr><td><strong>LiveSession</strong></td><td><code>active</code>, <code>presenterId</code>, <code>cloudflareLiveInputId?</code>, <code>recordingUrl?</code>(종료 후 녹화본), startedAt/endedAt. participants 보유.</td></tr>
+          <tr><td><strong>Participant</strong></td><td><code>@@unique([liveSessionId, memberId])</code>. joinedAt/leftAt — leave는 본인 leftAt만 기록.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>도메인 6 · 백그라운드 잡 (ADR-013)</h3>
+      <table>
+        <thead><tr><th>모델</th><th>핵심</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Job</strong></td><td>type: analyze_paper|fetch_arxiv|process_recording. status: queued|running|done|failed. <code>attempts</code>/<code>maxAttempts</code>(3), <code>lastError</code>, <code>runAfter</code>(재시도 백오프), <code>claimedAt</code>(원자적 claim). <code>@@index([status, runAfter])</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>주요 enum 값 (String으로 저장, 앱에서 검증)</h3>
+      <div class="grid cols-4">
+        <div class="card tiny"><h4>Role</h4>관리자 · 멤버 · 게스트</div>
+        <div class="card tiny"><h4>Lens / NoteLens</h4>research · repro <br/>(노트는 + any)</div>
+        <div class="card tiny"><h4>AnalysisStatus</h4>pending · ready · failed</div>
+        <div class="card tiny"><h4>Presence</h4>online · away · busy · offline</div>
+        <div class="card tiny"><h4>Availability</h4>active · vacation</div>
+        <div class="card tiny"><h4>InviteStatus</h4>pending · accepted · revoked</div>
+        <div class="card tiny"><h4>WeekStatus</h4>done · upcoming<br/>(current 파생)</div>
+        <div class="card tiny"><h4>JobStatus / JobType</h4>queued·running·done·failed<br/>analyze_paper·fetch_arxiv·process_recording</div>
+      </div>
+
+      <div class="footer-note">근거: <code>prisma/schema.prisma</code>, <code>types/entities.ts · enums.ts · analysis.ts</code>, <code>docs/dev/DB.md</code>.</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

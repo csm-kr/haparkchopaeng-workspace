@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>하박조팽 · 시퀀스 다이어그램</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">하박</div>
+      <div><h1>하박조팽</h1><div class="sub">System Understanding</div></div>
+    </div>
+    <nav class="nav">
+      <div class="group-label">시스템</div>
+      <a href="index.html"><span class="ic">🏠</span> 개요</a>
+      <a href="architecture.html"><span class="ic">🏗️</span> 아키텍처</a>
+      <a href="database.html"><span class="ic">🗄️</span> 데이터베이스</a>
+      <a href="api.html"><span class="ic">🔌</span> API 설계</a>
+      <div class="group-label">사용자</div>
+      <a href="userflow.html"><span class="ic">🧭</span> 워크플로우 · 저니</a>
+      <a href="sequence.html"><span class="ic">🔁</span> 시퀀스 다이어그램</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+      <div class="page-eyebrow">사용자 · 시스템 시퀀스</div>
+      <h2 class="page-title">시퀀스 다이어그램</h2>
+      <p class="lead">
+        주요 동작의 <strong>컴포넌트 간 호출 순서</strong>입니다.
+        참여자: <code>Client</code>(클라이언트 컴포넌트) · <code>API</code>(route handler/Server Action) · <code>DB</code>(Prisma) ·
+        <code>Storage</code>(파일) · <code>CF</code>(Cloudflare) · <code>Worker</code> · <code>Claude</code>.
+      </p>
+
+      <h3>S1 · 논문 업로드 → 분석 생성</h3>
+      <div class="callout crit"><span class="ci">🔥</span><div>분석은 요청 경로가 아니라 <strong>워커</strong>에서. Claude 호출은 분 단위 → HTTP 타임아웃을 넘으므로 API는 잡만 적재하고 즉시 응답(ADR-013).</div></div>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as Client
+  participant A as API (/api/papers)
+  participant S as Storage
+  participant D as DB
+  participant W as Worker
+  participant CL as Claude
+  Note over U,S: (사전) 프리사인 업로드: Client → Storage 직접 (서버는 서명만)
+  U->>A: POST { objectKey | arXiv URL }
+  A->>A: Content-Type 검증 (PDF만, 아니면 415)
+  A->>D: Paper 생성 (analysisStatus=pending)
+  A->>D: Job 적재 (type=analyze_paper, {paperId})
+  A-->>U: { data: paper, status: pending } (201) ← 즉시
+  U->>U: navigate('paper') · 스켈레톤 '읽는 중'
+  Note over W: 폴링 워커가 Job claim (원자적)
+  opt arXiv
+    W->>S: arxiv PDF fetch → 저장
+  end
+  W->>CL: PDF + 구조화 출력 스키마 (스트리밍)
+  alt 성공
+    CL-->>W: research/repro payload + figure 해석
+    W->>D: Analysis/Figure 저장, status=ready
+  else 실패 (refusal/timeout)
+    W->>D: status=failed, Job.lastError
+    Note over U: '분석 못 끝냄' + [다시 분석] (POST /reanalyze)
+  end
+  U->>A: (SSE 또는 재조회) ready 전환 수신
+        </pre>
+      </div>
+
+      <h3>S2 · 섹션 노트 추가 (작성자 표기·스코프)</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as Client (AnalysisView)
+  participant A as API (/papers/:id/notes)
+  participant D as DB
+  U->>U: [+ 이 섹션에 분석 추가] → 인라인 폼
+  U->>A: POST {sectionId, lens, title, body}
+  A->>A: 세션에서 authorId 주입 (클라 authorId 무시)
+  A->>A: sectionId==='figures' 이면 lens='any' 강제
+  A->>D: SectionNote 생성
+  A-->>U: { data: note }
+  U->>U: 해당 섹션 아래 작성자 표기 카드 렌더
+        </pre>
+      </div>
+      <p class="muted tiny"><strong>CRITICAL:</strong> 작성자는 서버가 세션에서 강제 — 위변조 방지.</p>
+
+      <h3>S3 · 라이브 시작 (발표자) — Cloudflare</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant P as Client (발표자)
+  participant A as API (/live/start)
+  participant D as DB
+  participant C as CF (Stream Live)
+  P->>A: POST /api/live/start
+  A->>D: active LiveSession 존재? (있으면 409)
+  A->>C: Live Input 생성
+  C-->>A: { liveInputId, rtmps{url,key}, srt, playback{hls} }
+  A->>D: LiveSession 생성 (active=true, cloudflareLiveInputId)
+  A-->>P: { rtmps, srt, playback } ※ Stream Key는 발표자에게만
+  Note over P: OBS 등으로 RTMPS/SRT 송출
+  A->>A: 이벤트 버스에 live.started 발행 → SSE 푸시 (S4.5)
+        </pre>
+      </div>
+
+      <h3>S4 · 라이브 입장(시청자) vs 나가기 vs 종료</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant V as Client (시청자)
+  participant A as API
+  participant D as DB
+  participant C as CF
+  V->>A: POST /api/live/:id/join
+  A->>D: Participant upsert
+  A-->>V: { playback{hls} } ※ 송출 자격증명 없음
+  V->>C: HLS 재생
+  alt 나가기 (본인만)
+    V->>A: POST /api/live/:id/leave
+    A->>D: Participant.leftAt 기록 (세션 active 유지)
+  else 종료 (발표자/관리자)
+    V->>A: POST /api/live/:id/end
+    A->>C: Live Input 정리
+    A->>D: LiveSession active=false, endedAt
+    A->>A: 이벤트 버스에 live.ended 발행 → SSE 푸시
+    A-->>V: ok
+  end
+        </pre>
+      </div>
+
+      <h3>S4.5 · 라이브 전이 실시간 전파 (SSE)</h3>
+      <div class="callout crit"><span class="ci">🔥</span><div><code>live</code>는 모두에게 즉시 일관돼야 함(ADR-001). 폴링이 아니라 SSE 푸시. 단일 인스턴스라 인-프로세스 버스로 충분.</div></div>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant C1 as 모든 클라이언트
+  participant A as API (/live/stream)
+  participant B as 인-프로세스 이벤트 버스
+  C1->>A: GET /api/live/stream (SSE 구독)
+  Note over A,B: /start·/end 핸들러가 live.started/ended 발행
+  B-->>A: live.started | live.ended | mention
+  A-->>C1: SSE 이벤트
+  C1->>C1: 사이드바 배지 · 홈 배너 · meeting 룸 동시 갱신
+        </pre>
+      </div>
+
+      <h3>S4.6 · 녹화 완료 웹훅 (Cloudflare → 앱)</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant C as Cloudflare Stream
+  participant A as API (/webhooks/cloudflare)
+  participant D as DB
+  C->>A: POST 녹화 완료 (HMAC 서명)
+  A->>A: 서명 검증 (세션 인증 아님)
+  A->>D: LiveSession.recordingUrl 기록
+  Note over A,D: 발표 자료로 아카이브할지 결정 (미결)
+        </pre>
+      </div>
+
+      <h3>S5 · 스케줄 빈 달 → 초안 → 저장(순번 전진)</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as Client (ScheduleScreen)
+  participant A as API
+  participant D as DB
+  U->>A: GET /api/schedule/2026/7
+  A->>D: ScheduleMonth(2026,7)?
+  D-->>A: 없음
+  A-->>U: { data: null } ※ row 생성 안 함 → 빈 상태
+  U->>A: POST /api/schedule/2026/7/draft
+  A->>D: 직전 저장월의 rotationPointerAfter 조회
+  A->>A: 7월 토요일 계산 + 순번 배정 (draft, confirmed=false)
+  A-->>U: { data: draftWeeks } (DB 저장 안 함 = 초안)
+  U->>U: 편집 (시간/발표자/주제/확정 체크)
+  U->>A: PUT /api/schedule/2026/7 {weeks} (If-Match: version)
+  A->>D: ScheduleMonth+Weeks 영속화 (saved=true)
+  A->>D: rotationPointerAfter = (start + weeks.length) % 4
+  A-->>U: { data: savedMonth } → 확정(읽기전용)
+        </pre>
+      </div>
+      <p class="muted tiny"><strong>CRITICAL:</strong> GET은 절대 월을 만들지 않음. 초안(POST /draft)도 저장하지 않음 — PUT만 영속화(ADR-006).</p>
+
+      <h3>S6 · 발표 자료 회고 댓글 + @멘션</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as Client (PresentationView)
+  participant A as API
+  participant D as DB
+  participant N as 알림 (채널 미결)
+  U->>A: POST /presentations/:id/comments {body, slide?}
+  A->>A: 본문에서 @멘션 파싱
+  A->>D: Comment 생성
+  A-->>U: { data: comment }
+  A--)N: 멘션 대상에게 알림 (인앱/이메일/푸시 미결)
+        </pre>
+      </div>
+
+      <h3>S7 · 멤버 초대 → 합류</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant Adm as 관리자
+  participant A as API
+  participant D as DB
+  participant New as 신규 멤버
+  Adm->>A: POST /api/invites {email, role} (👑)
+  A->>D: Invite(status=pending) 생성
+  A-->>Adm: 초대 링크(토큰)
+  New->>A: POST /api/invites/accept {token}
+  A->>A: 토큰 검증 (공개 가입 없음)
+  A->>D: Member 생성, Invite.status=accepted
+  A-->>New: 세션 발급 → 온보딩
+        </pre>
+      </div>
+
+      <div class="footer-note">근거: <code>docs/dev/SEQUENCE_DIAGRAM.md</code>, <code>docs/dev/API.md</code>, <code>docs/agent/ADR.md</code>.</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

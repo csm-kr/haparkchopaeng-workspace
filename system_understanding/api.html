@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>하박조팽 · API</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">하박</div>
+      <div><h1>하박조팽</h1><div class="sub">System Understanding</div></div>
+    </div>
+    <nav class="nav">
+      <div class="group-label">시스템</div>
+      <a href="index.html"><span class="ic">🏠</span> 개요</a>
+      <a href="architecture.html"><span class="ic">🏗️</span> 아키텍처</a>
+      <a href="database.html"><span class="ic">🗄️</span> 데이터베이스</a>
+      <a href="api.html"><span class="ic">🔌</span> API 설계</a>
+      <div class="group-label">사용자</div>
+      <a href="userflow.html"><span class="ic">🧭</span> 워크플로우 · 저니</a>
+      <a href="sequence.html"><span class="ic">🔁</span> 시퀀스 다이어그램</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="content-inner">
+      <div class="page-eyebrow">시스템 · API</div>
+      <h2 class="page-title">API 설계</h2>
+      <p class="lead">
+        모든 서버/외부 로직은 Next.js App Router의 route handler(<code>app/api/**/route.ts</code>) 또는 Server Action에서만 처리됩니다.
+        클라이언트 컴포넌트는 DB·Cloudflare·스토리지를 직접 호출하지 않습니다.
+      </p>
+
+      <div class="grid cols-3">
+        <div class="card tiny"><div class="icon">🔒</div><h4>인증 필수</h4>모든 엔드포인트가 세션 요구. 미인증 → <code>401</code></div>
+        <div class="card tiny"><div class="icon">🏢</div><h4>단일 테넌트</h4>워크스페이스 ID를 경로에 노출하지 않음. 암묵적으로 그 하나에 속함</div>
+        <div class="card tiny"><div class="icon">📨</div><h4>응답 포맷</h4><code>{ data }</code> 또는 <code>{ error: { code, message } }</code></div>
+      </div>
+      <p class="muted">권한 표기: <span class="badge">🔒 인증(전부)</span> <span class="badge warn">👑 관리자 전용</span> <span class="badge ok">✍️ 작성자/관리자</span></p>
+
+      <h3>인증 · 멤버</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/auth/login</code></td><td>세션 발급</td><td>—</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/auth/logout</code></td><td>세션 종료</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/me</code></td><td>현재 사용자</td><td>🔒</td></tr>
+          <tr><td><span class="m m-patch">PATCH</span></td><td><code>/api/me</code></td><td>프로필·알림·테마 수정</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/members</code></td><td>멤버 목록</td><td>🔒</td></tr>
+        </tbody>
+      </table>
+
+      <h3>팀 · 초대</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/invites</code></td><td>초대 생성(이메일+역할)</td><td>👑</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/invites</code></td><td>대기 중인 초대 목록</td><td>👑</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/invites/:id/resend</code></td><td>재전송</td><td>👑</td></tr>
+          <tr><td><span class="m m-del">DEL</span></td><td><code>/api/invites/:id</code></td><td>취소</td><td>👑</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/invites/accept</code></td><td>토큰으로 합류</td><td>— (토큰 검증)</td></tr>
+          <tr><td><span class="m m-patch">PATCH</span></td><td><code>/api/members/:id/role</code></td><td>역할 변경</td><td>👑</td></tr>
+          <tr><td><span class="m m-del">DEL</span></td><td><code>/api/members/:id</code></td><td>내보내기</td><td>👑</td></tr>
+        </tbody>
+      </table>
+
+      <h3>논문 · 분석</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/papers</code></td><td>논문 목록(필터 "전체"만)</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/papers</code></td><td>PDF 업로드 또는 arXiv URL로 생성</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/papers/:id</code></td><td>논문 + 분석 + figure</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/papers/:id/pdf</code></td><td>원문 PDF 다운로드(서명 URL)</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/papers/:id/analysis?lens=…</code></td><td>관점별 분석(research|repro)</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/papers/:id/notes</code></td><td>섹션 노트 목록</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/papers/:id/notes</code></td><td>섹션 노트 추가 {sectionId, lens, title, body}</td><td>🔒</td></tr>
+          <tr><td><span class="m m-del">DEL</span></td><td><code>/api/notes/:id</code></td><td>노트 삭제</td><td>✍️</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/papers/:id/reanalyze</code></td><td>분석 재시도(실패/대기 시)</td><td>🔒</td></tr>
+        </tbody>
+      </table>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>업로드는 <code>application/pdf</code>만 허용</strong> — 그 외 → <span class="badge danger">415</span>. arXiv URL은 서버(워커)가 PDF를 가져옵니다.
+        <strong>업로드 성공과 분석 성공을 분리</strong> — 분석이 실패해도 Paper를 저장하고 <code>analysisStatus: pending|failed</code>로 응답.
+        <strong>노트 작성자</strong>는 서버가 세션에서 강제 주입(클라 <code>authorId</code> 불신). <code>sectionId==="figures"</code>면 <code>lens</code>를 <code>any</code>로 강제.</div>
+      </div>
+
+      <h3>발표 자료 · 댓글</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/presentations</code></td><td>자료 목록</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/presentations</code></td><td>자료 생성</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/presentations/:id</code></td><td>자료 + 에셋 + 버전 + 댓글</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/presentations/:id/comments</code></td><td>댓글 작성 {body, slide?}</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/comments/:id/reactions</code></td><td>반응 토글 {emoji}</td><td>🔒</td></tr>
+          <tr><td><span class="m m-del">DEL</span></td><td><code>/api/comments/:id</code></td><td>댓글 삭제</td><td>✍️</td></tr>
+        </tbody>
+      </table>
+      <p class="muted tiny"><code>@멘션</code>은 본문 파싱으로 추출 → 알림 트리거(채널 미결).</p>
+
+      <h3>스케줄 · 책임</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/schedule/:year/:month</code></td><td>해당 월(없으면 null = 빈 달) + version</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/schedule/:year/:month/draft</code></td><td>초안 생성(서버가 토요일·순번 계산)</td><td>🔒</td></tr>
+          <tr><td><span class="m m-put">PUT</span></td><td><code>/api/schedule/:year/:month</code></td><td>저장(영속화 + 순번 전진) — <code>If-Match: version</code></td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/fines/:year</code></td><td>벌금 설정 + 멤버 장부</td><td>🔒</td></tr>
+          <tr><td><span class="m m-put">PUT</span></td><td><code>/api/fines/:year</code></td><td>벌금 금액 수정</td><td>👑</td></tr>
+        </tbody>
+      </table>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong>GET이 월을 자동 생성하지 않습니다</strong> — 없으면 <code>data: null</code>(ADR-006). <strong>순번 포인터 전진은 PUT 시 서버에서 원자적으로</strong>(클라가 포인터 안 보냄).
+        <strong>동시 편집 충돌은 낙관적 락으로</strong> — <code>If-Match</code> version 불일치면 <span class="badge danger">409</span>. 누적 벌금은 서버에서 파생 계산(저장 안 함).</div>
+      </div>
+
+      <h3>라이브 세미나 (Cloudflare Stream Live)</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/live</code></td><td>현재 세션(없으면 null)</td><td>🔒</td></tr>
+          <tr><td><span class="m m-get">GET</span></td><td><code>/api/live/stream</code></td><td><strong>SSE</strong> — live.started/ended · @멘션 푸시</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/start</code></td><td>Cloudflare Live Input 생성 → 세션 시작</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/:id/join</code></td><td>참가 등록 + 시청용 HLS</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/:id/leave</code></td><td>본인 퇴장</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/live/:id/end</code></td><td>세션 종료(전체) + 녹화 처리</td><td>✍️(발표자/관리자)</td></tr>
+        </tbody>
+      </table>
+      <div class="callout crit">
+        <span class="ci">🔥</span>
+        <div><strong><code>/start</code> 응답(발표자 전용):</strong> <code>{ rtmps, srt, playback{hls} }</code> — <strong>Stream Key는 발표자 본인에게만</strong>.
+        <strong><code>/join</code> 응답(시청자):</strong> 재생용 <code>{ playback{hls} }</code>만 — 송출 자격증명 절대 미포함.
+        <strong>동시 active 1개</strong> — 이미 있으면 <span class="badge danger">409</span>. <strong><code>/end</code>만 전역 종료</strong>, <code>/leave</code>는 본인만. 전이 전파는 SSE.</div>
+      </div>
+
+      <h3>업로드 / 스토리지 · 웹훅</h3>
+      <table>
+        <thead><tr><th>메서드</th><th>경로</th><th>설명</th><th>권한</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/uploads/presign</code></td><td>프리사인 업로드 URL 발급(PDF만)</td><td>🔒</td></tr>
+          <tr><td><span class="m m-post">POST</span></td><td><code>/api/webhooks/cloudflare</code></td><td>녹화 완료 등 Stream Live 이벤트(HMAC 검증)</td><td>서명 검증</td></tr>
+        </tbody>
+      </table>
+      <p class="muted tiny">프리사인 직접 업로드: 큰 PDF는 클라이언트→스토리지 직접(서버는 서명만), 완료 후 <code>POST /api/papers</code>에 객체 키 전달. 웹훅은 세션 인증이 아닌 HMAC 서명으로 보호.</p>
+
+      <h3>상태 코드 → UX 매핑</h3>
+      <p class="muted">서버 코드는 일관되게, 클라이언트는 따뜻한 한국어로 번역합니다(원문 노출 금지).</p>
+      <table>
+        <thead><tr><th>코드</th><th>사용처</th><th>사용자에게 보이는 카피</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge warn">400</span></td><td>검증 실패(zod)</td><td>인라인: "내용을 확인해주세요"</td></tr>
+          <tr><td><span class="badge warn">401</span></td><td>미인증/세션 만료</td><td>부드러운 재로그인 유도(작성 내용 보존 시도)</td></tr>
+          <tr><td><span class="badge warn">403</span></td><td>권한 부족</td><td>"이 작업은 관리자만 할 수 있어요"</td></tr>
+          <tr><td><span class="badge danger">409</span></td><td>충돌(이미 라이브 중, 월 편집 충돌)</td><td>"이미 OOO님이 시작했어요. 입장할까요?"</td></tr>
+          <tr><td><span class="badge danger">415</span></td><td>PDF 외 업로드</td><td>"PDF만 올릴 수 있어요"</td></tr>
+          <tr><td><span class="badge danger">5xx</span></td><td>서버/외부 오류</td><td>"잠시 후 다시 시도해주세요" + 다시 시도</td></tr>
+        </tbody>
+      </table>
+      <p class="muted tiny">분석 실패는 HTTP 에러가 아니라 <code>Paper.analysisStatus</code>로 표현 — 논문은 정상 응답.</p>
+
+      <div class="footer-note">근거: <code>docs/dev/API.md</code>, <code>docs/security/SECURITY.md</code>, <code>types/api.ts</code>.</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
