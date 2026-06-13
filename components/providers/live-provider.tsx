@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { LIVE_CHANNEL } from "@/lib/realtime";
 
 // CRITICAL: `live`는 앱 레벨에 단 하나만 존재한다(ADR-001/R5).
 // 화면 컴포넌트에 보관하지 않는다 — 사이드바 LIVE 알약·홈 배너·미팅 룸이 어긋난다.
@@ -13,35 +15,26 @@ interface LiveContextValue {
 const LiveContext = React.createContext<LiveContextValue | null>(null);
 
 /**
- * 라이브 전이 SSE 구독 골격 (ADR-014/R33).
- * `/api/live/stream`을 구독해 live.started/ended로 setLive를 호출한다.
- * 폴링이 아니라 단방향 EventSource 구독이다.
+ * 라이브 전이 Supabase Realtime 구독 (ADR-014→016/R33).
+ * `LIVE_CHANNEL`을 구독해 broadcast 이벤트(live.started/ended)로 setLive를 호출한다.
+ * 폴링이 아니라 단방향 푸시다 — setInterval/EventSource를 쓰지 않는다(R33).
  *
- * 이 엔드포인트는 라이브 step에서 추가된다 — 그 전까지는 연결 실패를
- * 조용히 무시한다(graceful no-op). 404 등에서 재연결이 폭주하지 않도록 닫는다.
+ * anon 키가 없으면(키 부재) 브라우저 클라이언트가 null → 조용히 no-op(graceful).
+ * 언마운트 시 removeChannel로 정리해 재연결 폭주를 막는다.
  */
-function useLiveStream(setLive: (v: boolean) => void): void {
+function useLiveRealtime(setLive: (v: boolean) => void): void {
   React.useEffect(() => {
-    if (typeof EventSource === "undefined") return;
+    const supabase = createBrowserSupabase();
+    if (!supabase) return; // 키 없음 → no-op
 
-    let es: EventSource;
-    try {
-      es = new EventSource("/api/live/stream");
-    } catch {
-      return; // 구독 자체가 불가능하면 무시
-    }
-
-    const onStarted = () => setLive(true);
-    const onEnded = () => setLive(false);
-    es.addEventListener("live.started", onStarted);
-    es.addEventListener("live.ended", onEnded);
-    // 엔드포인트 부재 시 조용히 닫는다(재연결 폭주 방지).
-    es.onerror = () => es.close();
+    const channel = supabase
+      .channel(LIVE_CHANNEL)
+      .on("broadcast", { event: "live.started" }, () => setLive(true))
+      .on("broadcast", { event: "live.ended" }, () => setLive(false))
+      .subscribe();
 
     return () => {
-      es.removeEventListener("live.started", onStarted);
-      es.removeEventListener("live.ended", onEnded);
-      es.close();
+      supabase.removeChannel(channel);
     };
   }, [setLive]);
 }
@@ -54,7 +47,7 @@ export function LiveProvider({
   initialLive?: boolean;
 }) {
   const [live, setLive] = React.useState(initialLive);
-  useLiveStream(setLive);
+  useLiveRealtime(setLive);
 
   const value = React.useMemo<LiveContextValue>(
     () => ({ live, setLive }),

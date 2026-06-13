@@ -2,6 +2,7 @@ import { requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { deleteLiveInput } from "@/lib/cloudflare";
+import { broadcastLive } from "@/lib/realtime";
 
 // POST /api/live/:id/end — 세션 전체 종료. ✍️ 발표자 본인 또는 관리자(👑)만.
 // CRITICAL: /end만 전역 종료(active=false) — /leave는 본인만(ADR-001/R6).
@@ -34,7 +35,8 @@ export async function POST(
       data: { active: false, endedAt: new Date() },
     });
 
-    // TODO(step1): Supabase Realtime 채널에 live.ended broadcast — 이 step 범위 아님.
+    // 전역 종료를 모든 구독 클라에 푸시(폴링 아님, R33). 실패는 무시(graceful).
+    await broadcastLive("live.ended", { sessionId: id });
 
     return ok({});
   } catch (e) {

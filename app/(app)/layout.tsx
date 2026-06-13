@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveSession } from "@/lib/live";
 import { AppProviders } from "@/components/providers";
 import { AppShell, type ShellMember } from "@/components/shell";
 
@@ -38,8 +39,11 @@ export default async function AppLayout({
   const current = members.find((m) => m.id === session.memberId);
   if (!current) redirect("/");
 
+  // 현재 live 여부를 서버에서 구해 첫 렌더부터 일관되게(ADR-001). 이후 전이는 Realtime.
+  const active = await getActiveSession();
+
   return (
-    <AppProviders>
+    <AppProviders initialLive={!!active}>
       <AppShell
         members={members.map(toShellMember)}
         currentUser={toShellMember(current)}

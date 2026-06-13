@@ -3,6 +3,7 @@ import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { createLiveInput } from "@/lib/cloudflare";
 import { getActiveSession } from "@/lib/live";
+import { broadcastLive } from "@/lib/realtime";
 
 // POST /api/live/start — 라이브 시작(발표자). 🔒
 // CRITICAL: 동시 active 세션은 1개 — 이미 있으면 409(ADR-001/R1·R6).
@@ -27,7 +28,8 @@ export async function POST(): Promise<Response> {
       },
     });
 
-    // TODO(step1): Supabase Realtime 채널에 live.started broadcast — 이 step 범위 아님.
+    // 전이를 모든 구독 클라에 푸시(폴링 아님, R33). 실패는 무시(graceful) — 전파는 best-effort.
+    await broadcastLive("live.started", { sessionId: live.id });
 
     return ok(
       {
