@@ -6,7 +6,19 @@
 
 ### A. 탐색
 
-`/docs/` 하위 문서(PRD, ARCHITECTURE, ADR 등)를 읽고 프로젝트의 기획·아키텍처·설계 의도를 파악한다. 필요시 Explore 에이전트를 병렬로 사용한다.
+`docs/` 하위 문서를 읽고 프로젝트의 기획·아키텍처·설계 의도를 파악한다. 문서는 관점별 폴더로 분류되어 있다:
+
+| 폴더 | 문서 | 관점 |
+|------|------|------|
+| `docs/user/` | `PRD.md` · `USER_JOURNEY.md` · `USER_FLOW.md` | 제품·사용자 |
+| `docs/agent/` | `ADR.md` | 아키텍처 결정 기록 |
+| `docs/dev/` | `ARCHITECTURE.md` · `CODING_CONVENTION.md` · `DB.md` · `API.md` · `SEQUENCE_DIAGRAM.md` · `ENV.md` | 구현 |
+| `docs/design/` | `DESIGN_GUIDE.md` · `SCREENS.md` · `SCREEN_FLOW.md` | 디자인 |
+| `docs/security/` | `SECURITY.md` | 보안 |
+
+**정본(canonical)은 루트의 `README.md` · `CLAUDE.md` · `PRD.md`다.** `docs/` 문서는 이를 관점별로 통합·요약한 것이며, 충돌 시 루트 문서를 따른다. 각 문서 상단의 인용 블록이 형제 문서로의 링크를 제공하므로 이를 따라 탐색한다.
+
+필요시 Explore 에이전트를 병렬로 사용한다.
 
 ### B. 논의
 
@@ -90,10 +102,19 @@
 
 ## 읽어야 할 파일
 
-먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하라:
+먼저 아래 문서를 읽고 아키텍처와 설계 의도를 파악하라. **정본은 루트 `README.md` · `CLAUDE.md` · `PRD.md`이며, 충돌 시 이를 따른다.**
 
-- `/docs/ARCHITECTURE.md`
-- `/docs/ADR.md`
+항상:
+- `docs/dev/ARCHITECTURE.md` — 스택·디렉토리 구조
+- `docs/agent/ADR.md` — 결정 근거 (의도된 결정이다. 코드를 보고 "고치지" 말 것)
+- `docs/dev/CODING_CONVENTION.md` — 코드 규칙
+
+이 step의 레이어에 해당하는 것만 추가로:
+- 데이터/API: `docs/dev/DB.md` · `docs/dev/API.md` · `docs/dev/SEQUENCE_DIAGRAM.md`
+- 화면/UI: `docs/design/DESIGN_GUIDE.md` · `docs/design/SCREENS.md` · `docs/design/SCREEN_FLOW.md` · `docs/user/USER_FLOW.md`
+- 인증/권한/비밀: `docs/security/SECURITY.md` · `docs/dev/ENV.md`
+
+그리고:
 - {이전 step에서 생성/수정된 파일 경로}
 
 이전 step에서 만들어진 코드를 꼼꼼히 읽고, 설계 의도를 이해한 뒤 작업하라.
@@ -106,17 +127,32 @@
 
 ## Acceptance Criteria
 
+AC는 **실제로 실행 가능한 커맨드**여야 하며, step의 레이어에 맞는 것만 포함한다(불필요한 커맨드를 전부 넣지 말 것). execute.py는 비대화형으로 돌므로 모든 커맨드는 헤드리스로 통과해야 한다.
+
 ```bash
-npm run build   # 컴파일 에러 없음
-npm test        # 테스트 통과
+# 공통 (모든 step)
+npm run build                 # 타입/컴파일 에러 없음
+
+# 로직/단위·통합 레이어 (types, lib, api)
+npm test                      # Vitest + RTL, TDD
+
+# 화면/플로우 레이어 (app 라우트, 화면 전환)
+npx playwright test           # 헤드리스 E2E — 사용자 흐름이 실제로 동작하는지
+
+# 스타일/규칙이 핵심이면
+npm run lint
 ```
+
+> **화면 step의 E2E는 Selenium이 아니라 Playwright를 쓴다.** 헤드리스 실행·자동 대기·스크린샷 비교가 execute.py의 비대화형 실행과 정합하고 설정이 가볍다. 단, 단위/컴포넌트 검증까지 E2E로 하지 말 것 — 그 레이어는 Vitest + RTL이 담당한다. E2E는 `USER_FLOW.md`의 핵심 경로(로그인→업로드→분석 등) 검증에만 쓴다.
 
 ## 검증 절차
 
 1. 위 AC 커맨드를 실행한다.
 2. 아키텍처 체크리스트를 확인한다:
-   - ARCHITECTURE.md 디렉토리 구조를 따르는가?
-   - ADR 기술 스택을 벗어나지 않았는가?
+   - `docs/dev/ARCHITECTURE.md` 디렉토리 구조를 따르는가?
+   - `docs/agent/ADR.md` 결정과 기술 스택을 벗어나지 않았는가?
+   - `docs/dev/CODING_CONVENTION.md` 규칙을 지켰는가?
+   - 권한/비밀을 다뤘다면 `docs/security/SECURITY.md`를 위반하지 않았는가?
    - CLAUDE.md CRITICAL 규칙을 위반하지 않았는가?
 3. 결과에 따라 `phases/{task-name}/index.json`의 해당 step을 업데이트한다:
    - 성공 → `"status": "completed"`, `"summary": "산출물 한 줄 요약"`
@@ -139,7 +175,7 @@ python3 scripts/execute.py {task-name} --push  # 실행 후 push
 execute.py가 자동으로 처리하는 것:
 
 - `feat-{task-name}` 브랜치 생성/checkout
-- 가드레일 주입 — CLAUDE.md + docs/*.md 내용을 매 step 프롬프트에 포함
+- 가드레일 주입 — CLAUDE.md + `docs/**/*.md`(하위 폴더 포함, 재귀) 내용을 매 step 프롬프트에 포함
 - 컨텍스트 누적 — 완료된 step의 summary를 다음 step 프롬프트에 전달
 - 자가 교정 — 실패 시 최대 3회 재시도하며, 이전 에러 메시지를 프롬프트에 피드백
 - 2단계 커밋 — 코드 변경(`feat`)과 메타데이터(`chore`)를 분리 커밋
