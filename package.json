@@ -14,10 +14,12 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.8.0",
     "@prisma/client": "^6.2.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "clsx": "^2.1.1",
+    "inngest": "^4.5.1",
     "lucide-react": "^1.18.0",
     "next": "^15.5.0",
     "react": "^19.0.0",
@@ -28,6 +30,7 @@
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "@tailwindcss/postcss": "^4.0.0",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.10.0",

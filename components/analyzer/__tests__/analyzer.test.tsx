@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AnalysisView, type NoteView } from "../analysis-view";
 import type { ReproPayload, ResearchPayload } from "@/types";
+
+// next/navigation을 고정 — 재분석 후 router.refresh 호출만 확인한다.
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh }),
+}));
 
 // AnalysisView — 두 관점 토글·figure 공통 렌더·섹션 노트(검증/작성자/lens=any).
 // 읽기 데이터는 props로, 노트 쓰기는 주입한 mock 액션으로 검증한다(ADR-015).
@@ -211,5 +217,24 @@ describe("AnalysisView 분석 상태", () => {
   it("failed면 다시 분석 안내를 보인다", () => {
     renderView({ analysisStatus: "failed", research: null, repro: null });
     expect(screen.getByText("분석을 못 끝냈어요")).toBeInTheDocument();
+  });
+
+  it("'다시 분석'은 reanalyze 라우트를 호출하고 새로고침한다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    refresh.mockClear();
+
+    renderView({ analysisStatus: "failed", research: null, repro: null });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "다시 분석" }));
+    });
+
+    // 재분석은 잡 트리거(R31) — 라우트만 호출하고 인라인 분석은 하지 않는다.
+    expect(fetchMock).toHaveBeenCalledWith("/api/papers/p1/reanalyze", {
+      method: "POST",
+    });
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+
+    vi.unstubAllGlobals();
   });
 });

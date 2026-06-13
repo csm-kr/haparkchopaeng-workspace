@@ -122,7 +122,14 @@
       "summary": "PDF 업로드(드롭/arXiv)→Supabase Storage→Paper(pending) 생성: lib/storage(ensureBucket 비공개·createSignedUploadUrl 프리사인·signedDownloadUrl 단기·uploadPdf 서버, service role 서버전용·호출시점 env R2/R36) + lib/arxiv(순수 parseArxivId SSRF arxiv.org 화이트리스트·버전제거·서브도메인/내부IP 거부 + arxivPdfUrl). route: /api/uploads/presign(requireAuth·.pdf 외 415·서버가 객체키 결정 R36)·POST /api/papers(파일=객체키 또는 arxivUrl 분기·arXiv는 서버 fetch+content-type 415·analysisStatus=pending 잡 미실행 R28/ADR-013→016·uploadedBy 세션 R3·tags[])·/api/papers/[id]/pdf(서명 URL 302 리디렉트 R36). components/upload UploadButton+UploadModal('use client' 섬 — PDF 전용 드롭존+파일선택 accept=application/pdf·비PDF 인라인 거부 R12/R30·arXiv 입력·idle→uploading→done router.push, 프리사인→PUT 직접 업로드→POST papers). 대시보드 Topbar ＋업로드 연결·paper 헤더 ⬇원문PDF를 /pdf 라우트로 변경(R13). 토큰만(R20). tests: arxiv 6·upload-modal RTL 5(모달열기·비PDF거부·프리사인 단계전이·arXiv제출·빈값검증). build·lint·test(118, 신규 11)·E2E(8, 신규 upload 1) 통과",
       "completed_at": "2026-06-13T22:52:24+0900"
     },
-    { "step": 15, "name": "jobs-analysis", "status": "pending" }
+    {
+      "step": 15,
+      "name": "jobs-analysis",
+      "status": "completed",
+      "started_at": "2026-06-13T22:55:59+0900",
+      "summary": "논문 분석 파이프라인(Inngest 잡 + Google Gemini): lib/inngest(Inngest 클라이언트 id=hapark)·lib/analysis(@google/genai — getAi 호출시점 키 R2·두 관점 responseSchema(연구 problem/contributions/io/comparison/ablation·재구현 data/model/loss/metrics/training/gpu)·figure 스키마 imageUrl=null I-1·inlineData PDF base64·blockReason/빈응답 throw 격리 + 오케스트레이션 analyzePaper: Job create(running)→PDF 로드→research/repro/figures 추출→$transaction(Analysis×2 upsert·Figure 재생성·analysisStatus=ready)→Job done, 실패 시 analysisStatus=failed+Job.lastError 후 재던짐 R28). worker/analyze-paper(inngest.createFunction retries:3, step.run)·app/api/inngest(serve, 로컬 Dev Server). 트리거: POST /api/papers·POST /api/papers/[id]/reanalyze가 inngest.send만(인라인 분석 금지 R31, 전송실패는 삼킴 업로드≠분석). step9 '다시 분석' 버튼을 reanalyze 라우트+router.refresh로 연결. Anthropic SDK 미도입. build·lint·test(127, 신규 9: responseSchema 연구/재구현 형태·inlineData PDF·JSON 파싱·blockReason/빈응답/키부재 throw·figure 매핑·페이로드→Analysis/Figure 매핑+ready 전이·실패격리 Paper유지·재분석 버튼) 통과",
+      "completed_at": "2026-06-13T23:11:00+0900"
+    }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
 }

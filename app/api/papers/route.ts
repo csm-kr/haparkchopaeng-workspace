@@ -5,6 +5,7 @@ import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { arxivPdfUrl, parseArxivId } from "@/lib/arxiv";
 import { uploadPdf } from "@/lib/storage";
+import { inngest } from "@/lib/inngest";
 
 // POST /api/papers — PDF 업로드(프리사인 경로) 또는 arXiv URL로 Paper 생성.
 // CRITICAL: 업로드는 PDF 전용(R12/ADR-003) — 그 외 415.
@@ -21,6 +22,16 @@ const ArxivBody = z.object({ arxivUrl: z.string().min(1) });
 
 function hasKey(body: unknown, key: string): boolean {
   return typeof body === "object" && body !== null && key in body;
+}
+
+// 분석은 요청 경로가 아니라 Inngest 잡에서 실행한다(R31/ADR-013→016). 잡 적재만 하고 즉시 응답.
+// 이벤트 전송 실패가 업로드(Paper 생성)를 막지 않게 삼킨다 — 업로드≠분석(R28). 분석은 reanalyze로 재시도.
+async function triggerAnalysis(paperId: string): Promise<void> {
+  try {
+    await inngest.send({ name: "paper/analyze", data: { paperId } });
+  } catch (e) {
+    console.error("paper/analyze 이벤트 전송 실패", e);
+  }
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -60,6 +71,7 @@ export async function POST(req: Request): Promise<Response> {
           tags: [],
         },
       });
+      await triggerAnalysis(paper.id);
       return ok({ id: paper.id, analysisStatus: paper.analysisStatus }, 201);
     }
 
@@ -87,6 +99,7 @@ export async function POST(req: Request): Promise<Response> {
         tags: [],
       },
     });
+    await triggerAnalysis(paper.id);
     return ok({ id: paper.id, analysisStatus: paper.analysisStatus }, 201);
   } catch (e) {
     return toErrorResponse(e);

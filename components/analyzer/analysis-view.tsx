@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, ImageOff, Plus, X } from "lucide-react";
 import { Avatar, Badge, Button, Card, Input, Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -91,7 +92,7 @@ export function AnalysisView({
   // 분석이 아직 준비되지 않았으면 섹션 대신 상태 블록을 보인다(SCREENS §화면별 상태).
   // 원문 PDF 다운로드는 분석 상태와 무관하게 헤더(page)에서 동작한다(R28).
   if (analysisStatus !== "ready") {
-    return <AnalysisStatusBlock status={analysisStatus} />;
+    return <AnalysisStatusBlock status={analysisStatus} paperId={paperId} />;
   }
 
   function startAdd(sectionId: string) {
@@ -388,8 +389,35 @@ export function AnalysisView({
   );
 }
 
-/** 분석 대기/실패 상태 — 섹션 대신 상태 블록(R26/R28). 재분석 트리거는 jobs step. */
-function AnalysisStatusBlock({ status }: { status: AnalysisStatus }) {
+/** 분석 대기/실패 상태 — 섹션 대신 상태 블록(R26/R28). */
+function AnalysisStatusBlock({
+  status,
+  paperId,
+}: {
+  status: AnalysisStatus;
+  paperId: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function reanalyze() {
+    setBusy(true);
+    setError(null);
+    try {
+      // 재분석은 Inngest 잡으로(R31) — 라우트가 상태를 pending으로 되돌리고 이벤트만 보낸다.
+      const res = await fetch(`/api/papers/${paperId}/reanalyze`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error();
+      // pending 전이를 다시 그린다(잡이 끝나면 ready로).
+      router.refresh();
+    } catch {
+      setError("다시 분석을 시작하지 못했어요. 잠깐 후 다시 시도해주세요.");
+      setBusy(false);
+    }
+  }
+
   if (status === "pending") {
     return (
       <Card className="flex flex-col gap-3 p-6">
@@ -413,10 +441,14 @@ function AnalysisStatusBlock({ status }: { status: AnalysisStatus }) {
       <p className="max-w-sm text-[13px] text-fg-muted">
         원문 PDF는 위에서 언제든 받을 수 있어요. 분석만 다시 시도하면 돼요.
       </p>
-      {/* 재분석 트리거는 jobs step에서 연결한다 — 지금은 표시만(disabled). */}
-      <Button variant="secondary" size="sm" disabled>
-        다시 분석
+      <Button variant="secondary" size="sm" onClick={reanalyze} disabled={busy}>
+        {busy ? "분석 시작 중…" : "다시 분석"}
       </Button>
+      {error && (
+        <p role="alert" className="text-[12px] text-busy">
+          {error}
+        </p>
+      )}
     </Card>
   );
 }
