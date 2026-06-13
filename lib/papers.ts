@@ -75,6 +75,7 @@ export interface PaperDetailMeta {
   pageCount: number | null;
   abstract: string | null;
   pdfUrl: string;
+  uploadedBy: string;
   analysisStatus: AnalysisStatus;
 }
 
@@ -124,6 +125,7 @@ export async function getPaperDetail(
       pageCount: paper.pageCount,
       abstract: paper.abstract,
       pdfUrl: paper.pdfUrl,
+      uploadedBy: paper.uploadedBy,
       analysisStatus: toAnalysisStatus(paper.analysisStatus),
     },
     research: research ? (research as unknown as ResearchPayload) : null,

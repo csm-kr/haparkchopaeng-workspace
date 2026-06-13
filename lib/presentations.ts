@@ -155,6 +155,7 @@ export async function getPresentationDetail(
     presentation: {
       id: pres.id,
       title: pres.title,
+      presenterId: pres.presenterId,
       presenter: toRef(byId.get(pres.presenterId)),
       date: pres.date.toISOString(),
       duration: pres.duration,

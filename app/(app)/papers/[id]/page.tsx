@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
-import { AnalysisView } from "@/components/analyzer";
+import { AnalysisView, DeletePaperButton } from "@/components/analyzer";
 import { getSession } from "@/lib/auth";
 import { getPaperDetail } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
@@ -95,20 +95,30 @@ export default async function PaperDetailPage({ params }: PageProps) {
     color: "var(--m-ha)",
   };
 
+  // 삭제 노출: 올린 사람 또는 관리자만(서버가 최종 강제, R3).
+  const canDelete =
+    !!session &&
+    (paper.uploadedBy === session.memberId || session.role === "관리자");
+
   return (
     <>
       <Topbar
         crumbs={[{ label: "논문", href: "/library" }, { label: paper.title }]}
         actions={
-          // R13: 원문 PDF 다운로드 단 하나. arXiv/공유 버튼을 추가하지 않는다.
+          // R13: 주 액션은 원문 PDF 다운로드. 삭제는 작성자/관리자에게만 보이는 보조 액션(R27).
           // 비공개 버킷 → 서명 URL 리디렉트 라우트로 받는다(R36).
-          <a
-            href={`/api/papers/${paper.id}/pdf`}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-border-strong bg-bg-elevated px-3.5 py-[7px] text-[13px] font-medium text-fg hover:bg-bg-subtle"
-          >
-            <Download size={14} aria-hidden="true" />
-            원문 PDF
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/papers/${paper.id}/pdf`}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-border-strong bg-bg-elevated px-3.5 py-[7px] text-[13px] font-medium text-fg hover:bg-bg-subtle"
+            >
+              <Download size={14} aria-hidden="true" />
+              원문 PDF
+            </a>
+            {canDelete && (
+              <DeletePaperButton paperId={paper.id} title={paper.title} />
+            )}
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto">

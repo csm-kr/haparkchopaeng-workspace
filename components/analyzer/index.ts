@@ -1,4 +1,5 @@
 export { AnalysisView } from "./analysis-view";
+export { DeletePaperButton } from "./delete-paper-button";
 export type {
   AnalysisViewProps,
   AddNoteInput,

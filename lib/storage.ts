@@ -62,3 +62,16 @@ export async function uploadPdf(
     .upload(path, body, { contentType: "application/pdf", upsert: false });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * 스토리지 객체를 제거한다(논문 삭제 시 원문 PDF 정리).
+ * best-effort: 실패해도 throw하지 않는다 — 스토리지 정리 실패가 DB 삭제를 막지 않게.
+ */
+export async function removeObject(path: string): Promise<void> {
+  try {
+    const admin = createSupabaseAdmin();
+    await admin.storage.from(bucketName()).remove([path]);
+  } catch {
+    // 정리 실패는 무시(고아 객체는 별도 청소로). DB가 진실의 원천.
+  }
+}

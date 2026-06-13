@@ -3,6 +3,7 @@ import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import {
   CommentThread,
+  DeletePresentationButton,
   PresentationViewer,
   type MemberRef,
 } from "@/components/presentations";
@@ -109,6 +110,12 @@ export default async function PresentationDetailPage({ params }: PageProps) {
     color: "var(--m-ha)",
   };
 
+  // 삭제 노출: 발표자 또는 관리자만(서버가 최종 강제, R3).
+  const canDelete =
+    !!session &&
+    (presentation.presenterId === session.memberId ||
+      session.role === "관리자");
+
   return (
     <>
       <Topbar
@@ -116,6 +123,14 @@ export default async function PresentationDetailPage({ params }: PageProps) {
           { label: "발표 자료", href: "/presentations" },
           { label: presentation.title },
         ]}
+        actions={
+          canDelete ? (
+            <DeletePresentationButton
+              presentationId={presentation.id}
+              title={presentation.title}
+            />
+          ) : undefined
+        }
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6">

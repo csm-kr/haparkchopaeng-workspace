@@ -3,6 +3,7 @@ export type { PresentationListProps } from "./presentation-list";
 export { PresentationViewer } from "./presentation-viewer";
 export type { PresentationViewerProps } from "./presentation-viewer";
 export { CommentThread } from "./comment-thread";
+export { DeletePresentationButton } from "./delete-presentation-button";
 export type { CommentThreadProps } from "./comment-thread";
 export { parseMentions } from "./mentions";
 export type { MentionSegment } from "./mentions";

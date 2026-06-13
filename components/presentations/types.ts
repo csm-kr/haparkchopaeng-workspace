@@ -66,6 +66,7 @@ export interface CommentView {
 export interface PresentationMeta {
   id: string;
   title: string;
+  presenterId: string;
   presenter: MemberRef | null;
   date: string;
   duration: string | null;
