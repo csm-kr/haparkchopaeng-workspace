@@ -105,8 +105,8 @@
       "started_at": "2026-06-13T19:53:29+0900",
       "summary": "팀 관리 화면 RSC: lib/team.getTeam(멤버 목록+대기 초대 Prisma 직접, role 유니온 좁힘, ADR-015/R32). components/team: team-manager('use client' 인터랙티브 섬 — 초대 블록(이메일+역할 select+초대 보내기·🔗 링크 복사, 관리자만 👑)·멤버 목록(아바타·이름+본인'나'·이메일·역할 배지 색+텍스트 R29·⋯메뉴 역할변경/내보내기, 본인 제외)·대기 초대 점선 행 재전송/취소(되돌리기)·내보내기 확인 다이얼로그 위험색 R27·낙관적 갱신+롤백·인라인 검증 R30). 초대 생성/취소/재전송은 step4 route handler(/api/invites…) fetch 호출(R32 섬)·역할변경/내보내기는 actions.ts Server Action 보강(requireRole 관리자 👑 R19·본인 보호·revalidatePath, ADR-015). 비관리자엔 관리 액션 숨김+안내(R19). 새 공개가입 경로 없음(R18/ADR-007). page.tsx RSC try/catch 에러카드·loading.tsx 스켈레톤 상태 3종(R26). 토큰만(R20). tests/e2e/team(관리자 로그인→/team 멤버4·이메일·초대블록). build·lint·test(101, 신규 6: 멤버행/역할배지·본인 메뉴부재·대기초대 점선·내보내기 확인다이얼로그·역할변경 액션호출·비관리자 숨김)·E2E(6) 통과",
       "completed_at": "2026-06-13T20:04:09+0900"
-    }
+    },
+    { "step": 13, "name": "settings", "status": "pending" }
   ],
-  "created_at": "2026-06-13T17:38:14+0900",
-  "completed_at": "2026-06-13T20:04:09+0900"
+  "created_at": "2026-06-13T17:38:14+0900"
 }
