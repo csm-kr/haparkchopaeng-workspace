@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { PaperListItem, PaperUploader } from "@/components/library";
-import type { AnalysisStatus } from "@/types";
+import type { FigureView, NoteView } from "@/components/analyzer";
+import type {
+  AnalysisStatus,
+  NoteLens,
+  ReproPayload,
+  ResearchPayload,
+} from "@/types";
 
 // 논문 목록 서버 조회 — 읽기는 RSC에서 Prisma 직접(ADR-015/R32).
 // 클라이언트는 이 데이터를 fetch하지 않는다.
@@ -56,4 +62,88 @@ export async function getPapers(): Promise<PaperListItem[]> {
     uploadedAt: p.uploadedAt.toISOString(),
     uploader: byId.get(p.uploadedBy) ?? null,
   }));
+}
+
+/** 논문 상세(헤더 메타 — 원문 PDF 다운로드 유일 액션, R13). */
+export interface PaperDetailMeta {
+  id: string;
+  title: string;
+  authors: string;
+  venue: string | null;
+  year: number | null;
+  arxiv: string | null;
+  pageCount: number | null;
+  abstract: string | null;
+  pdfUrl: string;
+  analysisStatus: AnalysisStatus;
+}
+
+export interface PaperDetailView {
+  paper: PaperDetailMeta;
+  /** 관점별 구조화 분석. 없으면 null(분석 대기/실패). */
+  research: ResearchPayload | null;
+  repro: ReproPayload | null;
+  /** Figure는 두 관점 공통(ADR-004) */
+  figures: FigureView[];
+  /** 섹션별 작성자 표기 노트(ADR-005) */
+  notes: NoteView[];
+}
+
+export async function getPaperDetail(
+  id: string,
+): Promise<PaperDetailView | null> {
+  // 읽기는 RSC에서 Prisma 직접(ADR-015/R32). 분석·figure·노트를 함께 읽는다.
+  const paper = await prisma.paper.findUnique({
+    where: { id },
+    include: {
+      analyses: true,
+      figures: { orderBy: { sourcePage: "asc" } },
+      notes: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!paper) return null;
+
+  // 노트 작성자(Member)는 관계가 없어 맵으로 합친다(getPapers와 동일 패턴).
+  const members = await prisma.member.findMany({
+    select: { id: true, name: true, initial: true, color: true },
+  });
+  const byId = new Map(members.map((m) => [m.id, m]));
+
+  // payload(Json)는 시드/추출 스키마와 1:1 — DTO로 좁힌다(any 미사용).
+  const research = paper.analyses.find((a) => a.lens === "research")?.payload;
+  const repro = paper.analyses.find((a) => a.lens === "repro")?.payload;
+
+  return {
+    paper: {
+      id: paper.id,
+      title: paper.title,
+      authors: paper.authors,
+      venue: paper.venue,
+      year: paper.year,
+      arxiv: paper.arxiv,
+      pageCount: paper.pageCount,
+      abstract: paper.abstract,
+      pdfUrl: paper.pdfUrl,
+      analysisStatus: toAnalysisStatus(paper.analysisStatus),
+    },
+    research: research ? (research as unknown as ResearchPayload) : null,
+    repro: repro ? (repro as unknown as ReproPayload) : null,
+    figures: paper.figures.map((f) => ({
+      id: f.id,
+      title: f.title,
+      caption: f.caption,
+      interpretation: f.interpretation,
+      sourcePage: f.sourcePage,
+      imageUrl: f.imageUrl,
+    })),
+    notes: paper.notes.map((n) => ({
+      id: n.id,
+      sectionId: n.sectionId,
+      lens: n.lens as NoteLens,
+      title: n.title,
+      body: n.body,
+      createdAt: n.createdAt.toISOString(),
+      author: byId.get(n.authorId) ?? null,
+    })),
+  };
 }

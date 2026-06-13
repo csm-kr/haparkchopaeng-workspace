@@ -74,7 +74,13 @@
       "summary": "논문 목록 화면 RSC: lib/papers.getPapers(Prisma 직접 조회 — 논문 최신순 + 업로더(Member) 맵 조인, tags 첫 항목=종류 태그, analysisStatus 유니온 좁힘, ADR-015/R32). components/library PaperList(단일 필터 칩 '전체'만 R17/ADR-007 · .paper-row: 태그·제목·저자·업로더 Avatar·날짜 → /papers/:id 링크만 · pending/failed 시 '분석 중'/'분석 실패' 표시 · 빈 상태 내장). page.tsx RSC + try/catch 에러카드, loading.tsx 행 스켈레톤 — 상태 3종(R26). 토큰만(R20). 상세 미구현(링크만). tests/e2e/library.spec(로그인→/library 5행·필터 단일·행클릭 /papers 전이). build·lint·test(60, 신규 4: 행 렌더·필터 단일·빈 상태·분석 상태표시)·E2E(2) 통과",
       "completed_at": "2026-06-13T19:04:26+0900"
     },
-    { "step": 9, "name": "paper-analysis", "status": "pending" }
+    {
+      "step": 9,
+      "name": "paper-analysis",
+      "status": "completed",
+      "started_at": "2026-06-13T19:06:16+0900",
+      "summary": "논문 상세(AnalysisView) RSC: lib/papers.getPaperDetail(Paper+Analysis(research/repro)+Figure[]+SectionNote[] 작성자 Member 조인, payload→DTO 좁힘, ADR-015/R32). components/analyzer: sections.tsx(연구 5섹션 problem/contributions/io/comparison/ablation · 재구현 4섹션 데이터/모델/학습/리소스 순수 렌더러, 표·강조는 색+굵기 R29) + analysis-view.tsx('use client' 관점 토글 research/repro 탭없음 R9/ADR-004 · Figure 두 관점 공통 하단고정 'p.N 추출'배지·imageUrl없으면 플레이스홀더 R10 · 섹션별 addingSec 단일 인라인폼·검증 인라인 '내용을 입력해주세요' R30 · 낙관적 추가/삭제+롤백 · figure 노트 lens=any R11 · pending/failed 상태블록·원문PDF 무관 R28). actions.ts Server Action addNote/deleteNote(authorId 세션주입 R3·figures→any 강제·✍️삭제권한·revalidatePath, ADR-015). page.tsx RSC 헤더 단일 액션 ⬇원문PDF(R13)·탭없음 + try/catch 에러·not-found, loading.tsx 스켈레톤(R26). 토큰만(R20). tests/e2e/paper.spec(로그인→/papers/p1→연구섹션→관점토글 재구현전환→Figure 양관점 공통). build·lint·test(68, 신규 8: 토글 섹션전환·figure 양관점·노트 작성자표기·빈값 인라인검증·낙관적 추가·figure lens=any·pending·failed)·E2E(3) 통과"
+    }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
 }
