@@ -7,7 +7,8 @@
       "name": "live-backend",
       "status": "completed",
       "started_at": "2026-06-13T23:17:44+0900",
-      "summary": "lib/cloudflare.ts(Live Input 생성/조회/삭제·웹훅 HMAC 검증, 키는 호출 시점)·lib/live.ts(getActiveSession)·live route handler 6종(GET·start·join·leave·end·webhook) 추가. 동시 active 1개(409)·Stream Key는 발표자 /start에만(join은 HLS만)·presenterId/memberId는 세션 주입·웹훅은 서명 검증. Realtime/UI는 다음 step. 테스트 12종 신규."
+      "summary": "lib/cloudflare.ts(Live Input 생성/조회/삭제·웹훅 HMAC 검증, 키는 호출 시점)·lib/live.ts(getActiveSession)·live route handler 6종(GET·start·join·leave·end·webhook) 추가. 동시 active 1개(409)·Stream Key는 발표자 /start에만(join은 HLS만)·presenterId/memberId는 세션 주입·웹훅은 서명 검증. Realtime/UI는 다음 step. 테스트 12종 신규.",
+      "completed_at": "2026-06-13T23:24:44+0900"
     },
     {
       "step": 1,
