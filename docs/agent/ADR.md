@@ -82,6 +82,32 @@
 **이유**: CLAUDE.md "서버 로직은 서버에서만"을 RSC 시대에 맞게 구체화. 클라이언트가 DB를 직접 보지 않으면서 초기 페인트가 빠르다.
 **트레이드오프**: RSC/클라이언트 경계 설계 필요. 변이 후 `revalidatePath`/`revalidateTag`로 캐시 무효화를 신경 써야 한다.
 
+### ADR-016: 배포는 Vercel + Supabase (ADR-010·012 개정)
+
+> **이 ADR은 ADR-010(Prisma+SQLite)과 ADR-012(상시 구동 Node 서버, 서버리스 금지)를 개정한다.** 두 결정의 전제는 ① 분 단위 분석/녹화 후처리를 인-프로세스 워커로 돌려야 하고 ② SQLite가 영속 디스크를 요구한다는 것이었다. Supabase 채택으로 ②가 사라지고, ①은 외부 durable 잡 러너로 대체 가능하므로 서버리스 배포가 성립한다.
+
+**결정**: 프로덕션을 **Vercel(Next.js 15) + Supabase**로 배포한다. 책임 재배치:
+
+| 관심사 | 이전(ADR-010·012~014) | 변경 후 |
+|---|---|---|
+| 앱 호스팅 | 상시 구동 Node 서버 단일 인스턴스 | **Vercel** (서버리스/Edge + Fluid Compute) |
+| DB/ORM | Prisma + SQLite (영속 디스크) | **Prisma + Supabase Postgres** (`DATABASE_URL` = pooled, `DIRECT_URL` = 마이그레이션용) |
+| 파일 스토리지 | 외부 객체 스토리지 | **Supabase Storage** (프리사인 업로드 / 서명 URL) |
+| 실시간(`live`·@멘션) | 인-프로세스 이벤트 버스 + SSE | **Supabase Realtime** (broadcast / `postgres_changes`) |
+| 백그라운드 잡(분석·arXiv·녹화 후처리) | 인-프로세스 폴링 워커 | **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash 등) — `Job` 테이블 패턴을 큐로 이관 |
+
+**이유**:
+- **②(영속 디스크) 소멸**: Supabase Postgres는 관리형이라 SQLite 파일·영속 볼륨이 필요 없다. ADR-010이 열어둔 "Postgres 이전 경로"를 실제로 밟는 것이다.
+- **실시간이 더 깔끔해짐**: `live`는 모두에게 즉시 일관돼야 한다(ADR-001). 인-프로세스 버스(단일 인스턴스 한정)를 **Supabase Realtime**으로 대체하면 서버리스/다중 리전에서도 전이 전파가 성립한다. ADR-014의 의도(폴링 금지, 푸시)는 유지된다 — 메커니즘만 교체.
+- **①(분 단위 잡)의 유일한 진짜 제약 해소**: Vercel 함수는 실행 시간 제한이 있어 분 단위 Claude 분석을 인라인으로 못 돌린다. 그래서 분석·arXiv 가져오기·녹화 후처리는 **durable 잡 러너**(재시도·멱등·관찰성 내장)에 맡긴다. "업로드 성공 ≠ 분석 성공"(ADR-013)의 원칙과 `Job` 모델(멱등·재시도·실패 보존)은 **그대로 유지**되며, 인-프로세스 폴링 대신 외부 큐가 실행 주체가 될 뿐이다.
+
+**트레이드오프**:
+- 인프라 의존이 단일 벤더(자체 서버)에서 **Vercel + Supabase + 잡 러너**로 늘어난다(비용·약관·콜드 스타트).
+- ADR-013의 "외부 큐는 과투자" 판단을 뒤집는다 — 서버리스에선 외부 큐가 **필수**다.
+- 인증은 자체 서명 세션(ADR-007/SECURITY) 유지 또는 Supabase Auth로 이관 중 택1 — **단일 테넌트·초대 전용 원칙은 불변**. 본 ADR 범위 밖, 별도 결정 필요.
+- Cloudflare Stream Live(ADR-002)는 영향 없음. 녹화 완료 웹훅은 Vercel route handler가 그대로 수신(HMAC 검증).
+- 다중 인스턴스 환경이 되므로 인-프로세스 상태(이벤트 버스 등)에 의존하던 코드는 전부 외부 서비스(Realtime/잡 러너)로 빠져야 한다.
+
 ### ADR-016: 운영 플랫폼은 Supabase로 통합
 **결정**: 운영 인프라를 **Supabase**(Postgres + Auth + Storage + Realtime)로 통합한다. ADR-010의 DB 결정을 개정한다 — **로컬 개발은 SQLite 유지, 운영 DB는 Supabase Postgres**(Prisma `DATABASE_URL`/`DIRECT_URL` 교체). 스토리지는 Supabase Storage(서명 URL), 실시간(`live`·@멘션)은 Supabase Realtime로 ADR-014의 인-프로세스 SSE 버스를 대체할 수 있다.
 **이유**: 4인 그룹이 DB·인증·스토리지·실시간을 각각 운영하는 부담을 줄인다. 인증 수단 미결(ISSUES I-7 계열)을 Supabase Auth로 해소.
