@@ -96,7 +96,7 @@
       "status": "completed",
       "started_at": "2026-06-13T19:41:56+0900",
       "summary": "발표 자료 목록+상세(뷰어+회고 댓글) RSC: lib/presentations(getPresentations 최신순+발표자 조인·getPresentationDetail Presentation+assets+versions+comments(reactions·작성자 조인)·getMemberRefs, Json→DTO 좁힘, ADR-015/R32). components/presentations: presentation-list(개수 'N개'·행→/presentations/:id 링크만·빈 상태 내장) + presentation-viewer(요약·핵심포인트·슬라이드·에셋·버전이력 순수렌더 R20) + comment-thread('use client' 시간순 스레드·@멘션 링크화(/team)·반응 그룹 토글 색+이모지 R29·슬라이드참조·textarea Cmd/Ctrl+Enter 전송·빈값 인라인검증 R30·낙관적 추가/토글+롤백) + mentions.ts(순수 parseMentions: 이름·핸들 해소·미매칭 @는 텍스트). [id]/actions.ts Server Action addComment(authorId 세션주입 R3·revalidatePath)·toggleReaction(memberId 세션주입·@@unique commentId_memberId_emoji 토글 R3, ADR-015). 댓글은 발표자료 귀속·논문상세엔 없음(ADR-004/R9). page.tsx RSC try/catch 에러·not-found, loading.tsx 스켈레톤 — 상태 3종(R26). tests/e2e/presentation(로그인→/presentations→상세 회고댓글 렌더). build·lint·test(95, 신규 8: 목록개수·빈상태·멘션파싱·댓글렌더·@멘션링크화·빈값검증·작성자세션주입·반응토글)·E2E(5) 통과",
-      "completed_at": "2026-06-13T19:52:00+0900"
+      "completed_at": "2026-06-13T19:52:26+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
