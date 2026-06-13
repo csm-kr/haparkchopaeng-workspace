@@ -128,7 +128,7 @@
       "status": "completed",
       "started_at": "2026-06-13T22:55:59+0900",
       "summary": "논문 분석 파이프라인(Inngest 잡 + Google Gemini): lib/inngest(Inngest 클라이언트 id=hapark)·lib/analysis(@google/genai — getAi 호출시점 키 R2·두 관점 responseSchema(연구 problem/contributions/io/comparison/ablation·재구현 data/model/loss/metrics/training/gpu)·figure 스키마 imageUrl=null I-1·inlineData PDF base64·blockReason/빈응답 throw 격리 + 오케스트레이션 analyzePaper: Job create(running)→PDF 로드→research/repro/figures 추출→$transaction(Analysis×2 upsert·Figure 재생성·analysisStatus=ready)→Job done, 실패 시 analysisStatus=failed+Job.lastError 후 재던짐 R28). worker/analyze-paper(inngest.createFunction retries:3, step.run)·app/api/inngest(serve, 로컬 Dev Server). 트리거: POST /api/papers·POST /api/papers/[id]/reanalyze가 inngest.send만(인라인 분석 금지 R31, 전송실패는 삼킴 업로드≠분석). step9 '다시 분석' 버튼을 reanalyze 라우트+router.refresh로 연결. Anthropic SDK 미도입. build·lint·test(127, 신규 9: responseSchema 연구/재구현 형태·inlineData PDF·JSON 파싱·blockReason/빈응답/키부재 throw·figure 매핑·페이로드→Analysis/Figure 매핑+ready 전이·실패격리 Paper유지·재분석 버튼) 통과",
-      "completed_at": "2026-06-13T23:11:00+0900"
+      "completed_at": "2026-06-13T23:12:30+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
