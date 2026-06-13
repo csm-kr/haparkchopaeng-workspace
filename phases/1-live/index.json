@@ -1,0 +1,9 @@
+{
+  "project": "하박조팽",
+  "phase": "1-live",
+  "steps": [
+    { "step": 0, "name": "live-backend", "status": "pending" },
+    { "step": 1, "name": "live-realtime", "status": "pending" },
+    { "step": 2, "name": "live-ui", "status": "pending" }
+  ]
+}
