@@ -376,10 +376,10 @@ const SCHEDULE = {
   // 6월 마지막 발표자 ha(로테이션 [ha,bak,jo,paeng]의 0) 다음 시작 인덱스
   rotationPointerAfter: 1,
   weeks: [
-    { week: 1, date: "6월 7일", time: "10:00", presenterId: "jo", topic: "Mixture-of-Depths 리뷰", status: "done", confirmed: true, presentationId: "pres1" },
-    { week: 2, date: "6월 14일", time: "10:00", presenterId: "bak", topic: "Diffusion Forcing", status: "upcoming", confirmed: true, presentationId: "pres2" },
-    { week: 3, date: "6월 21일", time: "10:00", presenterId: "paeng", topic: "RT-2 / VLA 정리", status: "upcoming", confirmed: true, presentationId: null },
-    { week: 4, date: "6월 28일", time: "10:00", presenterId: "ha", topic: "Q2 로드맵 점검", status: "upcoming", confirmed: true, presentationId: "pres3" },
+    { week: 1, date: "6월 6일", time: "10:00", presenterId: "jo", topic: "Mixture-of-Depths 리뷰", status: "done", confirmed: true, presentationId: "pres1" },
+    { week: 2, date: "6월 13일", time: "10:00", presenterId: "bak", topic: "Diffusion Forcing", status: "done", confirmed: true, presentationId: "pres2" },
+    { week: 3, date: "6월 20일", time: "10:00", presenterId: "paeng", topic: "RT-2 / VLA 정리", status: "upcoming", confirmed: true, presentationId: null },
+    { week: 4, date: "6월 27일", time: "10:00", presenterId: "ha", topic: "Q2 로드맵 점검", status: "upcoming", confirmed: true, presentationId: "pres3" },
   ],
 };
 
