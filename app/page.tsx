@@ -1,72 +1,24 @@
-import { FileText } from "lucide-react";
-import {
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Input,
-  Skeleton,
-} from "@/components/ui";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { AuthScreen, type QuickMember } from "@/components/auth/auth-screen";
 
-/**
- * 디자인 시스템 미리보기 — 도메인 화면 아님(step1 범위).
- * 토큰 기반 기본 컴포넌트가 라이트/다크에서 렌더되는지 확인용.
- */
-export default function Home() {
-  return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 p-10">
-      <h1 className="text-[28px] font-bold tracking-[-0.025em]">
-        하박조팽 — 디자인 시스템
-      </h1>
+// 진입점 — 로그인 화면(SCREENS §auth). 이미 로그인했으면 홈으로 보낸다.
+// 데이터 읽기는 서버에서(ADR-015). 빠른 로그인 목록은 시드 멤버(데모/로컬용).
 
-      <section className="flex flex-wrap gap-2">
-        <Button variant="primary">기본</Button>
-        <Button variant="secondary">보조</Button>
-        <Button variant="ghost">고스트</Button>
-        <Button variant="danger">내보내기</Button>
-      </section>
+export default async function Home() {
+  const session = await getSession();
+  if (session) redirect("/dashboard");
 
-      <section className="flex flex-wrap items-center gap-2">
-        <Badge variant="admin">관리자</Badge>
-        <Badge variant="member">멤버</Badge>
-        <Badge variant="guest">게스트</Badge>
-        <Badge variant="online">온라인</Badge>
-        <Badge variant="away">자리비움</Badge>
-        <Badge variant="busy">바쁨</Badge>
-      </section>
+  const members = await prisma.member.findMany({ orderBy: { createdAt: "asc" } });
+  const quick: QuickMember[] = members.map((m) => ({
+    id: m.id,
+    name: m.name,
+    initial: m.initial,
+    color: m.color,
+    email: m.email,
+    role: m.role,
+  }));
 
-      <section className="flex items-center gap-3">
-        <Avatar user={{ name: "하수현", initial: "하", color: "var(--m-ha)" }} />
-        <Avatar
-          user={{ name: "박진희", initial: "박", color: "var(--m-bak)" }}
-          size="lg"
-        />
-        <Avatar
-          user={{ name: "조성민", initial: "조", color: "var(--m-jo)" }}
-          size="xl"
-        />
-      </section>
-
-      <Card className="p-5">
-        <Input placeholder="이메일을 입력하세요" />
-      </Card>
-
-      <Card className="p-5">
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-4 w-1/2" />
-        </div>
-      </Card>
-
-      <Card>
-        <EmptyState
-          icon={<FileText size={20} />}
-          title="아직 올라온 논문이 없어요"
-          description="첫 PDF를 올려볼까요?"
-          action={<Button>업로드</Button>}
-        />
-      </Card>
-    </main>
-  );
+  return <AuthScreen members={quick} />;
 }
