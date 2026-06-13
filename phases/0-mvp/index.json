@@ -72,7 +72,7 @@
       "status": "completed",
       "started_at": "2026-06-13T18:57:17+0900",
       "summary": "논문 목록 화면 RSC: lib/papers.getPapers(Prisma 직접 조회 — 논문 최신순 + 업로더(Member) 맵 조인, tags 첫 항목=종류 태그, analysisStatus 유니온 좁힘, ADR-015/R32). components/library PaperList(단일 필터 칩 '전체'만 R17/ADR-007 · .paper-row: 태그·제목·저자·업로더 Avatar·날짜 → /papers/:id 링크만 · pending/failed 시 '분석 중'/'분석 실패' 표시 · 빈 상태 내장). page.tsx RSC + try/catch 에러카드, loading.tsx 행 스켈레톤 — 상태 3종(R26). 토큰만(R20). 상세 미구현(링크만). tests/e2e/library.spec(로그인→/library 5행·필터 단일·행클릭 /papers 전이). build·lint·test(60, 신규 4: 행 렌더·필터 단일·빈 상태·분석 상태표시)·E2E(2) 통과",
-      "completed_at": "2026-06-13T19:05:00+0900"
+      "completed_at": "2026-06-13T19:04:26+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
