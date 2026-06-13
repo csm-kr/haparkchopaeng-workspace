@@ -82,7 +82,14 @@
       "summary": "논문 상세(AnalysisView) RSC: lib/papers.getPaperDetail(Paper+Analysis(research/repro)+Figure[]+SectionNote[] 작성자 Member 조인, payload→DTO 좁힘, ADR-015/R32). components/analyzer: sections.tsx(연구 5섹션 problem/contributions/io/comparison/ablation · 재구현 4섹션 데이터/모델/학습/리소스 순수 렌더러, 표·강조는 색+굵기 R29) + analysis-view.tsx('use client' 관점 토글 research/repro 탭없음 R9/ADR-004 · Figure 두 관점 공통 하단고정 'p.N 추출'배지·imageUrl없으면 플레이스홀더 R10 · 섹션별 addingSec 단일 인라인폼·검증 인라인 '내용을 입력해주세요' R30 · 낙관적 추가/삭제+롤백 · figure 노트 lens=any R11 · pending/failed 상태블록·원문PDF 무관 R28). actions.ts Server Action addNote/deleteNote(authorId 세션주입 R3·figures→any 강제·✍️삭제권한·revalidatePath, ADR-015). page.tsx RSC 헤더 단일 액션 ⬇원문PDF(R13)·탭없음 + try/catch 에러·not-found, loading.tsx 스켈레톤(R26). 토큰만(R20). tests/e2e/paper.spec(로그인→/papers/p1→연구섹션→관점토글 재구현전환→Figure 양관점 공통). build·lint·test(68, 신규 8: 토글 섹션전환·figure 양관점·노트 작성자표기·빈값 인라인검증·낙관적 추가·figure lens=any·pending·failed)·E2E(3) 통과",
       "completed_at": "2026-06-13T19:24:17+0900"
     },
-    { "step": 10, "name": "schedule", "status": "pending" }
+    {
+      "step": 10,
+      "name": "schedule",
+      "status": "completed",
+      "started_at": "2026-06-13T19:25:45+0900",
+      "summary": "스케줄 화면 RSC: lib/schedule-logic(prisma-free 순수: ROTATION[ha,bak,jo,paeng]·saturdaysOf·draftMonth 순번배정·nextPointer·currentWeekIndex 파생·deriveFineSummary 파생·ensureVersion 409 낙관적락). lib/schedule(getMonth→null=빈달 R15/ADR-006·getFines 장부원자료·getScheduleMembers·resolveStartIdx 서버순번, Prisma직접 ADR-015). actions.ts Server Action: draftMonthAction(초안 미저장 R16)·saveMonth(트랜잭션 영속화+순번전진 서버원자적+ensureVersion 409 R35, 게스트❌, SaveMonthResult 판별유니온)·updateFines(requireRole관리자 👑). components/schedule: schedule-board('use client' 빈/편집/확정 3상태·편집중 월이동잠금 R27·취소변경분확인·저장에러 입력보존·상태알약 done/current(파생)/upcoming 색+텍스트 R29·입장/자료/미리보기 링크) + fines-panel(벌금설정 관리자수정·로테이션·연도별표 파생 즉시재계산 R29 완납/미납). page.tsx ?y=&m= 월선택 기본현재월·try/catch 에러카드, loading.tsx 스켈레톤(R26). 토큰만(R20). tests/e2e/schedule(로그인→빈달→일정짜기→편집진입). build·lint·test(87, 신규 19: 순수로직 13·보드 빈/편집/확정/월잠금 4·파생벌금/관리자게이트 3)·E2E(4) 통과",
+      "completed_at": "2026-06-13T19:41:00+0900"
+    }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
 }
