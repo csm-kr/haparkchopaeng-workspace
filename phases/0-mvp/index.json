@@ -48,7 +48,7 @@
       "status": "completed",
       "started_at": "2026-06-13T18:24:55+0900",
       "summary": "Supabase Auth Google OAuth + 초대 게이트: lib/supabase/server(쿠키연동 anon)·admin(service role 서버전용, 호출시점 env). lib/invite-gate(이메일→Member 해소: 멤버 통과·pending초대 수락·비초대 거부, R18). route /api/auth/google(OAuth 시작)·/auth/callback(code교환→게이트→signOut거부 or lib/auth.createSession). logout=Supabase signOut+앱세션 파기. password 컬럼 미추가, 권한은 lib/auth 일원화. 더미 .env로 키 없이 build 통과. build·lint·test(46, 신규 4: 멤버통과·비초대거부·초대수락·비pending거부) 통과",
-      "completed_at": "2026-06-13T18:30:00+0900"
+      "completed_at": "2026-06-13T18:29:11+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
