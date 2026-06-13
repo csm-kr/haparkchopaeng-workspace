@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-06-13T17:50:10+0900",
       "summary": "src/styles.css 전체 디자인 토큰(배경·텍스트·액센트·시맨틱·멤버색·경계·반경·그림자·폰트·밀도)을 app/globals.css로 이식(@theme로 Tailwind 유틸 매핑, [data-theme] 오버라이드만으로 라이트/다크 전환) + 허용 keyframes(shimmer·livepulse·slidein·fade-up·floatup) 및 prefers-reduced-motion 대체. 토큰 기반 컴포넌트 7종(Button[primary/secondary/ghost/danger·sm/md/lg]·Card·Badge·Avatar·Input·Skeleton·EmptyState) + lucide-react 추가. build/lint/test(RTL 10 통과) 통과",
-      "completed_at": "2026-06-13T17:55:00+0900"
+      "completed_at": "2026-06-13T17:55:41+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
