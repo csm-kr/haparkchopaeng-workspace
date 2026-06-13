@@ -19,6 +19,14 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
+# Windows 콘솔은 기본 cp949라 진행 표시기/✓·✗ 등 비-cp949 문자 출력 시 UnicodeEncodeError가 난다.
+# stdout/stderr를 UTF-8로 고정한다(PYTHONUTF8 미설정 환경에서도 안전).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
