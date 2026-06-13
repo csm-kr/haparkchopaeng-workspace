@@ -4,7 +4,7 @@
 
 ## 위협 모델 (단일 테넌트, 4인 비공개)
 
-- **자산:** 논문 PDF·분석, 발표 자료, 라이브 송출 자격증명, 멤버 PII(이메일), 벌금 장부, 외부 API 키(Anthropic·Cloudflare·스토리지).
+- **자산:** 논문 PDF·분석, 발표 자료, 라이브 송출 자격증명, 멤버 PII(이메일), 벌금 장부, 외부 API 키(Gemini·Cloudflare·Supabase).
 - **주요 위협:** ① 초대 외 무단 접근(공개 가입 없음) ② 라이브 Stream Key 유출 → 무단 송출 ③ 비밀 키의 클라이언트 노출 ④ 스토리지 객체 무단 다운로드 ⑤ 작성자 위변조(노트/댓글) ⑥ 권한 상승(멤버→관리자).
 - **범위 밖:** 멀티테넌트 격리(테넌트가 1개), 대규모 DDoS(4인 사설).
 
@@ -39,7 +39,7 @@
 ## 비밀 관리
 
 - **CRITICAL: 모든 키는 `.env`(서버)에서만.** 클라이언트 번들·`NEXT_PUBLIC_*`에 비밀 금지. `.env`는 커밋 금지(→ [`../dev/ENV.md`](../dev/ENV.md)).
-- 외부 호출(Anthropic 분석·Cloudflare·스토리지)은 **서버 route handler에서만**. 클라이언트는 자체 API 경유.
+- 외부 호출(Gemini 분석·Cloudflare·Supabase)은 **서버 route handler에서만**. 클라이언트는 자체 API 경유.
 - 키 유출 시 즉시 회전. 최소 권한 토큰 사용.
 
 ## 라이브(Cloudflare Stream Live)
@@ -56,7 +56,7 @@
 
 - 멤버 이메일은 PII — 초대·팀 화면 외 불필요한 노출 금지.
 - 라이브 녹화 보존 기간·발표 자료 아카이브 여부는 미결(→ [`../agent/ISSUES.md`](../agent/ISSUES.md)).
-- 논문 PDF를 Anthropic 분석에 전송함을 인지(외부 처리). 민감 비공개 자료 업로드 시 팀 합의.
+- 논문 PDF를 Google Gemini 분석에 전송함을 인지(외부 처리). 민감 비공개 자료 업로드 시 팀 합의.
 
 ## 체크리스트 (PR/리뷰)
 

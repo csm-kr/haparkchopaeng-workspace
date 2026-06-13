@@ -112,7 +112,7 @@
 - **Cloudflare Stream Live:** Live Input 생성/조회/삭제, 녹화 조회. 앱은 방송 생성·권한 체크·플레이어 노출만 담당(인코딩/HLS/CDN은 위임, ADR-002). 자격증명은 서버 환경변수. **녹화 완료는 웹훅**으로 수신.
 - **파일 스토리지:** 원문 PDF·발표 에셋·figure 이미지. 업로드는 **프리사인 직접 업로드**, 다운로드는 **서명 URL**(직접 공개 버킷 금지 → SECURITY).
 - **arXiv:** **워커**가 `arxiv.org/pdf/{id}` PDF를 가져와 스토리지에 저장(요청 경로 아님, ADR-013). SSRF 화이트리스트.
-- **Anthropic:** 논문 분석. **워커에서만** 호출(분 단위, ADR-013 → [`./ENV.md`](./ENV.md)).
+- **Gemini(`@google/genai`):** 논문 분석. **Inngest 잡에서만** 호출(분 단위, ADR-013→016 → [`./ENV.md`](./ENV.md)).
 
 ## 상태 코드 → UX 매핑
 

@@ -23,7 +23,7 @@ app/
   api/                    # CRITICAL: 모든 서버 로직은 여기 route handler에서만
     papers/  presentations/  schedule/  live/  invites/ …
 components/               # 재사용 UI (shell, analyzer, cards …) — 기본 RSC, 인터랙티브만 "use client"
-lib/                      # 서버 유틸: prisma, supabase(server/admin/realtime), cloudflare, anthropic, storage, auth, validators
+lib/                      # 서버 유틸: prisma, supabase(server/admin/realtime), cloudflare, gemini(@google/genai), storage, auth, validators
 worker/                   # 백그라운드 잡 워커(분석·arXiv·녹화) — 요청 경로와 분리 (ADR-013)
 types/                    # 공유 타입
 prisma/                   # schema.prisma, seed.ts

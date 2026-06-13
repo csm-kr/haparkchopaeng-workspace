@@ -31,7 +31,7 @@
    │                 │
    ├──< 푸시 ────[Supabase Realtime]   (live 전이·@멘션 broadcast)
    │
-[외부 durable 잡 러너] ──> [Anthropic API]  (분석; Vercel 함수 시간제한 밖)
+[외부 durable 잡 러너] ──> [Gemini API]  (분석; Vercel 함수 시간제한 밖)
         ↑ 잡 적재(Job)            └──> [Supabase Storage]  (PDF·에셋·figure, 서명 URL)
 [Vercel route handler]      ──webhook──< [Cloudflare Stream Live]  (Live Input·HLS·녹화)
 ```
@@ -51,11 +51,11 @@ CLAUDE.md "서버 로직은 route handler/서버에서만"을 RSC 시대에 맞�
 > 즉 **읽기는 서버에서 직접, 쓰기는 서버 액션/route handler.** 클라이언트 컴포넌트에서 fetch로 자체 API를 부르는 건 인터랙티브 섬에 한정한다.
 
 ### 백그라운드 작업 (ADR-013→016) — CRITICAL
-**분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인으로 돌리지 않는다.** 이유: Claude 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다([`./ENV.md`](./ENV.md)).
+**분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인으로 돌리지 않는다.** 이유: Gemini 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다([`./ENV.md`](./ENV.md)).
 ```
 POST /api/papers → Paper 저장(analysisStatus=pending) + 잡 트리거 → 즉시 201 응답
                                               │
-외부 durable 잡 러너 ──> Anthropic 분석 ──> Analysis/Figure 저장, analysisStatus=ready|failed
+외부 durable 잡 러너 ──> Gemini 분석 ──> Analysis/Figure 저장, analysisStatus=ready|failed
 클라이언트는 Realtime 또는 재조회로 ready 전환을 받는다 (/reanalyze로 재시도)
 ```
 - 실행 주체는 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash 등). `Job` 모델(멱등·재시도·실패 보존)은 큐의 상태 미러로 유지([`./DB.md`](./DB.md)).

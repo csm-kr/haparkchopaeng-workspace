@@ -11,10 +11,11 @@
 
 | 변수 | 용도 | 비고 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | 논문 분석 LLM 호출 | **비밀.** 서버 전용 |
-| `ANALYSIS_MODEL` | 분석 모델 ID | 기본 `claude-opus-4-8` |
-| `DATABASE_URL` | Prisma 연결 | 개발 `file:./dev.db`(SQLite), 운영 Supabase Postgres(ADR-016) |
-| `DIRECT_URL` | Prisma 마이그레이션 직결 | 운영(Supabase) 시 |
+| `GEMINI_API_KEY` | 논문 분석 LLM(Google Gemini) 호출 | **비밀.** 서버 전용 |
+| `GEMINI_MODEL` | 분석 모델 ID | 기본 `gemini-2.5-pro` |
+| `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` | 잡 러너(프로덕션) | 로컬은 Inngest Dev Server(키 불필요) |
+| `DATABASE_URL` | Prisma 연결(pooler) | Supabase Postgres(ADR-016) |
+| `DIRECT_URL` | Prisma `db push`/마이그레이션 직결 | Supabase |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL | 공개 |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon 키 | 공개(클라이언트 OK) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase 서버 권한 키 | **비밀! 서버 전용** — 클라 노출 금지 |
@@ -42,37 +43,38 @@ PDF 업로드/arXiv → 스토리지 저장(pdfUrl) → Paper 저장(analysisSta
    → 사람이 섹션 노트로 검수·보강
 ```
 
-> **CRITICAL: 분석은 요청 경로(route handler)에서 인라인으로 돌리지 않는다.** Claude 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다. 반드시 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash)에서 처리한다(→ [`./ARCHITECTURE.md`](./ARCHITECTURE.md) §백그라운드 작업, ADR-013→016). `POST /api/papers`는 잡만 트리거하고 즉시 응답한다.
+> **CRITICAL: 분석은 요청 경로(route handler)에서 인라인으로 돌리지 않는다.** Gemini 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다. 반드시 **Inngest 잡**에서 처리한다(→ [`./ARCHITECTURE.md`](./ARCHITECTURE.md) §백그라운드 작업, ADR-013→016). `POST /api/papers`는 잡만 트리거하고 즉시 응답한다.
 
-### 구현 지침 (시그니처 수준)
+### 구현 지침 (시그니처 수준) — Google Gemini
 
-- **SDK:** `@anthropic-ai/sdk` (이 프로젝트는 TS). 클라이언트는 `new Anthropic()`이 `ANTHROPIC_API_KEY`를 환경에서 읽는다 — 키를 하드코딩하지 않는다.
-- **모델:** `process.env.ANALYSIS_MODEL ?? "claude-opus-4-8"`.
-- **PDF 입력:** 메시지에 `document` 블록(`source.type: "base64"` 또는 Files API `file_id`)으로 원문 PDF를 넣는다.
-- **구조화 출력:** `output_config.format`(json_schema)으로 두 관점 스키마(problem/contributions/io/comparison/ablation | data/model/loss/metrics/training/gpu)를 강제한다 — 파싱 안정성 확보.
-- **긴 출력:** 분석 페이로드가 크므로 스트리밍 + `.finalMessage()` 권장(타임아웃 방지).
-- **figure 해석:** 추출된 figure 이미지는 vision(image 블록)으로 캡션·해석을 생성하되, 이미지가 없으면 `imageUrl=null`로 두고 수동 업로드 허용(미결 → [`../agent/ISSUES.md`](../agent/ISSUES.md)).
+- **SDK:** `@google/genai` (Google 최신 통합 GenAI SDK; 구 `@google/generative-ai`는 deprecated). **Anthropic SDK·claude-api 가이드는 쓰지 않는다.**
+- **클라이언트:** `new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })` — 키는 서버 환경에서만, 하드코딩 금지.
+- **모델:** `process.env.GEMINI_MODEL ?? "gemini-2.5-pro"`.
+- **PDF 입력:** PDF를 `inlineData`(base64, mimeType `application/pdf`) 또는 Files API로 contents에 넣는다.
+- **구조화 출력:** `config.responseMimeType="application/json"` + `config.responseSchema`로 두 관점 스키마(problem/contributions/io/comparison/ablation | data/model/loss/metrics/training/gpu)를 강제 — 파싱 안정성 확보.
+- **figure 해석:** 추출된 figure 이미지를 비전 입력(inlineData image)으로 캡션·해석 생성. 이미지가 없으면 `imageUrl=null`로 두고 수동 업로드 허용(미결 → [`../agent/ISSUES.md`](../agent/ISSUES.md)).
 
 ```ts
-// lib/analysis.ts (시그니처 예시 — 서버 전용)
-import Anthropic from "@anthropic-ai/sdk";
-const client = new Anthropic(); // ANTHROPIC_API_KEY 자동 사용
+// lib/analysis.ts (시그니처 예시 — 서버 전용, Inngest 잡에서 호출)
+import { GoogleGenAI } from "@google/genai";
+const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function extractAnalysis(pdf: Buffer, lens: "research" | "repro"): Promise<AnalysisPayload> {
-  // document(PDF) 블록 + output_config.format(json_schema)로 호출,
-  // 스트리밍 후 finalMessage()에서 구조화 결과 파싱.
+  // generateContent({ model, contents: [inlineData(pdf) + 프롬프트],
+  //   config: { responseMimeType: "application/json", responseSchema } }) → JSON 파싱
 }
 ```
 
-- **CRITICAL: 잡 러너에서 실행.** `extractAnalysis`는 외부 durable 잡 러너가 호출한다 — route handler 인라인 호출 금지(타임아웃, ADR-013→016). route handler는 잡만 트리거.
-- **CRITICAL: 비용·실패 처리.** 분석 실패가 업로드 자체를 막지 않게 한다 — Paper는 저장되고 `analysisStatus=failed`로 재시도 가능. `stop_reason`을 확인하고 `refusal`/`max_tokens`를 처리한다.
-- **CRITICAL: 키는 서버에서만.** 클라이언트는 절대 Anthropic을 직접 호출하지 않는다. 클라이언트는 `/api/papers`만 호출한다(→ [`./CODING_CONVENTION.md`](./CODING_CONVENTION.md)).
+- **CRITICAL: 잡 러너에서 실행.** `extractAnalysis`는 Inngest 잡이 호출한다 — route handler 인라인 호출 금지(타임아웃, ADR-013→016). route handler는 잡만 트리거.
+- **CRITICAL: 비용·실패 처리.** 분석 실패가 업로드 자체를 막지 않게 한다 — Paper는 저장되고 `analysisStatus=failed`로 재시도 가능. Gemini 안전 차단(`blockReason`)·빈 응답을 처리한다.
+- **CRITICAL: 키는 서버에서만.** 클라이언트는 절대 Gemini를 직접 호출하지 않는다. 클라이언트는 `/api/papers`만 호출한다(→ [`./CODING_CONVENTION.md`](./CODING_CONVENTION.md)).
 
 ## 로컬 셋업
 
 ```bash
-cp .env.example .env   # 값 채우기 (최소 ANTHROPIC_API_KEY, AUTH_SECRET)
+cp .env.example .env   # 값 채우기 (최소 GEMINI_API_KEY, Supabase 키, AUTH_SECRET)
 npm install
-npx prisma migrate dev # DATABASE_URL 기준 스키마 적용 + 시드
+npx prisma db push     # Supabase 스키마 동기화 + npx prisma db seed
+npx inngest-cli dev    # (jobs용) 로컬 Inngest Dev Server
 npm run dev
 ```

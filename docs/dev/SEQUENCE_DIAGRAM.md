@@ -8,7 +8,7 @@
 
 ## S1. 논문 업로드 → 분석 생성
 
-참여자에 `W`(백그라운드 워커), `CL`(Claude/Anthropic) 추가.
+참여자에 `W`(외부 durable 잡 러너=Inngest), `CL`(Gemini) 추가.
 
 ```mermaid
 sequenceDiagram
@@ -17,7 +17,7 @@ sequenceDiagram
   participant S as Storage
   participant D as DB
   participant W as Worker
-  participant CL as Claude
+  participant CL as Gemini
   Note over U,S: (사전) 프리사인 업로드: Client → Storage 직접 (서버는 서명만)
   U->>A: POST { objectKey | arXiv URL }
   A->>A: Content-Type/형식 검증 (PDF만, 아니면 415)
@@ -40,7 +40,7 @@ sequenceDiagram
   U->>A: (Realtime 또는 재조회) ready 전환 수신
 ```
 
-- ※ **CRITICAL: 분석은 요청 경로가 아니라 워커에서.** Claude 호출은 분 단위 → HTTP 타임아웃을 넘으므로 API는 잡만 적재하고 즉시 응답한다(ADR-013, [`./ARCHITECTURE.md`](./ARCHITECTURE.md)).
+- ※ **CRITICAL: 분석은 요청 경로가 아니라 워커에서.** Gemini 호출은 분 단위 → HTTP 타임아웃을 넘으므로 API는 잡만 적재하고 즉시 응답한다(ADR-013, [`./ARCHITECTURE.md`](./ARCHITECTURE.md)).
 - ※ **업로드 성공 ≠ 분석 성공.** 분석이 실패해도 `Paper`·원문 PDF는 살아 있고 분석만 재시도(UX: [`../design/SCREENS.md`](../design/SCREENS.md)).
 - ※ 분석 자동화 수준은 미결 → [`../agent/ISSUES.md`](../agent/ISSUES.md). figure 이미지가 없으면 `imageUrl=null` + 수동 업로드 허용.
 

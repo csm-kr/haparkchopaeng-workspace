@@ -46,7 +46,7 @@
 - **스택:** Next.js 15 (App Router) + TS strict + Tailwind + shadcn (ADR-009)
 - **DB:** Prisma + SQLite, Postgres 이전 경로 유지 (ADR-010)
 - **라이브:** Cloudflare Stream Live, MVP 포함 (ADR-002)
-- **논문 분석:** Claude API 보조 추출, 키는 `.env`(서버 전용) (ADR-011, [ENV](./dev/ENV.md))
+- **논문 분석:** Google Gemini 보조 추출, 키는 `.env`(서버 전용) (ADR-011, [ENV](./dev/ENV.md))
 
 ### 런타임 아키텍처 (ADR-015·016 → [ARCHITECTURE](./dev/ARCHITECTURE.md))
 - **배포:** **Vercel(Next.js 15) + Supabase** (ADR-016이 ADR-010/012 개정). 로컬 dev는 SQLite, 운영 DB는 Supabase Postgres
