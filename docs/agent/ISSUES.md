@@ -74,8 +74,8 @@
 
 ## 아키텍처 유래
 
-### I-15 🟡 잡 러너 제품 선택 (ADR-016으로 방향 확정)
-- **확정:** 인-프로세스 폴링 워커 폐기 → **외부 durable 잡 러너**(ADR-016). 남은 선택: Inngest / Trigger.dev / QStash 중 택1. 무료 한도·Vercel 연동·관찰성 기준으로 결정.
+### I-15 ✅ 잡 러너 = Inngest
+- 확정: 분석·arXiv·녹화 후처리는 **Inngest**로 실행(ADR-016). Next.js/Vercel 친화·재시도·관찰성. `Job` 테이블은 상태 미러. 키: `INNGEST_EVENT_KEY`·`INNGEST_SIGNING_KEY`(jobs-analysis step에서 사용).
 
 ### I-16 ✅ 실시간 전송 = Supabase Realtime
 - 확정: 인-프로세스 SSE 버스 폐기 → **Supabase Realtime**(broadcast/`postgres_changes`)(ADR-014→016). WebSocket 양방향이 필요한 기능(라이브 채팅)이 생기면 Realtime presence/broadcast로 확장.
