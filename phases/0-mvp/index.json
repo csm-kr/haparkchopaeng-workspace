@@ -26,7 +26,14 @@
       "summary": "types/ 공유 도메인 타입(enums·analysis·entities·api + index 배럴). 유니온 리터럴 11종, DB.md 대응 엔티티 DTO 18종(Paper.analysisStatus·ScheduleMonth.version·Job 포함, DateTime은 ISO 문자열), lens별 좁힘 Analysis<L>, ApiOk/ApiErr 봉투 + 파생 MemberFineSummary(미저장). any 미사용. expectTypeOf 6 + build/lint/test(16) 통과",
       "completed_at": "2026-06-13T18:01:04+0900"
     },
-    { "step": 3, "name": "data-layer", "status": "pending" }
+    {
+      "step": 3,
+      "name": "data-layer",
+      "status": "completed",
+      "started_at": "2026-06-13T18:02:22+0900",
+      "summary": "DB.md Prisma 스키마 19개 모델을 prisma/schema.prisma에 구현(SQLite: enum→String·배열→Json, @@unique·@@index·onDelete Cascade·CRITICAL 주석 보존, analysisStatus·Job·ScheduleMonth.version 포함). src/data.js 목 데이터를 prisma/seed.ts로 멱등 이식(워크스페이스1·멤버4·초대2·논문5[p5 pending]·분석8·figure6·섹션노트5·발표3+에셋/버전/댓글4·6월 스케줄4주·2026 벌금+장부4) — 빈 달 ScheduleMonth·active LiveSession은 미시드(ADR-006/001). tsx 추가 + package.json prisma.seed. migrate dev --name init(비대화형)·db seed·build·test(seed 검증 10 포함 26)·lint 통과",
+      "completed_at": "2026-06-13T18:11:00+0900"
+    }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
 }
