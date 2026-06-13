@@ -5,8 +5,8 @@
 ## 스택 결정
 
 - **ORM:** Prisma
-- **DB(개발):** SQLite (4인 단일 그룹에 적합한 경량 시작, 무설정 로컬 개발 → [`../agent/ADR.md`](../agent/ADR.md) 참조)
-- **DB(운영 이전 경로):** Postgres로 마이그레이션 가능하도록 Postgres 호환 타입만 사용
+- **DB:** **Supabase Postgres**(개발·운영 공통, ADR-016). `provider="postgresql"` + `directUrl`(마이그레이션/`db push`). 초기 스키마는 `prisma db push`로 동기화(Supabase shadow DB 권한 이슈 회피); prod 마이그레이션 파일은 추후 정식화.
+- (이력) 시작은 SQLite였으나 Supabase 채택으로 Postgres로 전환(ADR-010→016).
 - **단일 테넌트:** 워크스페이스는 1개 — `Workspace` row는 한 개만 존재한다(멀티테넌트 아님, ADR-007).
 
 ### SQLite 제약 (구현 시 주의)

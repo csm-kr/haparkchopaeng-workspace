@@ -1,8 +1,9 @@
-// SQLite 시작, Postgres 이전 경로 유지 (ADR-010).
-// SQLite 제약: enum 미지원 → 역할·관점·상태는 String(허용값은 주석). 배열 스칼라 미지원 → Json.
+// Supabase Postgres (ADR-016). enum 대신 String(허용값 주석)·배열은 Json — SQLite 시절 제약을
+// 유지해 호환. RLS는 사용하지 않고 앱 레벨 권한 체크로 일원화(ADR-016).
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooler(6543) — 런타임
+  directUrl = env("DIRECT_URL")   // 직결(5432) — 마이그레이션/db push
 }
 
 generator client {
