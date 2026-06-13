@@ -112,7 +112,7 @@
       "status": "completed",
       "started_at": "2026-06-13T20:05:14+0900",
       "summary": "설정/프로필 화면 RSC: profile/page.tsx getSession+Prisma 직접 조회→ProfileView(role 유니온 좁힘, ADR-015/R32)·try/catch 에러카드·loading.tsx 스켈레톤 상태 3종(R26). components/settings: settings-view('use client' 섬 — 프로필(이름·핸들·상태 편집, 이메일·역할 읽기전용, 저장→기존 PATCH /api/me fetch·id 미전송 세션주입 R3·인라인 검증 R30·성공 토스트)·알림 토글(인앱 기본 I-5, 라이브/멘션 switch 로컬저장, 외부채널 없음)·테마(useTheme 라이트/다크 [data-theme] 오버라이드만 R20·컴포넌트 분기 없음)·법적 링크) + legal-modal(약관/개인정보 토글 시트, Esc 닫기, ADR-011 정합 'AI 보조 분석'). PATCH /api/me에 handle 추가(@unique 충돌 409, 새 엔드포인트 미생성). 토큰만(R20)·색+텍스트(R29). tests/e2e/profile(로그인→/profile 필드·테마 렌더→테마 전환 data-theme 확인). build·lint·test(107, 신규 6: 프로필 렌더·빈값 인라인검증·PATCH 세션기반 저장·테마 data-theme 전환·알림 토글 로컬저장·법적 시트)·E2E(7) 통과",
-      "completed_at": "2026-06-13T20:11:00+0900"
+      "completed_at": "2026-06-13T20:12:26+0900"
     }
   ],
   "created_at": "2026-06-13T17:38:14+0900"
