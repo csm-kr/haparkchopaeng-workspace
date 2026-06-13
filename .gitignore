@@ -16,3 +16,9 @@ tsconfig.tsbuildinfo
 # phase execution outputs
 phases/**/phase*-output.json
 phases/**/step*-output.json
+
+# Playwright E2E 아티팩트
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
