@@ -101,9 +101,9 @@ export default async function PaperDetailPage({ params }: PageProps) {
         crumbs={[{ label: "논문", href: "/library" }, { label: paper.title }]}
         actions={
           // R13: 원문 PDF 다운로드 단 하나. arXiv/공유 버튼을 추가하지 않는다.
+          // 비공개 버킷 → 서명 URL 리디렉트 라우트로 받는다(R36).
           <a
-            href={paper.pdfUrl}
-            download
+            href={`/api/papers/${paper.id}/pdf`}
             className="inline-flex items-center gap-1.5 rounded-sm border border-border-strong bg-bg-elevated px-3.5 py-[7px] text-[13px] font-medium text-fg hover:bg-bg-subtle"
           >
             <Download size={14} aria-hidden="true" />
