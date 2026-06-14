@@ -8,7 +8,7 @@ test("로그인 후 대시보드가 렌더되고 라이브가 없으면 LIVE 배
   // 1) dev 로그인 — 시드 멤버(하수현) 이메일로 세션 쿠키 확보.
   //    page.request는 브라우저 컨텍스트와 쿠키 저장소를 공유한다.
   const login = await page.request.post("/api/auth/login", {
-    data: { email: "ha@habakjopaeng.team" },
+    data: { email: "de8167@gmail.com" },
   });
   expect(login.ok()).toBeTruthy();
 

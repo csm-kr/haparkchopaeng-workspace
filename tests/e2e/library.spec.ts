@@ -7,7 +7,7 @@ test("로그인 후 논문 목록이 렌더되고 필터는 '전체' 하나이�
 }) => {
   // 1) dev 로그인 — 시드 멤버(하수현) 이메일로 세션 쿠키 확보.
   const login = await page.request.post("/api/auth/login", {
-    data: { email: "ha@habakjopaeng.team" },
+    data: { email: "de8167@gmail.com" },
   });
   expect(login.ok()).toBeTruthy();
 
