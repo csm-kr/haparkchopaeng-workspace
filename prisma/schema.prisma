@@ -34,14 +34,23 @@ model Member {
   createdAt    DateTime @default(now())
 }
 
+// 초대 토큰 (ADR-018). 합류는 랜덤 토큰 검증으로만 — 이메일 매칭 폐기, 공개 가입 없음(R18).
+// CRITICAL: 이메일 컬럼을 두지 마라. role에 owner를 허용하지 마라(팀당 owner ≥ 1, 초대 부여 불가).
 model Invite {
-  id        String   @id @default(cuid())
-  email     String
-  role      String // 초대 시 부여할 역할
-  status    String   @default("pending") // pending | accepted | revoked
-  invitedBy String // Member.id
-  createdAt DateTime @default(now())
-  // CRITICAL: 합류는 초대 토큰 검증을 통해서만(공개 가입 없음, ADR-007)
+  id        String    @id @default(cuid())
+  teamId    String
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  token     String    @unique // crypto.randomBytes(18).base64url — 추측 불가
+  role      String // admin | member (앱에서 검증). owner 금지(ADR-018)
+  maxUses   Int       @default(1)
+  usedCount Int       @default(0)
+  expiresAt DateTime // 발급 +7일
+  revokedAt DateTime? // 회수(베어러 자격증명 무효화)
+  usedAt    DateTime? // 첫 사용 시각
+  createdBy String // Member.id
+  createdAt DateTime  @default(now())
+
+  @@index([teamId])
 }
 
 // --- 멀티팀 워크스페이스 (ADR-018) ---
@@ -54,6 +63,7 @@ model Team {
   createdBy   String // Member.id
   createdAt   DateTime     @default(now())
   memberships Membership[]
+  invites     Invite[]
   // 전역 팀 상한 MAX_TEAMS(기본 2)는 앱레벨에서 강제(ADR-018).
 }
 

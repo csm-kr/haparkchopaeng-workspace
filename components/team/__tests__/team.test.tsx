@@ -17,9 +17,10 @@ const members: TeamMemberView[] = [
   { id: "paeng", name: "팽진욱", handle: "@paengjh", email: "paeng@habakjopaeng.team", role: "게스트", color: "var(--m-paeng)", initial: "팽" },
 ];
 
+// 토큰 초대(ADR-018) — 이메일 없음, 역할 admin|member, 사용 횟수 표기.
 const invites: PendingInviteView[] = [
-  { id: "i1", email: "yoon@university.ac.kr", role: "멤버", createdAt: "2026-06-11T00:00:00.000Z" },
-  { id: "i2", email: "intern.kim@university.ac.kr", role: "게스트", createdAt: "2026-06-12T00:00:00.000Z" },
+  { id: "i1", role: "member", maxUses: 1, usedCount: 0, expiresAt: "2026-06-22T00:00:00.000Z", createdAt: "2026-06-11T00:00:00.000Z" },
+  { id: "i2", role: "admin", maxUses: 5, usedCount: 2, expiresAt: "2026-06-23T00:00:00.000Z", createdAt: "2026-06-12T00:00:00.000Z" },
 ];
 
 function renderTeam(opts?: {
@@ -71,11 +72,13 @@ describe("TeamManager", () => {
     ).toBeInTheDocument();
   });
 
-  it("대기 중인 초대를 점선 행으로 보인다(재전송/취소)", () => {
+  it("활성 초대를 점선 행으로 보인다(역할·사용 횟수·재전송/취소, 이메일 없음)", () => {
     renderTeam();
     const section = screen.getByRole("region", { name: "대기 중인 초대" });
-    expect(within(section).getByText("yoon@university.ac.kr")).toBeInTheDocument();
-    expect(within(section).getByText("intern.kim@university.ac.kr")).toBeInTheDocument();
+    // 이메일 대신 역할·사용 횟수를 보인다(토큰 초대, ADR-018).
+    expect(within(section).getByText("member")).toBeInTheDocument();
+    expect(within(section).getByText("admin")).toBeInTheDocument();
+    expect(within(section).getByText("2/5 사용됨")).toBeInTheDocument();
     expect(within(section).getAllByText("재전송").length).toBe(2);
     expect(within(section).getAllByText("취소").length).toBe(2);
   });

@@ -5,7 +5,7 @@ import type {
   AnalysisStatus,
   AssetType,
   Availability,
-  InviteStatus,
+  InviteRole,
   JobStatus,
   JobType,
   Lens,
@@ -33,13 +33,20 @@ export interface Member {
   createdAt: string;
 }
 
+/** 초대 토큰 (ADR-018) — 이메일 없음. role은 owner 불가(admin | member). */
 export interface Invite {
   id: string;
-  email: string;
-  role: Role;
-  status: InviteStatus;
+  teamId: string;
+  /** 랜덤 토큰(추측 불가). 표시용 프리뷰에는 재노출하지 않는다. */
+  token: string;
+  role: InviteRole;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  revokedAt?: string | null;
+  usedAt?: string | null;
   /** Member.id */
-  invitedBy: string;
+  createdBy: string;
   createdAt: string;
 }
 

@@ -16,13 +16,7 @@ export interface TeamView {
 }
 
 export async function getTeam(): Promise<TeamView> {
-  const [members, invites] = await Promise.all([
-    prisma.member.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.invite.findMany({
-      where: { status: "pending" }, // 대기 중인 초대만(점선 행, SCREENS)
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const members = await prisma.member.findMany({ orderBy: { createdAt: "asc" } });
 
   return {
     members: members.map((m) => ({
@@ -34,11 +28,7 @@ export async function getTeam(): Promise<TeamView> {
       color: m.color,
       initial: m.initial,
     })),
-    invites: invites.map((i) => ({
-      id: i.id,
-      email: i.email,
-      role: toRole(i.role),
-      createdAt: i.createdAt.toISOString(),
-    })),
+    // 초대는 팀 스코프(ADR-018)로 이동 — 레거시 단일 워크스페이스 화면에선 비운다(완전한 토큰 초대 UI는 step 4).
+    invites: [],
   };
 }

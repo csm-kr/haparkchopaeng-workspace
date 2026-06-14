@@ -17,6 +17,12 @@ vi.mock("@/lib/prisma", () => ({
         for (const m of db.members.values()) if (m.email === where.email) return m;
         return null;
       }),
+      create: vi.fn(
+        async ({ data }: { data: { id: string; name: string; email: string; role: string } }) => {
+          db.members.set(data.id, data);
+          return data;
+        },
+      ),
     },
     invite: {
       findFirst: vi.fn(
@@ -51,7 +57,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { gateInvitedEmail } from "@/lib/invite-gate";
+import { findOrCreateMember, gateInvitedEmail } from "@/lib/invite-gate";
 
 beforeEach(() => {
   db.members.clear();
@@ -68,38 +74,26 @@ describe("gateInvitedEmail (초대 게이트)", () => {
     });
   });
 
-  it("비초대 이메일은 거부한다(합류·세션 금지)", async () => {
+  it("멤버가 아닌 이메일은 NOT_INVITED(레거시 게이트 — 이메일 초대 경로는 ADR-018로 폐기)", async () => {
     const result = await gateInvitedEmail("stranger@evil.com");
     expect(result).toEqual({ ok: false, reason: "NOT_INVITED" });
-    expect(db.members.size).toBe(0); // Member를 만들지 않는다(R18)
+    expect(db.members.size).toBe(0); // 게이트는 Member를 만들지 않는다
+  });
+});
+
+describe("findOrCreateMember (멀티팀 — 로그인은 누구나, ADR-018)", () => {
+  it("이미 있는 멤버는 그대로 반환한다(생성하지 않음)", async () => {
+    db.members.set("ha", { id: "ha", name: "하수현", email: "ha@uni.ac.kr", role: "관리자" });
+    const member = await findOrCreateMember("ha@uni.ac.kr");
+    expect(member.id).toBe("ha");
+    expect(db.members.size).toBe(1); // 새로 만들지 않는다
   });
 
-  it("pending 초대가 있으면 Member를 생성하고 초대를 수락 처리한다", async () => {
-    db.invites.set("inv1", {
-      id: "inv1",
-      email: "new@uni.ac.kr",
-      role: "멤버",
-      status: "pending",
-    });
-    const result = await gateInvitedEmail("new@uni.ac.kr");
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.member.email).toBe("new@uni.ac.kr");
-      expect(result.member.role).toBe("멤버"); // 역할은 초대에서(클라 미신뢰)
-    }
-    expect(db.invites.get("inv1")?.status).toBe("accepted"); // 1회성 소비
+  it("없으면 거부하지 않고 생성한다(이름=local-part, 기본 역할 멤버)", async () => {
+    const member = await findOrCreateMember("stranger@evil.com");
+    expect(member.email).toBe("stranger@evil.com");
+    expect(member.name).toBe("stranger"); // local-part
+    expect(member.role).toBe("멤버"); // 기본 역할
     expect(db.members.size).toBe(1);
-  });
-
-  it("pending이 아닌 초대(이미 수락/취소)는 거부한다", async () => {
-    db.invites.set("inv2", {
-      id: "inv2",
-      email: "used@uni.ac.kr",
-      role: "멤버",
-      status: "accepted",
-    });
-    const result = await gateInvitedEmail("used@uni.ac.kr");
-    expect(result).toEqual({ ok: false, reason: "NOT_INVITED" });
-    expect(db.members.size).toBe(0);
   });
 });

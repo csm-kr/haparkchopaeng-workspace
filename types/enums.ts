@@ -12,6 +12,9 @@ export type Role = "관리자" | "멤버" | "게스트";
 /** 팀별 역할 (ADR-018). owner는 초대 부여 불가·팀당 ≥ 1. UI 표기도 영어 그대로. */
 export type TeamRole = "owner" | "admin" | "member";
 
+/** 초대로 부여 가능한 역할 — owner는 초대 불가(ADR-018) */
+export type InviteRole = Exclude<TeamRole, "owner">;
+
 /** 멤버 접속 상태 */
 export type Presence = "online" | "away" | "busy" | "offline";
 
@@ -30,8 +33,8 @@ export type JobType = "analyze_paper" | "fetch_arxiv" | "process_recording";
 /** 백그라운드 잡 상태 */
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
-/** 초대 상태 (ADR-007) */
-export type InviteStatus = "pending" | "accepted" | "revoked";
+/** 초대 토큰 프리뷰 상태 — getInviteForAcceptance가 파생 계산 (ADR-018) */
+export type InviteStatus = "not_found" | "revoked" | "expired" | "used_up" | "ready";
 
 /** 발표 자료 에셋 종류 — DB.md PresentationAsset.type */
 export type AssetType = "pdf" | "ppt" | "note";
