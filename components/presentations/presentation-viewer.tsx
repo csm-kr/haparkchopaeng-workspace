@@ -1,5 +1,6 @@
 import { FileText, History } from "lucide-react";
 import { Avatar, Badge, Card } from "@/components/ui";
+import { SlideDeck } from "./slide-deck";
 import type {
   AssetView,
   PresentationMeta,
@@ -53,27 +54,7 @@ export function PresentationViewer({
         </Card>
       )}
 
-      {slides.length > 0 && (
-        <section className="flex flex-col gap-3" aria-label="슬라이드">
-          <h2 className="text-[16px] font-semibold text-fg">슬라이드</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {slides.map((s, i) => (
-              <Card key={i} className="flex flex-col gap-1.5 p-4">
-                <span className="font-mono text-[11px] text-fg-faint">
-                  {i + 1} / {slides.length}
-                </span>
-                <p className="text-[14px] font-semibold text-fg">{s.title}</p>
-                {s.subtitle && (
-                  <p className="text-[12px] text-fg-subtle">{s.subtitle}</p>
-                )}
-                <p className="text-[13px] whitespace-pre-wrap text-fg-muted">
-                  {s.body}
-                </p>
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
+      {slides.length > 0 && <SlideDeck slides={slides} />}
 
       {assets.length > 0 && (
         <Card className="p-4">
@@ -82,7 +63,7 @@ export function PresentationViewer({
             {assets.map((a) => (
               <li key={a.id}>
                 <a
-                  href={a.url}
+                  href={`/api/presentations/${presentation.id}/assets/${a.id}`}
                   download
                   className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-bg-hover"
                 >

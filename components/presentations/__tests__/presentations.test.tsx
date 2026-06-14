@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { CommentThread } from "../comment-thread";
 import { PresentationList } from "../presentation-list";
+import { SlideDeck } from "../slide-deck";
 import { parseMentions } from "../mentions";
-import type { CommentView, MemberRef } from "../types";
+import type { CommentView, MemberRef, SlideView } from "../types";
 
 // 발표 자료 — 목록 개수·댓글 스레드 렌더·@멘션 링크화·반응 토글·작성자 세션 주입·빈값 인라인 검증.
 // 읽기 데이터는 props로, 쓰기는 주입한 mock 액션으로 검증한다(ADR-015).
@@ -58,6 +59,33 @@ describe("PresentationList", () => {
   it("빈 목록은 정직한 빈 상태를 보인다", () => {
     render(<PresentationList presentations={[]} />);
     expect(screen.getByText("발표 자료가 아직 없어요")).toBeInTheDocument();
+  });
+});
+
+describe("SlideDeck 슬라이드 이동", () => {
+  const slides: SlideView[] = [
+    { title: "표지", subtitle: null, body: "첫 장" },
+    { title: "방법", subtitle: "Method", body: "둘째 장" },
+    { title: "결과", subtitle: null, body: "셋째 장" },
+  ];
+
+  it("처음엔 1번 슬라이드를 보이고 이전은 비활성이다", () => {
+    render(<SlideDeck slides={slides} />);
+    expect(screen.getByText("첫 장")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /이전/ })).toBeDisabled();
+  });
+
+  it("다음을 누르면 다음 슬라이드로 넘어간다", () => {
+    render(<SlideDeck slides={slides} />);
+    fireEvent.click(screen.getByRole("button", { name: /다음/ }));
+    expect(screen.getByText("둘째 장")).toBeInTheDocument();
+  });
+
+  it("썸네일을 누르면 해당 슬라이드로 점프하고 마지막에선 다음이 비활성이다", () => {
+    render(<SlideDeck slides={slides} />);
+    fireEvent.click(screen.getByLabelText("3번 슬라이드"));
+    expect(screen.getByText("셋째 장")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /다음/ })).toBeDisabled();
   });
 });
 

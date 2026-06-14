@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
-import { PresentationList } from "@/components/presentations";
+import { CreatePresentationButton, PresentationList } from "@/components/presentations";
 import { getPresentations } from "@/lib/presentations";
 
 // 발표 자료 목록 — RSC. 읽기는 서버에서 Prisma 직접 조회(ADR-015/R32).
@@ -34,7 +34,10 @@ export default async function PresentationsPage() {
 
   return (
     <>
-      <Topbar crumbs={[{ label: "발표 자료" }]} />
+      <Topbar
+        crumbs={[{ label: "발표 자료" }]}
+        actions={<CreatePresentationButton />}
+      />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">{content}</div>
       </div>
