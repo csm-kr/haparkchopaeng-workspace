@@ -82,6 +82,7 @@ describe("LiveRoom", () => {
               session: { id: "s1", presenterId: "ha" },
               rtmps: { url: "rtmps://send/", streamKey: "KEY-12345" },
               srt: { url: "srt://send/", streamId: "sid", passphrase: "pass" },
+              webRTC: { url: "https://whip/publish" },
               playback: { hls: "" },
             },
           });
@@ -92,8 +93,12 @@ describe("LiveRoom", () => {
     renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });
     fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
 
-    // 발표자 본인에게만 송출 자격증명 노출.
-    expect(await screen.findByText("KEY-12345")).toBeInTheDocument();
+    // 발표자 뷰: 브라우저 송출 시작 버튼이 보인다(BroadcastPanel).
+    expect(
+      await screen.findByRole("button", { name: /송출 시작/ }),
+    ).toBeInTheDocument();
+    // OBS 폴백(고급)에 송출 자격증명이 본인에게만 노출된다.
+    expect(screen.getByText("KEY-12345")).toBeInTheDocument();
     const endBtn = screen.getByRole("button", { name: /라이브 종료/ });
     expect(endBtn).toBeInTheDocument();
 

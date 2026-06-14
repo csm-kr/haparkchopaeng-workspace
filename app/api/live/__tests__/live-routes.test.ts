@@ -94,6 +94,7 @@ describe("POST /api/live/start", () => {
       liveInputId: "li1",
       rtmps: { url: "rtmps://x", streamKey: "SECRET_KEY" },
       srt: { url: "srt://x", streamId: "sid", passphrase: "PASS" },
+      webRTC: { url: "https://whip/publish" },
       playback: { hls: "https://hls" },
     });
     prismaMock.liveSession.create.mockResolvedValue({
@@ -120,6 +121,7 @@ describe("POST /api/live/start", () => {
     const body = await res.json();
     expect(body.data.rtmps.streamKey).toBe("SECRET_KEY");
     expect(body.data.srt.passphrase).toBe("PASS");
+    expect(body.data.webRTC.url).toBe("https://whip/publish");
     expect(body.data.playback.hls).toBe("https://hls");
   });
 });
@@ -143,6 +145,7 @@ describe("POST /api/live/:id/join", () => {
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain("streamKey");
     expect(serialized).not.toContain("passphrase");
+    expect(serialized).not.toContain("webRTC");
 
     // memberId는 세션에서, 재참가 허용(leftAt=null).
     expect(prismaMock.participant.upsert).toHaveBeenCalledWith(
