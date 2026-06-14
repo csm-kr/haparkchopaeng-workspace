@@ -130,3 +130,20 @@ export async function resolveEntryTeam(memberId: string): Promise<{ slug: string
   });
   return m ? { slug: m.team.slug } : null;
 }
+
+/** 셸 팀 전환용 요약. */
+export interface TeamSummary {
+  slug: string;
+  name: string;
+  role: TeamRole;
+}
+
+/** 사용자가 속한 모든 팀을 최근 합류 순으로(= [0]이 진입 팀). 멤버십 없으면 빈 배열. */
+export async function listMemberships(memberId: string): Promise<TeamSummary[]> {
+  const rows = await prisma.membership.findMany({
+    where: { memberId },
+    orderBy: { joinedAt: "desc" },
+    include: { team: true },
+  });
+  return rows.map((m) => ({ slug: m.team.slug, name: m.team.name, role: toTeamRole(m.role) }));
+}

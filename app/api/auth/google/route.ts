@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { toErrorResponse } from "@/lib/http";
+import { sanitizeNext } from "@/lib/redirect";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // GET /api/auth/google — Supabase Auth로 Google OAuth 시작 → Google 인증 URL로 리디렉트.
-// 초대 게이트는 콜백(app/auth/callback)에서 — 인증 성공만으로 합류 금지(ADR-017).
+// 멀티팀(ADR-018): 로그인은 누구나 — 콜백이 findOrCreateMember로 해소한다(거부 게이트 없음).
+// 로그인 후 복귀 목적지(next, 예: /invite/{token})를 정제해 콜백 redirectTo에 실어 보낸다.
 
 /**
  * Supabase에 Google provider가 켜져 있는지 확인.
@@ -29,16 +31,23 @@ async function isGoogleEnabled(): Promise<boolean> {
 
 export async function GET(req: Request): Promise<Response> {
   try {
+    const next = sanitizeNext(new URL(req.url).searchParams.get("next"));
+
     // 아직 Google이 설정 전이면 400 크래시 대신 로그인 화면으로 안내(R30).
     if (!(await isGoogleEnabled())) {
-      return NextResponse.redirect(new URL("/?authError=google", req.url));
+      const back = new URL("/?authError=google", req.url);
+      if (next) back.searchParams.set("next", next); // 설정 후 재시도 시 복귀 보존
+      return NextResponse.redirect(back);
     }
 
     const supabase = await createSupabaseServerClient();
     const base = process.env.APP_BASE_URL ?? new URL(req.url).origin;
+    // 콜백 redirectTo에 정제된 next를 실어 보낸다(콜백이 다시 정제 — 방어적, SECURITY).
+    const callback = new URL("/auth/callback", base);
+    if (next) callback.searchParams.set("next", next);
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${base}/auth/callback` },
+      options: { redirectTo: callback.toString() },
     });
     if (error || !data.url) {
       return toErrorResponse(error ?? new Error("OAuth URL을 받지 못했어요."));

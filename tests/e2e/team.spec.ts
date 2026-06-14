@@ -4,9 +4,11 @@ import { expect, test } from "@playwright/test";
 // 실제로 실행하지 않는다(실제 이메일 발송·멤버 변경 발생). 폼·메뉴·확인 다이얼로그는 열고 검증까지만.
 // 로그인: de8167@gmail.com = 단일 관리자(ADR-017 dev 로그인). step0이 webServer를 dev로 고쳐 둠.
 
-// 핵심 경로: dev 로그인(관리자=조성민) → /team → 단일 관리자 본인 + 초대 블록 렌더.
+// 핵심 경로: dev 로그인(관리자=조성민) → /team → 단일 관리자 본인 + 초대 전용 안내 렌더.
 // (멤버는 관리자가 초대해 늘린다 — 초기엔 본인 1명.)
-test("관리자로 팀 관리에 들어가면 본인 멤버와 초대 블록이 보인다", async ({
+// NOTE: 이메일 초대 폼은 멀티팀 전환(ADR-018, phase 6 step 2)으로 제거됐고, 토큰 초대 발급 UI는
+//       step 4(team-ui)에서 채운다 — 여기선 헤더·안내까지만 단언한다.
+test("관리자로 팀 관리에 들어가면 본인 멤버와 초대 안내가 보인다", async ({
   page,
 }) => {
   // 1) dev 로그인 — 단일 관리자(조성민) 이메일로 세션 쿠키 확보.
@@ -22,26 +24,16 @@ test("관리자로 팀 관리에 들어가면 본인 멤버와 초대 블록이 
   await expect(page.getByText("de8167@gmail.com")).toBeVisible();
   await expect(page.getByText("나").first()).toBeVisible();
 
-  // 4) 관리자에게는 초대 블록이 보인다(👑): 이메일 입력 + 역할 선택 + [초대 보내기].
-  await expect(page.getByLabel("초대할 이메일")).toBeVisible();
-  const roleSelect = page.getByLabel("초대 역할");
-  await expect(roleSelect).toBeVisible();
-  // 역할은 관리자/멤버/게스트 셋뿐(ADR-007 역할 모델).
-  await expect(roleSelect.locator("option")).toHaveText([
-    "관리자",
-    "멤버",
-    "게스트",
-  ]);
-  await expect(page.getByRole("button", { name: "초대 보내기" })).toBeVisible();
+  // 4) 팀 관리 헤더 + 초대 전용 안내(현재 UI). 토큰 초대 발급 UI는 step 4 소관 — 여기선 단언하지 않는다.
+  await expect(page.getByRole("heading", { name: "팀 관리" })).toBeVisible();
+  await expect(
+    page.getByText("초대 전용 비공개 그룹이에요. 합류는 초대 링크로만 가능해요."),
+  ).toBeVisible();
 
-  // 5) 권한 안내(선택, task #4): 관리자 시점에선 비관리자용 안내 카드가 뜨지 않고
-  //    실제 초대 블록이 정상 노출된다(R19 게이팅 — 비관리자에게만 안내).
+  // 5) 권한 안내(R19): 관리자 시점에선 비관리자용 안내 카드가 뜨지 않는다(비관리자에게만 안내).
   await expect(
     page.getByText("멤버 초대·역할 변경은 관리자만 할 수 있어요."),
   ).toHaveCount(0);
-
-  // 참고: [🔗 링크 복사]는 초대를 실제로 생성(파괴적)한 뒤에만 노출된다(shareLink 상태).
-  //       비파괴 e2e에선 초대를 보내지 않으므로 링크 복사 버튼은 단언하지 않는다.
 });
 
 // F6: 멤버 ⋯ 메뉴(역할 변경/내보내기) + 내보내기 확인 다이얼로그를 "노출까지만" 검증한다.

@@ -29,15 +29,24 @@ export function AuthScreen({
   members,
   allowDevLogin = false,
   authError = null,
+  next = null,
 }: {
   members: QuickMember[];
   allowDevLogin?: boolean;
   authError?: string | null;
+  /** 로그인 후 복귀 목적지(초대 링크 등). 서버에서 이미 정제됨(same-origin path). */
+  next?: string | null;
 }) {
   const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [loading, setLoading] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  // 복귀 목적지(없으면 대시보드). dev 로그인·Google 로그인 모두 이걸로 이어간다.
+  const dest = next ?? "/dashboard";
+  const googleHref = next
+    ? `/api/auth/google?next=${encodeURIComponent(next)}`
+    : "/api/auth/google";
 
   async function loginWithEmail(value: string, key: string) {
     setError(null);
@@ -56,7 +65,7 @@ export function AuthScreen({
         setLoading(null);
         return;
       }
-      router.push("/dashboard");
+      router.push(dest);
       router.refresh();
     } catch {
       setError("잠시 후 다시 시도해주세요.");
@@ -130,7 +139,7 @@ export function AuthScreen({
           )}
 
           <a
-            href="/api/auth/google"
+            href={googleHref}
             className="mt-7 flex w-full items-center justify-center gap-2 rounded-sm border border-border-strong bg-bg-elevated px-3.5 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>

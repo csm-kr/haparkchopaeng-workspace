@@ -89,6 +89,25 @@ vi.mock("@/lib/prisma", () => {
         return row;
       },
     ),
+    findMany: vi.fn(
+      async ({
+        where,
+        include,
+      }: {
+        where: { memberId: string };
+        orderBy?: unknown;
+        include?: { team?: boolean };
+      }) => {
+        const rows = db.memberships
+          .filter((m) => m.memberId === where.memberId)
+          .slice()
+          .sort((a, b) => b.joinedAt.getTime() - a.joinedAt.getTime());
+        if (include?.team) {
+          return rows.map((r) => ({ ...r, team: db.teams.get(r.teamId) ?? null }));
+        }
+        return rows;
+      },
+    ),
   };
   return {
     prisma: {
@@ -107,6 +126,7 @@ import {
   isTeamAdmin,
   isTeamMember,
   isTeamOwner,
+  listMemberships,
   maxTeams,
   resolveEntryTeam,
 } from "@/lib/teams";
@@ -245,5 +265,21 @@ describe("resolveEntryTeam()", () => {
     await createTeam({ name: "First", creatorId: "ha" });
     const second = await createTeam({ name: "Second", creatorId: "ha" });
     expect(await resolveEntryTeam("ha")).toEqual({ slug: second.slug });
+  });
+});
+
+describe("listMemberships()", () => {
+  it("멤버십이 없으면 빈 배열", async () => {
+    expect(await listMemberships("ghost")).toEqual([]);
+  });
+
+  it("최근 합류 순으로 {slug,name,role}을 돌려준다", async () => {
+    const first = await createTeam({ name: "First", creatorId: "ha" });
+    const second = await createTeam({ name: "Second", creatorId: "ha" });
+    const list = await listMemberships("ha");
+    expect(list).toEqual([
+      { slug: second.slug, name: "Second", role: "owner" },
+      { slug: first.slug, name: "First", role: "owner" },
+    ]);
   });
 });
