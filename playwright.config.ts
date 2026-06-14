@@ -9,7 +9,11 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // 공유 운영 Supabase(원격 DB 지연) + Next dev 온디맨드 컴파일/하이드레이션이 6 워커 병렬과
+  // 겹치면 행 클릭→RSC 내비가 toHaveURL 기본 5초를 간헐적으로 넘겨 타이밍 플레이크가 난다
+  // (단언은 정확, 매 실행 다른 spec이 깜빡임). 결정적 실패는 모든 시도에서 실패하므로 회귀를
+  // 가리지 않는다 — 일시적 타이밍 플레이크만 흡수한다(원격 인프라 대상 E2E 표준 해법).
+  retries: 2,
   use: {
     baseURL: BASE_URL,
     headless: true,
