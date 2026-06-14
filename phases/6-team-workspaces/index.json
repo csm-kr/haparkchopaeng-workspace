@@ -5,31 +5,15 @@
     {
       "step": 0,
       "name": "team-data-model",
-      "status": "blocked",
+      "status": "completed",
       "started_at": "2026-06-15T07:42:58+0900",
-      "blocked_reason": "prisma db push는 운영 DB 스키마 반영이라 사용자 승인·크리덴셜 필요 — 코드/타입/시드는 완료. 로컬 npx prisma generate·npm run build green, npm test 216/219 pass. 신규 팀 이관 테스트 3건(seed.test.ts)은 공유 Supabase DB에 Team/Membership/TeamInviteAcceptance 테이블이 아직 없어 'public.Team does not exist'로 실패 — db push + seed 후 통과 예정.",
-      "summary": "멀티팀(ADR-018) 데이터 모델 additive 추가: schema.prisma에 Team·Membership(복합PK)·TeamInviteAcceptance, types에 TeamRole + DTO, seed.ts에 하박조팽→Team 1개+owner 이관(멱등·팀 0개일 때만), seed.test.ts 이관 케이스 3건."
+      "completed_at": "2026-06-15T08:04:00+0900",
+      "summary": "멀티팀(ADR-018) 데이터 모델 additive 추가: schema.prisma에 Team·Membership(복합PK [teamId,memberId], @@index([memberId]))·TeamInviteAcceptance, types에 TeamRole + DTO, seed.ts에 하박조팽→Team 1개+owner(=관리자 jo) 이관(멱등·팀 0개일 때만). 운영 Supabase에 prisma db push로 3테이블 생성 + 비파괴 이관 실행 완료(team habakjopaeng, owner=jo). seed.test 6/6 통과. 기존 Invite/Workspace/엔티티는 미변경(Invite 토큰화는 step 2)."
     },
-    {
-      "step": 1,
-      "name": "team-create",
-      "status": "pending"
-    },
-    {
-      "step": 2,
-      "name": "invite-tokens",
-      "status": "pending"
-    },
-    {
-      "step": 3,
-      "name": "entry-flow",
-      "status": "pending"
-    },
-    {
-      "step": 4,
-      "name": "team-ui",
-      "status": "pending"
-    }
+    { "step": 1, "name": "team-create", "status": "pending" },
+    { "step": 2, "name": "invite-tokens", "status": "pending" },
+    { "step": 3, "name": "entry-flow", "status": "pending" },
+    { "step": 4, "name": "team-ui", "status": "pending" }
   ],
   "created_at": "2026-06-15T07:42:58+0900"
 }
