@@ -40,7 +40,7 @@
       "status": "completed",
       "started_at": "2026-06-14T22:55:31+0900",
       "summary": "paper.spec.ts의 test.skip을 F3 비파괴 조건부 테스트로 교체: /library 행 0이면 런타임 test.skip(논문 유무 조건부), 있으면 첫 논문 상세 진입. analysisStatus ready 여부로 분기(관점 토글은 ready일 때만 렌더—AnalysisStatusBlock). ready면 관점 토글(재구현↔연구, aria-pressed)·재구현/연구 섹션 헤딩(.or 빈 payload 안내)·Figure 분석 공통 헤더(ADR-005)·노트 폼 열고 [취소]까지만 검증([추가] 금지). 미-ready면 상태 블록만 확인. paper 1 passed(ready 경로), 전체 13 passed·0 skip.",
-      "completed_at": "2026-06-14T23:00:25+0900"
+      "completed_at": "2026-06-14T23:01:08+0900"
     },
     {
       "step": 5,
