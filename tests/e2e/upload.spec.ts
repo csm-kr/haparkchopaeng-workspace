@@ -15,8 +15,8 @@ test("업로드 모달은 PDF 전용 + arXiv 입력이며 한도를 표시하고
   });
   expect(login.ok()).toBeTruthy();
 
-  // 홈 진입 후 헤더의 ＋업로드 열기.
-  await page.goto("/dashboard");
+  // 논문(라이브러리) 진입 후 헤더의 ＋업로드 열기. (홈 상단 버튼은 제거됨 — 논문 페이지로 이전)
+  await page.goto("/library");
   await page.getByRole("button", { name: "논문 올리기" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -52,7 +52,7 @@ test("잘못된 arXiv 주소는 인라인 에러로 거부되고 모달은 유�
   });
   expect(login.ok()).toBeTruthy();
 
-  await page.goto("/dashboard");
+  await page.goto("/library");
   await page.getByRole("button", { name: "논문 올리기" }).click();
 
   const dialog = page.getByRole("dialog");

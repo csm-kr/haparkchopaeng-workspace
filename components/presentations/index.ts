@@ -5,6 +5,8 @@ export { PresentationViewer } from "./presentation-viewer";
 export type { PresentationViewerProps } from "./presentation-viewer";
 export { SlideDeck } from "./slide-deck";
 export type { SlideDeckProps } from "./slide-deck";
+export { PdfSlideViewer } from "./pdf-slide-viewer";
+export type { PdfSlideViewerProps } from "./pdf-slide-viewer";
 export { CommentThread } from "./comment-thread";
 export { DeletePresentationButton } from "./delete-presentation-button";
 export type { CommentThreadProps } from "./comment-thread";
