@@ -31,7 +31,7 @@
       "name": "entry-flow",
       "status": "completed",
       "started_at": "2026-06-15T08:28:48+0900",
-      "completed_at": "2026-06-15T08:50:45+0900",
+      "completed_at": "2026-06-15T08:51:43+0900",
       "summary": "진입 흐름 배선(ADR-018): callback 게이트 제거(gateInvitedEmail 삭제 → findOrCreateMember+createSession, 비초대 거부 안 함)·초대 복귀 next 처리. lib/redirect.ts 신규(sanitizeNext: same-origin /path만 허용·//·/\\·제어문자 거부 / needsTeamOnboarding: 팀없음 가드 결정, /teams/new·/invite 예외). /api/auth/google가 정제된 next를 콜백 redirectTo에 전달. middleware.ts 신규(x-pathname 헤더 노출 — RSC 레이아웃 경로 가드용). (app)/layout이 listMemberships로 팀없음 가드(→/teams/new)+teams/activeTeamSlug prop. lib/teams.ts listMemberships 추가. app/invite/[token] 신규((app) 밖·팀가드 없음, 미로그인→/?next= 복귀, 수락 UI는 step4). 셸 TeamSwitcher 신규(현재 팀+전환 링크, 최소·전환 진짜 스코프는 팀스코핑 단계). page.tsx/auth-screen이 next 스레딩(dev·Google 둘다). 세션은 기존 lib/auth 유지. 유닛 +16(redirect 10·teams listMemberships 2·team-switcher 4, invite-gate gateInvitedEmail 테스트 제거)·전체 260 통과·build/lint green·e2e entry.spec 3개 신규 통과 + 기존 green(team.spec 구버전 단언을 step2 제거된 이메일초대 UI에 맞게 갱신 — 토큰초대 단언은 step4)."
     },
     {
