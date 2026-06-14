@@ -65,7 +65,7 @@ describe("DELETE /api/papers/:id", () => {
     expect(removeObjectMock).toHaveBeenCalledWith("papers/p1.pdf");
   });
 
-  it("관리자는 남의 논문도 삭제할 수 있다", async () => {
+  it("관리자라도 남의 논문은 삭제할 수 없다(작성자만) — 403", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "ha", role: "관리자" });
     prismaMock.paper.findUnique.mockResolvedValue({
       id: "p1",
@@ -74,7 +74,7 @@ describe("DELETE /api/papers/:id", () => {
     });
 
     const res = await DELETE(req(), ctx("p1"));
-    expect(res.status).toBe(200);
-    expect(prismaMock.paper.delete).toHaveBeenCalled();
+    expect(res.status).toBe(403);
+    expect(prismaMock.paper.delete).not.toHaveBeenCalled();
   });
 });

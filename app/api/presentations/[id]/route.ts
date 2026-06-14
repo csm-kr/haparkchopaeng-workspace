@@ -16,9 +16,9 @@ export async function DELETE(
     const pres = await prisma.presentation.findUnique({ where: { id } });
     if (!pres) return fail(404, "NOT_FOUND", "발표 자료를 찾을 수 없어요.");
 
-    // 발표자 또는 관리자만(R3). 그 외 403.
-    if (pres.presenterId !== session.memberId && session.role !== "관리자") {
-      return fail(403, "FORBIDDEN", "발표자나 관리자만 삭제할 수 있어요.");
+    // 발표자(작성자)만 삭제할 수 있다(R3). 그 외(관리자 포함) 403.
+    if (pres.presenterId !== session.memberId) {
+      return fail(403, "FORBIDDEN", "발표자만 삭제할 수 있어요.");
     }
 
     await prisma.presentation.delete({ where: { id } }); // cascade: 에셋/버전/댓글

@@ -17,9 +17,9 @@ export async function DELETE(
     const paper = await prisma.paper.findUnique({ where: { id } });
     if (!paper) return fail(404, "NOT_FOUND", "논문을 찾을 수 없어요.");
 
-    // 올린 사람 또는 관리자만(R3). 그 외 403.
-    if (paper.uploadedBy !== session.memberId && session.role !== "관리자") {
-      return fail(403, "FORBIDDEN", "올린 사람이나 관리자만 삭제할 수 있어요.");
+    // 올린 사람만 삭제할 수 있다(R3). 그 외(관리자 포함) 403.
+    if (paper.uploadedBy !== session.memberId) {
+      return fail(403, "FORBIDDEN", "올린 사람만 삭제할 수 있어요.");
     }
 
     await prisma.paper.delete({ where: { id } }); // cascade: 분석/figure/노트

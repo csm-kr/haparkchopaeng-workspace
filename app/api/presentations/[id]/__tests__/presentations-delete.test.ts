@@ -60,7 +60,7 @@ describe("DELETE /api/presentations/:id", () => {
     });
   });
 
-  it("관리자는 남의 자료도 삭제할 수 있다", async () => {
+  it("관리자라도 남의 자료는 삭제할 수 없다(발표자만) — 403", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "ha", role: "관리자" });
     prismaMock.presentation.findUnique.mockResolvedValue({
       id: "pres1",
@@ -68,7 +68,7 @@ describe("DELETE /api/presentations/:id", () => {
     });
 
     const res = await DELETE(req(), ctx("pres1"));
-    expect(res.status).toBe(200);
-    expect(prismaMock.presentation.delete).toHaveBeenCalled();
+    expect(res.status).toBe(403);
+    expect(prismaMock.presentation.delete).not.toHaveBeenCalled();
   });
 });

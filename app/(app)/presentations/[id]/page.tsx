@@ -110,11 +110,9 @@ export default async function PresentationDetailPage({ params }: PageProps) {
     color: "var(--m-ha)",
   };
 
-  // 삭제 노출: 발표자 또는 관리자만(서버가 최종 강제, R3).
+  // 삭제 노출: 발표자(작성자)만(서버가 최종 강제, R3).
   const canDelete =
-    !!session &&
-    (presentation.presenterId === session.memberId ||
-      session.role === "관리자");
+    !!session && presentation.presenterId === session.memberId;
 
   return (
     <>

@@ -95,10 +95,8 @@ export default async function PaperDetailPage({ params }: PageProps) {
     color: "var(--m-ha)",
   };
 
-  // 삭제 노출: 올린 사람 또는 관리자만(서버가 최종 강제, R3).
-  const canDelete =
-    !!session &&
-    (paper.uploadedBy === session.memberId || session.role === "관리자");
+  // 삭제 노출: 올린 사람만(서버가 최종 강제, R3).
+  const canDelete = !!session && paper.uploadedBy === session.memberId;
 
   return (
     <>
