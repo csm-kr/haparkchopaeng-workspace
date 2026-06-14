@@ -28,9 +28,11 @@ const FEATURES = [
 export function AuthScreen({
   members,
   allowDevLogin = false,
+  authError = null,
 }: {
   members: QuickMember[];
   allowDevLogin?: boolean;
+  authError?: string | null;
 }) {
   const router = useRouter();
   const [email, setEmail] = React.useState("");
@@ -117,6 +119,15 @@ export function AuthScreen({
           <p className="mt-1.5 text-sm text-fg-muted">
             소셜 계정으로 간편하게 로그인하세요.
           </p>
+
+          {authError === "google" && (
+            <p
+              role="alert"
+              className="mt-4 rounded-sm border border-border bg-bg-subtle px-3 py-2.5 text-xs leading-relaxed text-fg-muted"
+            >
+              Google 로그인이 아직 준비 중이에요. 관리자가 설정을 마치면 켜져요.
+            </p>
+          )}
 
           <a
             href="/api/auth/google"
