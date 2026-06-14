@@ -43,7 +43,7 @@ export function UploadButton() {
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus size={14} aria-hidden="true" />
-        업로드
+        논문 올리기
       </Button>
       {open && <UploadModal onClose={() => setOpen(false)} />}
     </>

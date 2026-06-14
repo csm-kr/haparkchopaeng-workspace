@@ -9,7 +9,7 @@ const iso = (s: string) => new Date(s);
 // --- 멤버 / 권한 / 초대 (src/data.js TEAM·ACCESS·PENDING_INVITES) ---
 
 const TEAM = [
-  { id: "ha", name: "하수현", handle: "@hajieun", email: "ha@habakjopaeng.team", color: "var(--m-ha)", initial: "하", presence: "online", status: "📍 NeurIPS 마감 모드", role: "관리자" },
+  { id: "ha", name: "하수현", handle: "@hajieun", email: "de8167@gmail.com", color: "var(--m-ha)", initial: "하", presence: "online", status: "📍 NeurIPS 마감 모드", role: "관리자" },
   { id: "bak", name: "박진희", handle: "@parksj", email: "park@habakjopaeng.team", color: "var(--m-bak)", initial: "박", presence: "online", status: "리뷰 중", role: "멤버" },
   { id: "jo", name: "조성민", handle: "@chominho", email: "cho@habakjopaeng.team", color: "var(--m-jo)", initial: "조", presence: "away", status: "회의 — 5시 복귀", role: "멤버" },
   { id: "paeng", name: "팽진욱", handle: "@paengjh", email: "paeng@habakjopaeng.team", color: "var(--m-paeng)", initial: "팽", presence: "busy", status: "🔬 실험 돌리는 중", role: "멤버" },

@@ -32,7 +32,7 @@ describe("UploadButton / UploadModal", () => {
 
   it("버튼을 누르면 PDF 드롭존과 arXiv 입력이 보인다", () => {
     render(<UploadButton />);
-    fireEvent.click(screen.getByRole("button", { name: /업로드/ }));
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText("PDF 파일 선택")).toBeInTheDocument();
     // arXiv URL 입력 필드(드래그앤드롭 또는 arXiv URL — ADR-003)
@@ -43,7 +43,7 @@ describe("UploadButton / UploadModal", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     render(<UploadButton />);
-    fireEvent.click(screen.getByRole("button", { name: /업로드/ }));
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
 
     pickFile(makeFile("slides.pptx", "application/vnd.ms-powerpoint"));
 
@@ -71,7 +71,7 @@ describe("UploadButton / UploadModal", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<UploadButton />);
-    fireEvent.click(screen.getByRole("button", { name: /업로드/ }));
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
     pickFile(makeFile("mod.pdf", "application/pdf"));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/papers/newpaper"));
@@ -95,7 +95,7 @@ describe("UploadButton / UploadModal", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<UploadButton />);
-    fireEvent.click(screen.getByRole("button", { name: /업로드/ }));
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
     fireEvent.change(screen.getByLabelText("arXiv 주소"), {
       target: { value: "https://arxiv.org/abs/2404.02258" },
     });
@@ -112,7 +112,7 @@ describe("UploadButton / UploadModal", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     render(<UploadButton />);
-    fireEvent.click(screen.getByRole("button", { name: /업로드/ }));
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
     fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
 
     expect(screen.getByText("arXiv 주소를 입력해주세요.")).toBeInTheDocument();
