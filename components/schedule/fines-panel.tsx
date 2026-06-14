@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ChevronRight, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Avatar, Badge, Button, Card } from "@/components/ui";
 import { deriveFineSummary } from "@/lib/schedule-logic";
-import type { FinesView, MemberOption } from "./types";
+import type { FinesView } from "./types";
 
 // 벌금 설정 + 로테이션 + 연도별 멤버 현황 표(SCREENS §schedule).
 // CRITICAL: 누적 벌금·미납은 저장하지 않고 화면에서 파생(DB.md). 벌금 수정은 관리자만(👑, SECURITY).
@@ -17,7 +17,6 @@ function won(n: number): string {
 
 export interface FinesPanelProps {
   fines: FinesView | null;
-  members: MemberOption[];
   isAdmin: boolean;
   onUpdate: (input: {
     year: number;
@@ -28,7 +27,6 @@ export interface FinesPanelProps {
 
 export function FinesPanel({
   fines: initial,
-  members,
   isAdmin,
   onUpdate,
 }: FinesPanelProps) {
@@ -128,31 +126,6 @@ export function FinesPanel({
             {error}
           </p>
         )}
-      </Card>
-
-      {/* 로테이션 */}
-      <Card className="flex flex-col gap-3 p-4">
-        <h2 className="text-[20px] font-semibold text-fg">로테이션</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {members.map((m, i) => (
-            <React.Fragment key={m.id}>
-              {i > 0 && (
-                <ChevronRight
-                  size={13}
-                  className="text-fg-faint"
-                  aria-hidden="true"
-                />
-              )}
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-2 py-1 text-[12px] text-fg">
-                <Avatar user={m} size="sm" /> {m.name}
-              </span>
-            </React.Fragment>
-          ))}
-        </div>
-        <p className="text-[12px] text-fg-subtle">
-          하수현 → 박진희 → 조성민 → 팽진욱 순서로 순환하며, 새 달을 짜면 이어서
-          배정돼요.
-        </p>
       </Card>
 
       {/* 연도별 멤버 현황 — 누적/미납은 현재 벌금값으로 파생 계산 */}

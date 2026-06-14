@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ROTATION } from "@/lib/schedule-logic";
 import type {
   FinesView,
   MemberLedgerRow,
@@ -17,21 +16,6 @@ function toWeekStatus(value: string): WeekStatus {
 
 function toAvailability(value: string): Availability {
   return value === "vacation" ? "vacation" : "active";
-}
-
-/** ROTATION을 먼저, 그 외 멤버는 뒤에 둔 정렬 순서(로테이션·장부 표 공통). */
-function orderByRotation<T extends { id: string }>(members: T[]): T[] {
-  const byId = new Map(members.map((m) => [m.id, m]));
-  const ordered: T[] = [];
-  for (const id of ROTATION) {
-    const m = byId.get(id);
-    if (m) {
-      ordered.push(m);
-      byId.delete(id);
-    }
-  }
-  for (const m of byId.values()) ordered.push(m);
-  return ordered;
 }
 
 /** 해당 월 조회. 없으면 null(빈 달) — 절대 row를 생성하지 않는다(R15/ADR-006). */
@@ -64,9 +48,14 @@ export async function getMonth(
   };
 }
 
-/** 발표자 선택·로테이션 표시에 쓸 멤버(로테이션 순서). */
+/** 발표자 선택·로테이션 표시에 쓸 멤버(가입순 = 로테이션 순서). */
 export async function getScheduleMembers(): Promise<MemberOption[]> {
   const members = await prisma.member.findMany({
+    // 로테이션 순서(iteration)가 지정된 멤버 우선, 미지정(null)은 가입순으로 뒤에.
+    orderBy: [
+      { rotationOrder: { sort: "asc", nulls: "last" } },
+      { createdAt: "asc" },
+    ],
     select: {
       id: true,
       name: true,
@@ -75,7 +64,7 @@ export async function getScheduleMembers(): Promise<MemberOption[]> {
       availability: true,
     },
   });
-  return orderByRotation(members).map((m) => ({
+  return members.map((m) => ({
     id: m.id,
     name: m.name,
     initial: m.initial,
@@ -96,11 +85,16 @@ export async function getFines(year: number): Promise<FinesView | null> {
   if (!config) return null;
 
   const members = await prisma.member.findMany({
+    // 로테이션과 동일 순서(iteration 우선, 미지정은 가입순) — 장부 표도 같은 정렬.
+    orderBy: [
+      { rotationOrder: { sort: "asc", nulls: "last" } },
+      { createdAt: "asc" },
+    ],
     select: { id: true, name: true, initial: true, color: true },
   });
   const ledgerByMember = new Map(config.ledgers.map((l) => [l.memberId, l]));
 
-  const rows: MemberLedgerRow[] = orderByRotation(members).map((m) => {
+  const rows: MemberLedgerRow[] = members.map((m) => {
     const l = ledgerByMember.get(m.id);
     return {
       memberId: m.id,

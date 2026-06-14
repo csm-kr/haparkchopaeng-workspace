@@ -5,8 +5,8 @@ import type { ScheduleWeekView } from "@/components/schedule/types";
 // 스케줄 순수 로직 — prisma를 import하지 않는다(클라이언트 섬도 안전하게 쓰도록).
 // 서버 조회(lib/schedule.ts)와 Server Action(actions.ts)이 이 함수들을 재사용한다.
 
-/** 로테이션 순서: 하수현 → 박진희 → 조성민 → 팽진욱 (PRD/SCREENS). */
-export const ROTATION = ["ha", "bak", "jo", "paeng"] as const;
+// 로테이션 순서는 실제 멤버(가입순)로 결정한다 — 하드코딩하지 않는다.
+// lib/schedule.ts가 createdAt asc로 멤버를 읽어 호출부(actions)에 넘긴다.
 
 /** 해당 연·월의 모든 토요일을 "M월 D일" 문자열 배열로. (UTC가 아니라 로컬 달력 기준) */
 export function saturdaysOf(year: number, month: number): string[] {
@@ -20,29 +20,28 @@ export function saturdaysOf(year: number, month: number): string[] {
 }
 
 /**
- * 5개의 토요일이 있는 달의 마지막(5)주차는 방학 — 발표 없음.
- * (멤버 4명이라 1~4주차가 한 바퀴, 5주차가 있으면 쉰다.)
+ * 로테이션 한 바퀴(rotationLen 주)를 넘는 자투리 주는 방학 — 발표 없음.
+ * 예) 멤버 4명·토요일 5개 → 1~4주 발표, 5주차 방학.
  */
-export function isBreakWeek(week: number, totalWeeks: number): boolean {
-  return totalWeeks === 5 && week === 5;
+export function isBreakWeek(week: number, rotationLen: number): boolean {
+  return rotationLen > 0 && week > rotationLen;
 }
 
 /**
- * 빈 달의 초안을 만든다 — 1주차부터 순번(기본 하수현→박진희→조성민→팽진욱) 배정.
- * 5주차가 있으면 방학(발표자 없음). CRITICAL: 순수 계산, DB 저장 안 함(초안, R16/ADR-006).
+ * 빈 달의 초안을 만든다 — 1주차부터 startIdx 순번으로 rotation(멤버 id)을 배정.
+ * 멤버 수를 넘는 자투리 주는 방학(발표자 없음). CRITICAL: 순수 계산, DB 저장 안 함(초안, R16/ADR-006).
  */
 export function draftMonth(
   year: number,
   month: number,
   startIdx: number,
-  rotation: readonly string[] = ROTATION,
+  rotation: readonly string[],
 ): ScheduleWeekView[] {
   const len = rotation.length;
   const saturdays = saturdaysOf(year, month);
-  const total = saturdays.length;
   return saturdays.map((date, i) => {
     const week = i + 1;
-    const brk = isBreakWeek(week, total);
+    const brk = isBreakWeek(week, len);
     return {
       week,
       date,

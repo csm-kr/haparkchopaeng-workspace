@@ -30,6 +30,7 @@ model Member {
   presence     String   @default("offline") // online | away | busy | offline
   status       String?
   availability String   @default("active") // active | vacation
+  rotationOrder Int? // 로테이션 순서(iteration). null이면 가입순(createdAt)으로 fallback.
   createdAt    DateTime @default(now())
 }
 
