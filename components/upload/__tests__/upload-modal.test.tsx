@@ -180,4 +180,22 @@ describe("UploadButton / UploadModal", () => {
     expect(screen.getByText("arXiv 주소를 입력해주세요.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("quota를 주면 이번 주 분석 사용량을 보여준다", () => {
+    render(<UploadButton quota={{ limit: 20, used: 7, remaining: 13 }} />);
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
+    expect(screen.getByText("7/20")).toBeInTheDocument();
+  });
+
+  it("한도를 다 쓰면(remaining 0) 안내하고 업로드를 막는다", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<UploadButton quota={{ limit: 20, used: 20, remaining: 0 }} />);
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
+    expect(screen.getByText(/한도를 다 썼어요/)).toBeInTheDocument();
+    // 한도 소진 상태에서 PDF를 골라도 업로드(fetch)를 시도하지 않는다
+    pickFile(makeFile("mod.pdf", "application/pdf"));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("이번 주 분석 한도를 다 썼어요.")).toBeInTheDocument();
+  });
 });

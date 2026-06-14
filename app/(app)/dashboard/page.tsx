@@ -3,12 +3,18 @@ import { Card } from "@/components/ui";
 import { QuickCards, RecentActivity } from "@/components/dashboard";
 import { UploadButton } from "@/components/upload";
 import { getDashboardData } from "@/lib/dashboard";
+import { getSession } from "@/lib/auth";
+import { quotaStatus } from "@/lib/rate-limit";
 
 // 홈(대시보드) — RSC. 읽기는 서버에서 Prisma 직접 조회(ADR-015/R32).
 // LIVE 배너는 인터랙티브 섬(useLive)이고, 데이터 카드/목록은 RSC다.
 // 로딩 상태는 같은 폴더의 loading.tsx(스켈레톤)가 담당한다(R26).
 
 export default async function DashboardPage() {
+  const session = await getSession();
+  const quota = session
+    ? await quotaStatus(session.memberId).catch(() => undefined)
+    : undefined;
   let content: React.ReactNode;
   try {
     const data = await getDashboardData();
@@ -50,7 +56,7 @@ export default async function DashboardPage() {
   return (
     <>
       {/* 헤더 액션 = ＋업로드(SCREENS dashboard). 업로드 모달은 인터랙티브 섬. */}
-      <Topbar crumbs={[{ label: "홈" }]} actions={<UploadButton />} />
+      <Topbar crumbs={[{ label: "홈" }]} actions={<UploadButton quota={quota} />} />
       {/* live===true일 때만 렌더(ADR-001/R5). live는 화면에 보관하지 않는다. */}
       <LiveBanner />
       <div className="flex-1 overflow-y-auto">{content}</div>
