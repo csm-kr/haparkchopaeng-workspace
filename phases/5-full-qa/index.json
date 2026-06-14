@@ -53,7 +53,10 @@
     {
       "step": 6,
       "name": "team-flow",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-14T23:04:29+0900",
+      "summary": "team.spec.ts에 F6 비파괴 분기 보강: 기존 본인+초대 블록 테스트에 역할 선택(관리자/멤버/게스트 option toHaveText)·관리자 시점 비관리자 안내 부재(toHaveCount 0) 단언 추가. 🔗 링크 복사는 초대 생성(파괴적) 후에만 노출되어 단언 제외(주석). 신규 조건부 테스트: ⋯ 관리 메뉴는 본인 행엔 없으므로(isAdmin&&!isSelf) 본인 외 멤버 대상 — getByRole(/관리 메뉴$/) count 0이면 런타임 test.skip(단일 관리자 DB, 데이터 무관). 있으면 ⋯ 열기→역할 변경/내보내기 노출→[내보내기]로 '님을 내보낼까요?' 확인 다이얼로그→[취소]로 닫기까지만(위험 버튼·역할 변경·초대 전송 실행 금지). team 1 passed·1 skip(단일 관리자), 전체 14 passed·1 skip.",
+      "completed_at": "2026-06-14T23:09:40+0900"
     },
     {
       "step": 7,
