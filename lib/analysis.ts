@@ -7,6 +7,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { signedDownloadUrl } from "@/lib/storage";
+import { renderFigures } from "@/lib/figure-render";
 import type { Lens, ReproPayload, ResearchPayload } from "@/types";
 
 // 논문 분석 파이프라인 (서버 전용). PDF → 두 관점(연구/재구현) 구조화 분석 + figure 해석.
@@ -140,6 +141,18 @@ export const REPRO_SCHEMA: Schema = {
   required: ["data", "model", "loss", "metrics", "training", "gpu"],
 };
 
+/** figure를 감싸는 bounding box(0–1000 정규화 좌표, Gemini 객체 검출 규약). 렌더 단계 입력. */
+const BOX_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    ymin: { type: Type.INTEGER },
+    xmin: { type: Type.INTEGER },
+    ymax: { type: Type.INTEGER },
+    xmax: { type: Type.INTEGER },
+  },
+  required: ["ymin", "xmin", "ymax", "xmax"],
+};
+
 export const FIGURES_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -152,6 +165,8 @@ export const FIGURES_SCHEMA: Schema = {
           caption: STR,
           interpretation: STR,
           sourcePage: { type: Type.INTEGER },
+          // box는 선택(required 미포함) — Gemini가 못 잡으면 생략, 그땐 렌더가 페이지 fallback.
+          box: BOX_SCHEMA,
         },
         required: ["title", "caption", "interpretation", "sourcePage"],
       },
@@ -176,7 +191,9 @@ const PROMPT_BY_LENS: Record<Lens, string> = {
 
 const FIGURES_PROMPT =
   "이 논문의 주요 figure들을 찾아 주어진 JSON 스키마로만 답하라. " +
-  "각 figure의 제목·캡션·평이한 해석(interpretation)·원문 페이지(sourcePage)를 채운다. 한국어로 쓴다.";
+  "각 figure의 제목·캡션·평이한 해석(interpretation)·원문 페이지(sourcePage)를 채운다. " +
+  "각 figure를 감싸는 bounding box를 0–1000 정규화 좌표 [ymin,xmin,ymax,xmax]로 box에 채운다(못 찾으면 생략). " +
+  "한국어로 쓴다.";
 
 /** 안전 차단·빈 응답을 잡아 던진다(실패는 잡에서 failed로 격리). */
 function responseText(res: GenerateContentResponse): string {
@@ -208,12 +225,21 @@ export async function extractAnalysis(
   return JSON.parse(responseText(res)) as ResearchPayload | ReproPayload;
 }
 
-/** figure 추출 결과. 이미지 렌더 파이프라인은 추후(I-1) — imageUrl은 null(수동 업로드 허용). */
+/** figure를 감싸는 bounding box(0–1000 정규화). 렌더 단계가 페이지 픽셀로 변환해 크롭한다. */
+export interface FigureBox {
+  ymin: number;
+  xmin: number;
+  ymax: number;
+  xmax: number;
+}
+
+/** figure 추출 결과. box는 렌더 입력, imageUrl은 렌더 단계가 채운다(추출 단계에선 null). */
 export interface FigureExtract {
   title: string;
   caption: string;
   interpretation: string;
   sourcePage: number;
+  box: FigureBox | null;
   imageUrl: string | null;
 }
 
@@ -222,6 +248,21 @@ interface RawFigure {
   caption?: unknown;
   interpretation?: unknown;
   sourcePage?: unknown;
+  box?: unknown;
+}
+
+/** RawFigure.box를 FigureBox로 좁힌다 — 네 좌표가 모두 유한 숫자일 때만. 아니면 null(→ 페이지 fallback). */
+function parseBox(raw: unknown): FigureBox | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const ymin = Number(o.ymin);
+  const xmin = Number(o.xmin);
+  const ymax = Number(o.ymax);
+  const xmax = Number(o.xmax);
+  if ([ymin, xmin, ymax, xmax].every((n) => Number.isFinite(n))) {
+    return { ymin, xmin, ymax, xmax };
+  }
+  return null;
 }
 
 /** PDF에서 figure 메타/해석을 추출한다. 이미지가 없으면 imageUrl=null로 둔다(ADR-011/I-1). */
@@ -242,6 +283,7 @@ export async function extractFigures(pdf: Buffer): Promise<FigureExtract[]> {
     caption: String(f.caption ?? ""),
     interpretation: String(f.interpretation ?? ""),
     sourcePage: Number(f.sourcePage ?? 0),
+    box: parseBox(f.box),
     imageUrl: null,
   }));
 }
@@ -253,6 +295,11 @@ export interface AnalyzePaperDeps {
   loadPdf(paperId: string): Promise<Buffer>;
   extractAnalysis(pdf: Buffer, lens: Lens): Promise<ResearchPayload | ReproPayload>;
   extractFigures(pdf: Buffer): Promise<FigureExtract[]>;
+  renderFigures(
+    pdf: Buffer,
+    paperId: string,
+    figures: FigureExtract[],
+  ): Promise<FigureExtract[]>;
 }
 
 /** 스토리지에서 원문 PDF 바이트를 가져온다(비공개 버킷 → 단기 서명 URL, R36). */
@@ -272,6 +319,7 @@ export const realDeps: AnalyzePaperDeps = {
   loadPdf: loadPaperPdf,
   extractAnalysis,
   extractFigures,
+  renderFigures,
 };
 
 /** 분석 결과를 한 트랜잭션으로 영속화하고 analysisStatus=ready로 전이한다(멱등 upsert). */
@@ -332,11 +380,20 @@ export async function analyzePaper(
 
   try {
     const pdf = await deps.loadPdf(paperId);
-    const [research, repro, figures] = await Promise.all([
+    const [research, repro, extracted] = await Promise.all([
       deps.extractAnalysis(pdf, "research"),
       deps.extractAnalysis(pdf, "repro"),
       deps.extractFigures(pdf),
     ]);
+    // figure 이미지 렌더(크롭/페이지 fallback)로 imageUrl을 채운다.
+    // renderFigures는 figure·PDF 단위로 격리(throw 안 함)하지만, 방어적으로 감싸 메타 분석을 지킨다(R28).
+    let figures = extracted;
+    try {
+      figures = await deps.renderFigures(pdf, paperId, extracted);
+    } catch {
+      // 렌더 전체가 실패해도 분석을 막지 않는다 — extracted는 이미 imageUrl=null이라 그대로 저장.
+      figures = extracted;
+    }
     await persistAnalysis(
       paperId,
       research as ResearchPayload,

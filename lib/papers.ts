@@ -136,7 +136,8 @@ export async function getPaperDetail(
       caption: f.caption,
       interpretation: f.interpretation,
       sourcePage: f.sourcePage,
-      imageUrl: f.imageUrl,
+      // DB엔 스토리지 경로, 클라엔 서명 라우트 URL을 노출한다(R36). 없으면 null(아직 렌더 전).
+      imageUrl: f.imageUrl ? `/api/figures/${f.id}/image` : null,
     })),
     notes: paper.notes.map((n) => ({
       id: n.id,

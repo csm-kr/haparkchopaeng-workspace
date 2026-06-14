@@ -108,6 +108,68 @@ describe("UploadButton / UploadModal", () => {
     );
   });
 
+  it("파일 업로드가 한도 초과(429)면 서버 메시지를 그대로 보여준다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { uploadUrl: "https://store/sign/abc", path: "papers/abc.pdf" },
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({
+          error: {
+            code: "TOO_MANY_REQUESTS",
+            message: "이번 주 분석 한도(20편)를 다 썼어요.",
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<UploadButton />);
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
+    pickFile(makeFile("mod.pdf", "application/pdf"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("이번 주 분석 한도(20편)를 다 썼어요."),
+      ).toBeInTheDocument(),
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("arXiv 가져오기가 30쪽 초과(413)면 서버 메시지를 그대로 보여준다", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 413,
+      json: async () => ({
+        error: {
+          code: "PDF_TOO_LONG",
+          message: "30쪽 이하 PDF만 올릴 수 있어요. (지금 42쪽)",
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<UploadButton />);
+    fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
+    fireEvent.change(screen.getByLabelText("arXiv 주소"), {
+      target: { value: "https://arxiv.org/abs/2404.02258" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("30쪽 이하 PDF만 올릴 수 있어요. (지금 42쪽)"),
+      ).toBeInTheDocument(),
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("빈 arXiv URL은 인라인 검증으로 막는다(R30)", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

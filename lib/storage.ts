@@ -63,6 +63,16 @@ export async function uploadPdf(
   if (error) throw new Error(error.message);
 }
 
+/** 서버가 PNG 바이트를 스토리지에 올린다(figure 렌더 결과). 비공개 버킷·덮어쓰기 허용(재분석 시 갱신). */
+export async function uploadPng(path: string, body: Buffer): Promise<void> {
+  await ensureBucket();
+  const admin = createSupabaseAdmin();
+  const { error } = await admin.storage
+    .from(bucketName())
+    .upload(path, body, { contentType: "image/png", upsert: true });
+  if (error) throw new Error(error.message);
+}
+
 /**
  * 스토리지 객체를 제거한다(논문 삭제 시 원문 PDF 정리).
  * best-effort: 실패해도 throw하지 않는다 — 스토리지 정리 실패가 DB 삭제를 막지 않게.
@@ -73,5 +83,21 @@ export async function removeObject(path: string): Promise<void> {
     await admin.storage.from(bucketName()).remove([path]);
   } catch {
     // 정리 실패는 무시(고아 객체는 별도 청소로). DB가 진실의 원천.
+  }
+}
+
+/**
+ * 스토리지 폴더(prefix) 아래 객체를 모두 제거한다(논문 삭제 시 figure 이미지 정리).
+ * best-effort: 실패해도 throw하지 않는다 — 정리 실패가 DB 삭제를 막지 않게(removeObject와 동일 정책).
+ */
+export async function removeFolder(prefix: string): Promise<void> {
+  try {
+    const admin = createSupabaseAdmin();
+    const bucket = bucketName();
+    const { data } = await admin.storage.from(bucket).list(prefix);
+    if (!data || data.length === 0) return;
+    await admin.storage.from(bucket).remove(data.map((f) => `${prefix}/${f.name}`));
+  } catch {
+    // 정리 실패는 무시 — best-effort.
   }
 }
