@@ -7,7 +7,7 @@ test("발표 자료 목록에서 항목을 열면 자료 뷰어와 회고 댓글
 }) => {
   // 1) dev 로그인 — 시드 멤버(하수현) 이메일로 세션 쿠키 확보.
   const login = await page.request.post("/api/auth/login", {
-    data: { email: "ha@habakjopaeng.team" },
+    data: { email: "de8167@gmail.com" },
   });
   expect(login.ok()).toBeTruthy();
 

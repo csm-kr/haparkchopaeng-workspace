@@ -7,7 +7,7 @@ test("업로드 모달은 PDF 전용 + arXiv 입력이며 비-PDF를 거부한�
 }) => {
   // 1) dev 로그인 — 시드 멤버(하수현) 이메일로 세션 쿠키 확보.
   const login = await page.request.post("/api/auth/login", {
-    data: { email: "ha@habakjopaeng.team" },
+    data: { email: "de8167@gmail.com" },
   });
   expect(login.ok()).toBeTruthy();
 
