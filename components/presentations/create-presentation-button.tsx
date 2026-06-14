@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileText, Plus, UploadCloud, X } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui";
 
-// 발표 추가 모달 — 인터랙티브 섬(ADR-015). 제목(+발표 시간)과 슬라이드 파일(PDF·PPTX, 선택).
+// 발표자료 올리기 모달 — 인터랙티브 섬(ADR-015). 제목(+발표 시간)과 슬라이드 파일(PDF·PPTX, 선택).
 // CRITICAL: 파일은 프리사인 직접 업로드(클라→스토리지), 생성 API엔 객체 키만 보낸다(R36).
 // CRITICAL: 발표자(presenterId)는 서버가 세션에서 정한다 — 클라가 보내지 않는다(R3).
 // 검증은 인라인(R30). 제목만 있으면 파일 없이도 추가할 수 있다.
@@ -52,7 +52,7 @@ export function CreatePresentationButton() {
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus size={14} aria-hidden="true" />
-        발표 추가
+        발표자료 올리기
       </Button>
       {open && <CreateModal onClose={() => setOpen(false)} />}
     </>
@@ -137,11 +137,11 @@ function CreateModal({ onClose }: { onClose: () => void }) {
       <Card
         role="dialog"
         aria-modal="true"
-        aria-label="발표 추가"
+        aria-label="발표자료 업로드"
         className="flex w-full max-w-md flex-col gap-4 p-5"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-[20px] font-semibold text-fg">발표 추가</h2>
+          <h2 className="text-[20px] font-semibold text-fg">발표자료 업로드</h2>
           <button
             type="button"
             aria-label="닫기"
@@ -247,7 +247,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
             취소
           </Button>
           <Button onClick={submit} disabled={busy || !title.trim()}>
-            {busy ? "추가 중이에요…" : "발표 추가"}
+            {busy ? "올리는 중이에요…" : "발표자료 올리기"}
           </Button>
         </div>
       </Card>

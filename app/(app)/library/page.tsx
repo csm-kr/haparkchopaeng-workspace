@@ -1,6 +1,7 @@
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { PaperList } from "@/components/library";
+import { UploadButton } from "@/components/upload";
 import { getPapers } from "@/lib/papers";
 
 // 논문 목록 — RSC. 읽기는 서버에서 Prisma 직접 조회(ADR-015/R32).
@@ -34,7 +35,7 @@ export default async function LibraryPage() {
 
   return (
     <>
-      <Topbar crumbs={[{ label: "논문" }]} />
+      <Topbar crumbs={[{ label: "논문" }]} actions={<UploadButton />} />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">{content}</div>
       </div>
