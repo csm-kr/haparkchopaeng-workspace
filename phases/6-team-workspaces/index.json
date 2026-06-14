@@ -15,7 +15,7 @@
       "name": "team-create",
       "status": "completed",
       "started_at": "2026-06-15T08:05:33+0900",
-      "completed_at": "2026-06-15T08:12:00+0900",
+      "completed_at": "2026-06-15T08:11:17+0900",
       "summary": "팀 생성 도메인(앱레벨 권한, RLS 미사용): lib/teams.ts에 maxTeams()(env 호출시점·기본2)·createTeam(이름2–30·slug 정규화/충돌-2,-3 회피·전역 상한 TEAM_LIMIT(403)·명시 slug 중복 SLUG_TAKEN(409)·트랜잭션 내 count 재확인+생성자 owner 멤버십)·getMembership/isTeamMember/isTeamAdmin/isTeamOwner(위계 owner>admin>member)·resolveEntryTeam(최근 joinedAt slug|null). app/(app)/teams/new/actions.ts에 createTeamAction(creatorId=세션·판별 유니온 반환). teams.test.ts 14개 신규(전체 233 통과)·build green. 기존 lib/team.ts 미변경."
     },
     {
