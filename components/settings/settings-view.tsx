@@ -76,6 +76,21 @@ export function SettingsView({ profile }: { profile: ProfileView }) {
   // 법적 문서 시트
   const [legal, setLegal] = React.useState<LegalDoc | null>(null);
 
+  // 로그아웃 진행 상태
+  const [loggingOut, setLoggingOut] = React.useState(false);
+
+  async function logout() {
+    setLoggingOut(true);
+    // 성공/실패와 무관하게 로그인 화면으로 — 전체 네비게이션으로 서버가 세션 없이 다시 렌더.
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // 네트워크 실패여도 어차피 로그인 화면으로 보낸다.
+    } finally {
+      window.location.assign("/");
+    }
+  }
+
   function toggleNotif(id: NotifId) {
     setNotif((prev) => {
       const next = { ...prev, [id]: !prev[id] };
@@ -314,6 +329,16 @@ export function SettingsView({ profile }: { profile: ProfileView }) {
           >
             개인정보처리방침
           </button>
+        </div>
+      </Card>
+
+      {/* 계정 — 로그아웃은 기존 POST /api/auth/logout만 호출한다(새 엔드포인트 없음). */}
+      <Card className="flex flex-col gap-3 p-5">
+        <h2 className="text-[20px] font-semibold text-fg">계정</h2>
+        <div>
+          <Button variant="secondary" onClick={logout} disabled={loggingOut}>
+            {loggingOut ? "로그아웃 중…" : "로그아웃"}
+          </Button>
         </div>
       </Card>
 
