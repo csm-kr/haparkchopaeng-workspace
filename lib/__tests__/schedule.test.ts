@@ -101,13 +101,23 @@ describe("isBreakWeek (자투리 주 방학)", () => {
   });
 });
 
-describe("nextPointer (순번 전진)", () => {
+describe("nextPointer (순번 전진 — 연속)", () => {
   it("4주차 4인 로테이션이면 한 바퀴 돌아 같은 인덱스로", () => {
     expect(nextPointer(1, 4, R4.length)).toBe(1);
   });
 
   it("5주차면 한 칸 전진한다", () => {
     expect(nextPointer(0, 5, R4.length)).toBe(1);
+  });
+
+  it("직전 저장월 포인터에서 이어 전진한다(연속)", () => {
+    // 직전 달이 인덱스 1에서 끝 → 이번 달 1부터, 발표 2주 → 다음 시작 (1+2)%3 = 0
+    expect(nextPointer(1, 2, 3)).toBe(0);
+  });
+
+  it("멤버 수가 가변이어도 실제 멤버 수로 나눈다", () => {
+    expect(nextPointer(2, 3, 5)).toBe(0); // (2+3)%5
+    expect(nextPointer(4, 3, 6)).toBe(1); // (4+3)%6
   });
 });
 

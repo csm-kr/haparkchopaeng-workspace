@@ -5,10 +5,11 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { getFines, getScheduleMembers } from "@/lib/schedule";
+import { getFines, getScheduleMembers, resolveStartIdx } from "@/lib/schedule";
 import {
   draftMonth as draftWeeks,
   ensureVersion,
+  nextPointer,
 } from "@/lib/schedule-logic";
 import type {
   FinesView,
@@ -41,10 +42,11 @@ export async function draftMonthAction(
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "잘못된 달이에요.");
   }
-  // 로테이션 = 실제 멤버(가입순). 1주차부터 멤버 순서대로 배정하고,
+  // 로테이션 = 실제 멤버(가입순). 시작 순번은 직전 저장월에서 이어받는다(연속 전진).
   // 멤버 수를 넘는 자투리 주는 draftWeeks가 방학으로 둔다.
   const rotation = (await getScheduleMembers()).map((m) => m.id);
-  return draftWeeks(parsed.data.year, parsed.data.month, 0, rotation);
+  const startIdx = await resolveStartIdx(parsed.data.year, parsed.data.month);
+  return draftWeeks(parsed.data.year, parsed.data.month, startIdx, rotation);
 }
 
 const WeekInputSchema = z.object({
@@ -139,8 +141,12 @@ export async function saveMonth(input: {
   }
   const { year, month, version, weeks } = parsed.data;
 
-  // 순번은 매달 1주차(멤버 가입순 첫 번째)부터 다시 시작. 자투리 방학 주는 슬롯을 쓰지 않는다.
-  const pointer = 0;
+  // 순번 연속 전진: 이 달 시작 인덱스 = 직전 저장월의 rotationPointerAfter,
+  // 이 달 발표 배정 수(방학 제외)만큼 전진. 멤버 수는 가변이라 실제 멤버 수로 나눈다(R16).
+  const startIdx = await resolveStartIdx(year, month);
+  const len = (await getScheduleMembers()).length;
+  const presented = weeks.filter((w) => w.presenterId !== null).length;
+  const pointer = nextPointer(startIdx, presented, len);
 
   try {
     const saved = await prisma.$transaction(async (tx) => {

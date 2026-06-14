@@ -23,3 +23,6 @@ phases/**/step*-output.json
 /blob-report/
 /.playwright/
 .vercel
+
+# Claude Code 로컬 워크트리(중첩 git repo) — 추적 금지
+.claude/worktrees/

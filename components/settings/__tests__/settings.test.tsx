@@ -122,4 +122,33 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByRole("button", { name: "이용약관" }));
     expect(screen.getByRole("dialog", { name: "이용약관" })).toBeInTheDocument();
   });
+
+  it("로그아웃 버튼을 누르면 POST /api/auth/logout을 호출하고 로그인 화면으로 보낸다", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    // jsdom은 navigation 미구현 — location 객체를 stub으로 갈아끼워 assign을 검증한다(구현도 assign 사용).
+    const assignSpy = vi.fn();
+    const realLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...realLocation, assign: assignSpy },
+    });
+    renderSettings();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "로그아웃" }));
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/auth/logout");
+    expect(init?.method).toBe("POST");
+    expect(assignSpy).toHaveBeenCalledWith("/");
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: realLocation,
+    });
+  });
 });

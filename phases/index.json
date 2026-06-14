@@ -17,6 +17,15 @@
     {
       "dir": "3-team-bootstrap",
       "status": "pending"
+    },
+    {
+      "dir": "4-rotation-quota-e2e",
+      "status": "completed"
+    },
+    {
+      "dir": "5-full-qa",
+      "status": "completed",
+      "completed_at": "2026-06-14T23:19:15+0900"
     }
   ]
 }

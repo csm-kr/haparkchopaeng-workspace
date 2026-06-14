@@ -1,0 +1,72 @@
+{
+  "project": "하박조팽",
+  "phase": "5-full-qa",
+  "steps": [
+    {
+      "step": 0,
+      "name": "e2e-baseline",
+      "status": "completed",
+      "started_at": "2026-06-14T22:35:47+0900",
+      "summary": "playwright webServer를 next dev로 전환해 클린 상태에서 e2e 8 passed·1 skip. 사전 기동 dev 서버 의존 제거.",
+      "completed_at": "2026-06-14T22:39:01+0900"
+    },
+    {
+      "step": 1,
+      "name": "live-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T22:39:02+0900",
+      "summary": "meeting.spec.ts에 F1 비파괴 분기 추가: 빈 상태 카피+[라이브 시작] 노출·활성(클릭 금지) 단언, 그리고 사이드바 [스케쥴] 링크로 /schedule 비파괴 내비 검증(빈 상태 [스케줄 보기] CTA는 프로덕션 미포팅—R21 단일 CTA). meeting 2 passed, 전체 9 passed·1 skip.",
+      "completed_at": "2026-06-14T22:44:33+0900"
+    },
+    {
+      "step": 2,
+      "name": "schedule-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T22:44:33+0900",
+      "summary": "schedule.spec.ts에 F4 비파괴 분기 2개 추가: 편집 모드 [취소] → 초안 폐기·빈 상태 복귀, 편집 중 [다음 달] 잠금(인라인 경고+달·URL 불변). [저장]은 누르지 않음([일정 짜기]=draftMonthAction은 순수 계산, 영속 쓰기 없음 코드 확인). schedule 3 passed, 전체 11 passed·1 skip.",
+      "completed_at": "2026-06-14T22:47:31+0900"
+    },
+    {
+      "step": 3,
+      "name": "upload-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T22:47:32+0900",
+      "summary": "upload.spec.ts에 F2 비파괴 분기 보강: 모달 열기→PDF 전용+arXiv 입력+[파일 선택] 어포던스, 주간 분석 한도 표시(/이번 주 분석 \\d+\\/\\d+/ 데이터-무관), 비-PDF 인라인 거부 1개 + 잘못된 arXiv(비-arxiv 호스트) 인라인 거부·모달 유지 1개. 실제 업로드/arXiv 가져오기는 끝까지 안 감(서버 400/415 검증선까지). playwright.config webServer에 PAPER_WEEKLY_LIMIT=20 주입(dev 무제한이면 한도 표시 숨김 게이트 우회—모달 한정, 타 spec 무영향). upload 2 passed, 전체 12 passed·1 skip.",
+      "completed_at": "2026-06-14T22:55:31+0900"
+    },
+    {
+      "step": 4,
+      "name": "paper-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T22:55:31+0900",
+      "summary": "paper.spec.ts의 test.skip을 F3 비파괴 조건부 테스트로 교체: /library 행 0이면 런타임 test.skip(논문 유무 조건부), 있으면 첫 논문 상세 진입. analysisStatus ready 여부로 분기(관점 토글은 ready일 때만 렌더—AnalysisStatusBlock). ready면 관점 토글(재구현↔연구, aria-pressed)·재구현/연구 섹션 헤딩(.or 빈 payload 안내)·Figure 분석 공통 헤더(ADR-005)·노트 폼 열고 [취소]까지만 검증([추가] 금지). 미-ready면 상태 블록만 확인. paper 1 passed(ready 경로), 전체 13 passed·0 skip.",
+      "completed_at": "2026-06-14T23:01:08+0900"
+    },
+    {
+      "step": 5,
+      "name": "presentation-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T23:01:08+0900",
+      "summary": "presentation.spec.ts에 F5 비파괴 조건부 테스트 추가: 기존 목록 스모크 유지 + 상세 검증. rows.count()===0이면 런타임 test.skip(발표 자료 유무 조건부), 있으면 첫 행 클릭→/presentations/:id 진입. 자료 뷰어 영역=h1 제목 노출, 회고 댓글 region(aria-label \"회고 댓글\")+입력 textarea(getByLabel \"댓글 내용\") 노출 단언. 댓글은 fill(\"리뷰 테스트\")→toHaveValue까지만(전송 금지: Cmd/Ctrl+Enter·[보내기] 미클릭—공유 DB 영구 생성 방지). 공유 DB에 자료 존재→상세 경로 실행, presentation 2 passed, 전체 14 passed·0 skip.",
+      "completed_at": "2026-06-14T23:04:29+0900"
+    },
+    {
+      "step": 6,
+      "name": "team-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T23:04:29+0900",
+      "summary": "team.spec.ts에 F6 비파괴 분기 보강: 기존 본인+초대 블록 테스트에 역할 선택(관리자/멤버/게스트 option toHaveText)·관리자 시점 비관리자 안내 부재(toHaveCount 0) 단언 추가. 🔗 링크 복사는 초대 생성(파괴적) 후에만 노출되어 단언 제외(주석). 신규 조건부 테스트: ⋯ 관리 메뉴는 본인 행엔 없으므로(isAdmin&&!isSelf) 본인 외 멤버 대상 — getByRole(/관리 메뉴$/) count 0이면 런타임 test.skip(단일 관리자 DB, 데이터 무관). 있으면 ⋯ 열기→역할 변경/내보내기 노출→[내보내기]로 '님을 내보낼까요?' 확인 다이얼로그→[취소]로 닫기까지만(위험 버튼·역할 변경·초대 전송 실행 금지). team 1 passed·1 skip(단일 관리자), 전체 14 passed·1 skip.",
+      "completed_at": "2026-06-14T23:10:24+0900"
+    },
+    {
+      "step": 7,
+      "name": "global-flow",
+      "status": "completed",
+      "started_at": "2026-06-14T23:10:25+0900",
+      "summary": "global.spec.ts 신규 작성(전역 인터랙션 비파괴 QA): ① 사이드바 내비게이션 — role=navigation '주요 메뉴'에서 논문/발표 자료/스케쥴 클릭→URL+활성 링크 aria-current=page(셸 재렌더 증거), 스케쥴은 h1 '세미나 스케줄'도 확인(데이터 무관). ② 로그아웃 — 셸에 로그아웃 버튼 부재(코드 확인)라 POST /api/auth/logout으로 세션 쿠키만 파기(dev 세션은 Supabase IdP 세션 없음→공유 DB 불변)→/dashboard 재접근 시 홈 '다시 오셨네요'로 리다이렉트 단언. 명령 팔레트(Cmd/Ctrl+K)·통합 검색은 프로덕션 셸 미포팅(components/shell·app/(app) 코드 확인)이라 가정 단언 없이 생략+주석/리포트 사유. 타이밍 플레이크(6워커×원격 Supabase×Next dev 온디맨드, toHaveURL 5s 간헐 초과) 대응으로 playwright.config retries:2 추가(단언 불변, 회귀 미은폐). QA_REPORT.md 작성. 전체 16 passed·1 skip(단일 관리자 team ⋯메뉴)·0 failed, 종료 코드 0.",
+      "completed_at": "2026-06-14T23:19:15+0900"
+    }
+  ],
+  "created_at": "2026-06-14T22:35:47+0900",
+  "completed_at": "2026-06-14T23:19:15+0900"
+}

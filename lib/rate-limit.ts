@@ -16,13 +16,32 @@ export function paperWeeklyLimit(): number {
   return process.env.NODE_ENV === "production" ? 20 : 0;
 }
 
-/** 최근 7일간 이 멤버가 올린 논문 수가 한도 이상이면 true. 무제한(한도≤0)이면 DB 조회 없이 false. */
+/** 최근 7일간 이 멤버가 올린 논문 수(롤링). */
+async function usedThisWeek(memberId: string): Promise<number> {
+  const since = new Date(Date.now() - WINDOW_MS);
+  return prisma.paper.count({
+    where: { uploadedBy: memberId, uploadedAt: { gte: since } },
+  });
+}
+
+/** 최근 7일 업로드 수가 한도 이상이면 true. 무제한(한도≤0)이면 DB 조회 없이 false. */
 export async function isPaperQuotaExceeded(memberId: string): Promise<boolean> {
   const limit = paperWeeklyLimit();
   if (limit <= 0) return false;
-  const since = new Date(Date.now() - WINDOW_MS);
-  const count = await prisma.paper.count({
-    where: { uploadedBy: memberId, uploadedAt: { gte: since } },
-  });
-  return count >= limit;
+  return (await usedThisWeek(memberId)) >= limit;
+}
+
+/** 주간 분석 한도 현황(표시용). */
+export interface QuotaStatus {
+  limit: number; // 0 이하 = 무제한
+  used: number; // 최근 7일 업로드 수
+  remaining: number | null; // 무제한이면 null
+}
+
+/** 인당 주간 분석 한도 현황. 무제한(한도≤0)이면 remaining=null, used는 항상 집계. */
+export async function quotaStatus(memberId: string): Promise<QuotaStatus> {
+  const limit = paperWeeklyLimit();
+  const used = await usedThisWeek(memberId);
+  const remaining = limit <= 0 ? null : Math.max(0, limit - used);
+  return { limit, used, remaining };
 }

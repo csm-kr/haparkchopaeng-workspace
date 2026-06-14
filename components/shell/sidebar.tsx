@@ -65,14 +65,14 @@ export function Sidebar({
         <Link
           href="/dashboard"
           className="flex min-w-0 items-center gap-2"
-          title="하박조팽"
+          title="모두의모임"
         >
           <span className="grid size-8 shrink-0 place-items-center rounded-md bg-accent text-[13px] font-bold text-accent-fg">
-            하
+            모모
           </span>
           {!collapsed && (
             <span className="truncate text-[15px] font-semibold text-fg">
-              하박조팽
+              모두의모임
             </span>
           )}
         </Link>

@@ -3,12 +3,18 @@ import { Card } from "@/components/ui";
 import { PaperList } from "@/components/library";
 import { UploadButton } from "@/components/upload";
 import { getPapers } from "@/lib/papers";
+import { getSession } from "@/lib/auth";
+import { quotaStatus } from "@/lib/rate-limit";
 
 // 논문 목록 — RSC. 읽기는 서버에서 Prisma 직접 조회(ADR-015/R32).
 // 로딩 상태는 같은 폴더의 loading.tsx(스켈레톤)가 담당한다(R26).
 // 빈 상태는 PaperList가 내부에서 처리한다(R26).
 
 export default async function LibraryPage() {
+  const session = await getSession();
+  const quota = session
+    ? await quotaStatus(session.memberId).catch(() => undefined)
+    : undefined;
   let content: React.ReactNode;
   try {
     const papers = await getPapers();
@@ -35,7 +41,7 @@ export default async function LibraryPage() {
 
   return (
     <>
-      <Topbar crumbs={[{ label: "논문" }]} actions={<UploadButton />} />
+      <Topbar crumbs={[{ label: "논문" }]} actions={<UploadButton quota={quota} />} />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">{content}</div>
       </div>

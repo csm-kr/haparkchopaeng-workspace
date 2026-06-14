@@ -9,7 +9,7 @@ const { prismaMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
-const { paperWeeklyLimit, isPaperQuotaExceeded } = await import("@/lib/rate-limit");
+const { paperWeeklyLimit, isPaperQuotaExceeded, quotaStatus } = await import("@/lib/rate-limit");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -68,5 +68,26 @@ describe("isPaperQuotaExceeded", () => {
     const since = arg.where.uploadedAt.gte as Date;
     // 대략 7일 전(±2초) 시점부터 집계.
     expect(Math.abs(since.getTime() - before)).toBeLessThan(2000);
+  });
+});
+
+describe("quotaStatus", () => {
+  it("운영 한도에서 used·remaining을 돌려준다", async () => {
+    vi.stubEnv("PAPER_WEEKLY_LIMIT", "20");
+    prismaMock.paper.count.mockResolvedValue(7);
+    expect(await quotaStatus("ha")).toEqual({ limit: 20, used: 7, remaining: 13 });
+  });
+
+  it("한도를 넘겨도 remaining은 0(음수 아님)", async () => {
+    vi.stubEnv("PAPER_WEEKLY_LIMIT", "20");
+    prismaMock.paper.count.mockResolvedValue(25);
+    expect((await quotaStatus("ha")).remaining).toBe(0);
+  });
+
+  it("무제한(한도≤0)이면 remaining=null, used는 집계", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PAPER_WEEKLY_LIMIT", "0");
+    prismaMock.paper.count.mockResolvedValue(3);
+    expect(await quotaStatus("ha")).toEqual({ limit: 0, used: 3, remaining: null });
   });
 });

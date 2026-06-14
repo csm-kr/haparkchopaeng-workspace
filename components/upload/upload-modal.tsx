@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Plus, UploadCloud, X } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui";
+import type { QuotaStatus } from "@/lib/rate-limit";
 
 // 업로드 모달 — 인터랙티브 섬(ADR-015). PDF 드래그앤드롭 또는 arXiv URL(ADR-003).
 // CRITICAL: PDF 전용 — PPTX/MD·빈 노트/아이디어 메모 단축 없음(R12/ADR-003).
@@ -36,7 +37,7 @@ function isPdf(file: File): boolean {
 
 type Step = "idle" | "uploading" | "done";
 
-export function UploadButton() {
+export function UploadButton({ quota }: { quota?: QuotaStatus }) {
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -45,12 +46,18 @@ export function UploadButton() {
         <Plus size={14} aria-hidden="true" />
         논문 올리기
       </Button>
-      {open && <UploadModal onClose={() => setOpen(false)} />}
+      {open && <UploadModal quota={quota} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function UploadModal({ onClose }: { onClose: () => void }) {
+function UploadModal({
+  quota,
+  onClose,
+}: {
+  quota?: QuotaStatus;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [step, setStep] = React.useState<Step>("idle");
   const [dragging, setDragging] = React.useState(false);
@@ -66,6 +73,11 @@ function UploadModal({ onClose }: { onClose: () => void }) {
   }
 
   async function uploadFile(file: File) {
+    // 한도 소진 시 시도 자체를 막고 안내(서버도 429로 막지만 UX상 미리 차단).
+    if (quota?.remaining === 0) {
+      setFileError("이번 주 분석 한도를 다 썼어요.");
+      return;
+    }
     // PDF 전용 검증 — 인라인 에러, 업로드 시도하지 않는다(R12/R30).
     if (!isPdf(file)) {
       setFileError("PDF만 올릴 수 있어요.");
@@ -108,6 +120,10 @@ function UploadModal({ onClose }: { onClose: () => void }) {
   }
 
   async function importArxiv() {
+    if (quota?.remaining === 0) {
+      setArxivError("이번 주 분석 한도를 다 썼어요.");
+      return;
+    }
     const value = arxivUrl.trim();
     if (!value) {
       setArxivError("arXiv 주소를 입력해주세요.");
@@ -159,6 +175,18 @@ function UploadModal({ onClose }: { onClose: () => void }) {
             <X size={16} aria-hidden="true" />
           </button>
         </div>
+
+        {quota && quota.limit > 0 && (
+          <p className="text-[12px] text-fg-subtle">
+            이번 주 분석{" "}
+            <span className="font-mono text-fg">
+              {quota.used}/{quota.limit}
+            </span>
+            {quota.remaining === 0 && (
+              <span className="text-busy"> · 한도를 다 썼어요</span>
+            )}
+          </p>
+        )}
 
         {/* PDF 전용 드롭존 */}
         <div
