@@ -32,6 +32,7 @@ describe("createLiveInput", () => {
           rtmps: { url: "rtmps://live", streamKey: "KEY" },
           srt: { url: "srt://live", streamId: "sid", passphrase: "PASS" },
           playback: { hls: "https://hls/manifest.m3u8" },
+          webRTC: { url: "https://cf/webRTC/publish" },
         },
       }),
     });
@@ -43,6 +44,7 @@ describe("createLiveInput", () => {
       rtmps: { url: "rtmps://live", streamKey: "KEY" },
       srt: { url: "srt://live", streamId: "sid", passphrase: "PASS" },
       playback: { hls: "https://hls/manifest.m3u8" },
+      webRTC: { url: "https://cf/webRTC/publish" },
     });
 
     const [url, opts] = fetchMock.mock.calls[0];

@@ -8,7 +8,7 @@ import { broadcastLive } from "@/lib/realtime";
 // POST /api/live/start — 라이브 시작(발표자). 🔒
 // CRITICAL: 동시 active 세션은 1개 — 이미 있으면 409(ADR-001/R1·R6).
 // CRITICAL: presenterId는 세션에서 취한다 — 클라 입력 미신뢰(R3).
-// CRITICAL: Stream Key(rtmps.streamKey/srt.passphrase)는 발표자=호출자에게만(SECURITY/R7·R36).
+// CRITICAL: 송출 자격증명(rtmps.streamKey/srt.passphrase/webRTC.url)은 발표자=호출자에게만(SECURITY/R7·R36).
 export async function POST(): Promise<Response> {
   try {
     const session = await requireAuth();
@@ -49,6 +49,7 @@ export async function POST(): Promise<Response> {
         },
         rtmps: input.rtmps,
         srt: input.srt,
+        webRTC: input.webRTC,
         playback: input.playback,
       },
       201,

@@ -5,6 +5,7 @@ import { Copy, Radio, Video } from "lucide-react";
 import { useLive } from "@/components/providers";
 import { Avatar, Badge, Button, Card, EmptyState } from "@/components/ui";
 import { HlsPlayer } from "./hls-player";
+import { BroadcastPanel } from "./broadcast-panel";
 
 // 세미나 라이브 룸 — 'use client' 인터랙티브 섬(R32).
 // CRITICAL: `live`는 화면 state로 보관하지 않는다 — 앱 레벨 useLive()가 단일 소스(ADR-001/R5).
@@ -36,6 +37,7 @@ export interface LiveRoomProps {
 interface Credentials {
   rtmps: { url: string; streamKey: string };
   srt: { url: string; streamId: string; passphrase: string };
+  webRTC: { url: string };
 }
 
 /** 시작/입장/종료/나가기 중 에러 분기. */
@@ -128,7 +130,11 @@ export function LiveRoom({
         presenterId: j.data.session.presenterId,
         participantIds: [j.data.session.presenterId],
       });
-      setCredentials({ rtmps: j.data.rtmps, srt: j.data.srt });
+      setCredentials({
+        rtmps: j.data.rtmps,
+        srt: j.data.srt,
+        webRTC: j.data.webRTC,
+      });
       setLive(true); // 낙관적 — Realtime이 확정(R33)
     } catch {
       setStartError("error");
@@ -322,7 +328,7 @@ export function LiveRoom({
   );
 }
 
-/** 발표자 송출 안내 — RTMPS/Stream Key·SRT를 복사 버튼으로. 본인에게만 보인다(R7). */
+/** 발표자 송출 — 브라우저 송출(BroadcastPanel) + OBS 폴백(접이식). 본인에게만 보인다(R7). */
 function PresenterPanel({ credentials }: { credentials: Credentials | null }) {
   if (!credentials) {
     // 새로고침 등으로 자격증명이 없으면(키는 시작 시 1회만) graceful 안내(R30).
@@ -337,18 +343,31 @@ function PresenterPanel({ credentials }: { credentials: Credentials | null }) {
     );
   }
   return (
-    <Card className="flex flex-col gap-4 p-4">
-      <div className="flex flex-col gap-1">
-        <p className="text-[13px] font-semibold text-fg">발표자 송출 정보</p>
-        <p className="text-[12px] text-fg-muted">
-          OBS 등에 아래 정보를 넣어 송출하세요. 이 정보는 발표자 본인에게만 보여요.
-        </p>
-      </div>
-      <CopyField label="RTMPS URL" value={credentials.rtmps.url} />
-      <CopyField label="Stream Key" value={credentials.rtmps.streamKey} secret />
-      <CopyField label="SRT URL" value={credentials.srt.url} />
-      <CopyField label="SRT Passphrase" value={credentials.srt.passphrase} secret />
-    </Card>
+    <div className="flex flex-col gap-3">
+      {/* 기본: 브라우저에서 바로 송출(화면공유+마이크 → WHIP). */}
+      <BroadcastPanel webRTCUrl={credentials.webRTC?.url ?? null} />
+
+      {/* 고급: OBS 등 외부 인코더로 송출(폴백). 자격증명은 발표자 본인에게만(R7). */}
+      <details className="rounded-lg border border-border-token bg-bg-subtle p-3">
+        <summary className="cursor-pointer text-[12px] font-medium text-fg-muted">
+          고급: OBS로 송출
+        </summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <p className="text-[12px] text-fg-muted">
+            OBS 등 외부 인코더에 아래 정보를 넣어 송출할 수도 있어요. 이 정보는 발표자
+            본인에게만 보여요.
+          </p>
+          <CopyField label="RTMPS URL" value={credentials.rtmps.url} />
+          <CopyField label="Stream Key" value={credentials.rtmps.streamKey} secret />
+          <CopyField label="SRT URL" value={credentials.srt.url} />
+          <CopyField
+            label="SRT Passphrase"
+            value={credentials.srt.passphrase}
+            secret
+          />
+        </div>
+      </details>
+    </div>
   );
 }
 

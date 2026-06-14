@@ -40,6 +40,9 @@ const { prismaMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
+// figure-render는 mupdf(wasm)·sharp를 끌어오므로 모킹한다(오케스트레이션은 deps로 가짜를 주입).
+vi.mock("@/lib/figure-render", () => ({ renderFigures: vi.fn() }));
+
 // 모킹 후에 import — 모듈이 모킹된 의존성을 받도록.
 const { analyzePaper, extractAnalysis, extractFigures } = await import(
   "@/lib/analysis"
@@ -133,7 +136,7 @@ describe("Gemini 추출 (extractAnalysis)", () => {
 });
 
 describe("Gemini figure 추출 (extractFigures)", () => {
-  it("figure 메타/해석을 매핑하고 imageUrl은 null로 둔다(I-1)", async () => {
+  it("box 없는 figure는 box=null·imageUrl=null로 둔다(렌더 단계가 채움)", async () => {
     generateContentMock.mockResolvedValue({
       text: JSON.stringify({
         figures: [
@@ -148,11 +151,55 @@ describe("Gemini figure 추출 (extractFigures)", () => {
         caption: "캡션",
         interpretation: "해석",
         sourcePage: 3,
+        box: null,
         imageUrl: null,
       },
     ]);
     const arg = generateContentMock.mock.calls[0][0];
     expect(arg.config.responseSchema.properties).toHaveProperty("figures");
+    // box는 스키마에 있지만 required는 아니다(Gemini가 못 잡으면 생략 — fallback이 동작해야 함).
+    const itemProps = arg.config.responseSchema.properties.figures.items.properties;
+    expect(itemProps).toHaveProperty("box");
+    expect(
+      arg.config.responseSchema.properties.figures.items.required,
+    ).not.toContain("box");
+  });
+
+  it("box(0–1000 정규화)가 오면 FigureExtract.box로 파싱한다", async () => {
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        figures: [
+          {
+            title: "Figure 2",
+            caption: "c",
+            interpretation: "i",
+            sourcePage: 5,
+            box: { ymin: 100, xmin: 200, ymax: 600, xmax: 800 },
+          },
+        ],
+      }),
+    });
+    const figs = await extractFigures(Buffer.from("x"));
+    expect(figs[0].box).toEqual({ ymin: 100, xmin: 200, ymax: 600, xmax: 800 });
+    expect(figs[0].imageUrl).toBeNull();
+  });
+
+  it("box 좌표가 하나라도 숫자가 아니면 box=null(방어적)", async () => {
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        figures: [
+          {
+            title: "F",
+            caption: "c",
+            interpretation: "i",
+            sourcePage: 1,
+            box: { ymin: 1, xmin: 2, ymax: "x", xmax: 4 },
+          },
+        ],
+      }),
+    });
+    const figs = await extractFigures(Buffer.from("x"));
+    expect(figs[0].box).toBeNull();
   });
 });
 
@@ -161,6 +208,7 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
     loadPdf: vi.fn(),
     extractAnalysis: vi.fn(),
     extractFigures: vi.fn(),
+    renderFigures: vi.fn(),
   };
 
   beforeEach(() => {
@@ -169,8 +217,16 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
       lens === "research" ? research : repro,
     );
     deps.extractFigures.mockResolvedValue([
-      { title: "F1", caption: "c", interpretation: "i", sourcePage: 2, imageUrl: null },
+      { title: "F1", caption: "c", interpretation: "i", sourcePage: 2, box: null, imageUrl: null },
     ]);
+    // 기본은 passthrough(imageUrl 그대로 null) — 렌더가 채우는 케이스는 개별 테스트에서 덮어쓴다.
+    deps.renderFigures.mockImplementation(
+      async (
+        _pdf: Buffer,
+        _paperId: string,
+        figs: Array<{ imageUrl: string | null }>,
+      ) => figs,
+    );
     prismaMock.job.create.mockResolvedValue({ id: "job1" });
     prismaMock.job.update.mockResolvedValue({});
     prismaMock.paper.update.mockResolvedValue({});
@@ -219,6 +275,22 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
     expect(prismaMock.job.update).toHaveBeenCalledWith({
       where: { id: "job1" },
       data: { status: "done" },
+    });
+  });
+
+  it("renderFigures가 채운 imageUrl이 Figure 저장(createMany)에 반영된다", async () => {
+    deps.renderFigures.mockImplementation(
+      async (
+        _pdf: Buffer,
+        _paperId: string,
+        figs: Array<{ imageUrl: string | null }>,
+      ) => figs.map((f, i) => ({ ...f, imageUrl: `figures/p1/${i}.png` })),
+    );
+
+    await analyzePaper("p1", deps);
+
+    expect(prismaMock.figure.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ title: "F1", imageUrl: "figures/p1/0.png" })],
     });
   });
 

@@ -1,7 +1,7 @@
 import { requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { removeObject } from "@/lib/storage";
+import { removeObject, removeFolder } from "@/lib/storage";
 
 // DELETE /api/papers/:id — 논문 삭제. ✍️ 올린 사람 또는 관리자만(SECURITY).
 // CRITICAL: 권한은 세션에서 — 클라가 보낸 식별자 미신뢰(R3).
@@ -24,6 +24,7 @@ export async function DELETE(
 
     await prisma.paper.delete({ where: { id } }); // cascade: 분석/figure/노트
     await removeObject(paper.pdfUrl); // 원문 PDF 정리(실패해도 무시)
+    await removeFolder(`figures/${id}`); // figure 이미지 정리(best-effort)
 
     return ok({ id });
   } catch (e) {

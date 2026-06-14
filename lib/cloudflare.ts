@@ -31,6 +31,8 @@ export interface LiveInput {
   rtmps: { url: string; streamKey: string };
   /** 송출 자격증명(SRT) — 발표자 본인에게만 노출(SECURITY/R36). */
   srt: { url: string; streamId: string; passphrase: string };
+  /** 브라우저 송출용 WHIP publish URL — 발표자 본인에게만 노출(SECURITY/R36). */
+  webRTC: { url: string };
   /** 시청자용 재생 정보(HLS). */
   playback: { hls: string };
 }
@@ -119,6 +121,7 @@ interface CloudflareLiveInput {
   uid: string;
   rtmps: { url: string; streamKey: string };
   srt: { url: string; streamId: string; passphrase: string };
+  webRTC?: { url?: string };
   playback?: { hls?: string };
 }
 
@@ -131,6 +134,7 @@ function mapLiveInput(r: CloudflareLiveInput): LiveInput {
       streamId: r.srt.streamId,
       passphrase: r.srt.passphrase,
     },
+    webRTC: { url: r.webRTC?.url ?? "" },
     playback: { hls: r.playback?.hls ?? "" },
   };
 }

@@ -98,9 +98,10 @@ function UploadModal({ onClose }: { onClose: () => void }) {
       done(paper.id);
     } catch (e) {
       setStep("idle");
+      // 서버가 준 메시지(한도 초과·30쪽 초과 등)를 그대로 노출한다 — 원인을 알려야 한다(R30).
       setFileError(
         e instanceof Error
-          ? "업로드가 안 됐어요. 파일을 확인하고 다시 시도해주세요."
+          ? e.message
           : "업로드가 안 됐어요. 파일을 확인하고 다시 시도해주세요.",
       );
     }
@@ -122,9 +123,12 @@ function UploadModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ arxivUrl: value }),
       });
       done(paper.id);
-    } catch {
+    } catch (e) {
       setStep("idle");
-      setArxivError("arXiv 주소를 확인해주세요.");
+      // 서버 메시지(한도 초과·30쪽 초과 등)를 그대로 노출한다(R30).
+      setArxivError(
+        e instanceof Error ? e.message : "arXiv 주소를 확인해주세요.",
+      );
     }
   }
 

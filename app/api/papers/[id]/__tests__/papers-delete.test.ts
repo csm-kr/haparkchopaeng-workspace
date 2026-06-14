@@ -13,8 +13,14 @@ const { prismaMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
-const { removeObjectMock } = vi.hoisted(() => ({ removeObjectMock: vi.fn() }));
-vi.mock("@/lib/storage", () => ({ removeObject: removeObjectMock }));
+const { removeObjectMock, removeFolderMock } = vi.hoisted(() => ({
+  removeObjectMock: vi.fn(),
+  removeFolderMock: vi.fn(),
+}));
+vi.mock("@/lib/storage", () => ({
+  removeObject: removeObjectMock,
+  removeFolder: removeFolderMock,
+}));
 
 const { DELETE } = await import("@/app/api/papers/[id]/route");
 
@@ -24,6 +30,7 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 beforeEach(() => {
   vi.clearAllMocks();
   removeObjectMock.mockResolvedValue(undefined);
+  removeFolderMock.mockResolvedValue(undefined);
   prismaMock.paper.delete.mockResolvedValue({});
 });
 
@@ -63,6 +70,7 @@ describe("DELETE /api/papers/:id", () => {
     expect(res.status).toBe(200);
     expect(prismaMock.paper.delete).toHaveBeenCalledWith({ where: { id: "p1" } });
     expect(removeObjectMock).toHaveBeenCalledWith("papers/p1.pdf");
+    expect(removeFolderMock).toHaveBeenCalledWith("figures/p1");
   });
 
   it("관리자라도 남의 논문은 삭제할 수 없다(작성자만) — 403", async () => {

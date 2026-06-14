@@ -1,0 +1,34 @@
+{
+  "project": "하박조팽",
+  "phase": "2-figure-extraction",
+  "steps": [
+    {
+      "step": 0,
+      "name": "figure-bbox-schema",
+      "status": "completed",
+      "summary": "lib/analysis.ts: FigureBox 타입·FIGURES_SCHEMA에 box(OBJECT ymin/xmin/ymax/xmax INTEGER, required 제외)·FIGURES_PROMPT box 지시·FigureExtract.box·extractFigures parseBox 추가. DB 무변경. 테스트 3종 신규(box없음→null·box파싱·비숫자→null) + 기존 extractFigures 테스트 box:null 갱신. tsc·vitest(analysis 10) 통과",
+      "completed_at": "2026-06-14T16:14:30+0900"
+    },
+    {
+      "step": 1,
+      "name": "figure-render",
+      "status": "completed",
+      "summary": "lib/figure-render.ts(신규): renderFigures — mupdf로 페이지 150dpi 래스터화(인덱스별 1회 캐시)→box 유효시 sharp 크롭, 무효/없음시 페이지 fallback→uploadPng(figures/{paperId}/{i}.png)→imageUrl=경로. figure 단위 try/catch 격리(R28), 경로만 저장(R36). lib/storage.uploadPng 추가(image/png, upsert). next.config serverExternalPackages=[mupdf,sharp]. 의존성 mupdf@1.27·sharp@0.35 설치. 테스트 6종(크롭좌표·fallback·폭0무효·페이지1회·클램프·업로드실패격리) 통과",
+      "completed_at": "2026-06-14T16:20:30+0900"
+    },
+    {
+      "step": 2,
+      "name": "analysis-orchestration",
+      "status": "completed",
+      "summary": "lib/analysis.ts: AnalyzePaperDeps에 renderFigures 추가·realDeps 연결·analyzePaper에서 extractFigures 직후/persist 직전에 renderFigures로 imageUrl 채움(방어적 try, 렌더 실패해도 메타 보존 R28). analysis.test.ts: figure-render mock(mupdf 로드 차단)·deps.renderFigures passthrough·imageUrl 전파 테스트 추가. tsc·vitest(analysis 11) 통과",
+      "completed_at": "2026-06-14T16:23:00+0900"
+    },
+    {
+      "step": 3,
+      "name": "figure-image-serving",
+      "status": "completed",
+      "summary": "app/api/figures/[id]/image/route.ts(신규): requireAuth→figure.imageUrl 조회→없으면 404·있으면 signedDownloadUrl(60s) 302(PDF 라우트 동일 패턴, R36). lib/papers.ts figure 매핑을 imageUrl=경로→/api/figures/{id}/image(없으면 null)로 변환. lib/storage.removeFolder 추가(prefix 아래 일괄 삭제, best-effort). app/api/papers/[id] 삭제 시 removeFolder(figures/{id}) 정리. analysis-view.tsx 무변경. 테스트: figures-image 4종(302·imageUrl null 404·없음 404·미인증) + papers-delete에 removeFolder 검증. tsc·vitest(전체 199) 통과. ※ npm run build는 dev 실행 중이라 보류(.next 보호)",
+      "completed_at": "2026-06-14T16:27:30+0900"
+    }
+  ]
+}

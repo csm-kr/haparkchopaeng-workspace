@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
-import { fail, ok, toErrorResponse } from "@/lib/http";
+import { fail, HttpError, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { arxivPdfUrl, parseArxivId } from "@/lib/arxiv";
-import { uploadPdf } from "@/lib/storage";
+import { removeObject, signedDownloadUrl, uploadPdf } from "@/lib/storage";
+import { isPaperQuotaExceeded, paperWeeklyLimit } from "@/lib/rate-limit";
+import { countPdfPages } from "@/lib/pdf";
 import { inngest } from "@/lib/inngest";
 
 // POST /api/papers — PDF 업로드(프리사인 경로) 또는 arXiv URL로 Paper 생성.
@@ -13,6 +15,9 @@ import { inngest } from "@/lib/inngest";
 //   요청 경로에서 인라인 실행하지 않는다 — 다음 step의 잡이 처리한다(ADR-013→016).
 // CRITICAL: 업로더(uploadedBy)는 세션에서 취한다 — 클라 입력 미신뢰(R3).
 // CRITICAL: arXiv fetch는 arxiv.org 화이트리스트(SSRF) — parseArxivId가 호스트를 강제한다.
+// 비용 가드: ① 주간 업로드 한도(인당, Gemini 비용 통제, lib/rate-limit) ② 30쪽 초과 PDF 거부.
+
+const MAX_PAGES = 30; // 30쪽 초과 PDF는 받지 않는다(분석 비용·토큰 상한).
 
 const FileBody = z.object({
   objectPath: z.string().min(1),
@@ -22,6 +27,28 @@ const ArxivBody = z.object({ arxivUrl: z.string().min(1) });
 
 function hasKey(body: unknown, key: string): boolean {
   return typeof body === "object" && body !== null && key in body;
+}
+
+/** PDF 페이지 수 제한(≤30쪽). 초과/판독불가면 HttpError를 던진다(toErrorResponse가 응답으로 변환). */
+async function assertPageLimit(bytes: ArrayBuffer): Promise<number> {
+  let pages: number;
+  try {
+    pages = await countPdfPages(bytes);
+  } catch {
+    throw new HttpError(
+      400,
+      "BAD_REQUEST",
+      "PDF를 읽을 수 없어요. 다른 파일로 시도해주세요.",
+    );
+  }
+  if (pages > MAX_PAGES) {
+    throw new HttpError(
+      413,
+      "PDF_TOO_LONG",
+      `30쪽 이하 PDF만 올릴 수 있어요. (지금 ${pages}쪽)`,
+    );
+  }
+  return pages;
 }
 
 // 분석은 요청 경로가 아니라 Inngest 잡에서 실행한다(R31/ADR-013→016). 잡 적재만 하고 즉시 응답.
@@ -37,6 +64,16 @@ async function triggerAnalysis(paperId: string): Promise<void> {
 export async function POST(req: Request): Promise<Response> {
   try {
     const session = await requireAuth();
+
+    // 주간 업로드 한도(인당) — Gemini 비용 통제. 초과면 429(어느 경로든 생성 전에 차단).
+    if (await isPaperQuotaExceeded(session.memberId)) {
+      return fail(
+        429,
+        "TOO_MANY_REQUESTS",
+        `이번 주 분석 한도(${paperWeeklyLimit()}편)를 다 썼어요. 다음 주에 다시 올려주세요.`,
+      );
+    }
+
     const body: unknown = await req.json().catch(() => null);
 
     // --- arXiv 경로: 서버가 arxiv.org PDF를 가져와 스토리지에 저장 ---
@@ -58,13 +95,18 @@ export async function POST(req: Request): Promise<Response> {
         return fail(415, "UNSUPPORTED_MEDIA_TYPE", "PDF만 올릴 수 있어요.");
       }
 
+      // 30쪽 제한: 업로드/생성 전에 페이지 수를 확인한다(초과면 throw → 저장하지 않음).
+      const bytes = await res.arrayBuffer();
+      const pageCount = await assertPageLimit(bytes);
+
       const path = `papers/${randomUUID()}.pdf`;
-      await uploadPdf(path, await res.arrayBuffer());
+      await uploadPdf(path, bytes);
       const paper = await prisma.paper.create({
         data: {
           title: `arXiv:${id}`,
           authors: "",
           arxiv: id,
+          pageCount,
           pdfUrl: path,
           uploadedBy: session.memberId,
           analysisStatus: "pending",
@@ -87,12 +129,29 @@ export async function POST(req: Request): Promise<Response> {
       return fail(415, "UNSUPPORTED_MEDIA_TYPE", "PDF만 올릴 수 있어요.");
     }
 
+    // 30쪽 제한: 이미 스토리지에 올라간 객체(프리사인 업로드)를 내려받아 페이지 수를 확인한다.
+    const url = await signedDownloadUrl(parsed.data.objectPath, 120);
+    const dl = await fetch(url);
+    if (!dl.ok) {
+      return fail(502, "BAD_GATEWAY", "업로드한 파일을 확인하지 못했어요.");
+    }
+    const bytes = await dl.arrayBuffer();
+    let pageCount: number;
+    try {
+      pageCount = await assertPageLimit(bytes);
+    } catch (e) {
+      // 한도 위반(또는 판독 불가) 업로드는 고아 객체로 남지 않게 정리한다(best-effort).
+      await removeObject(parsed.data.objectPath);
+      throw e;
+    }
+
     // 제목은 파일명에서 유도 — 실제 메타는 분석 잡이 채운다(pending).
     const title = parsed.data.filename.replace(/\.pdf$/i, "");
     const paper = await prisma.paper.create({
       data: {
         title,
         authors: "",
+        pageCount,
         pdfUrl: parsed.data.objectPath,
         uploadedBy: session.memberId,
         analysisStatus: "pending",

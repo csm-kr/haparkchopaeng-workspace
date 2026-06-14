@@ -9,6 +9,14 @@
       "dir": "1-live",
       "status": "completed",
       "completed_at": "2026-06-13T23:40:17+0900"
+    },
+    {
+      "dir": "2-figure-extraction",
+      "status": "pending"
+    },
+    {
+      "dir": "3-team-bootstrap",
+      "status": "pending"
     }
   ]
 }
