@@ -64,7 +64,7 @@
       "status": "completed",
       "started_at": "2026-06-14T23:10:25+0900",
       "summary": "global.spec.ts 신규 작성(전역 인터랙션 비파괴 QA): ① 사이드바 내비게이션 — role=navigation '주요 메뉴'에서 논문/발표 자료/스케쥴 클릭→URL+활성 링크 aria-current=page(셸 재렌더 증거), 스케쥴은 h1 '세미나 스케줄'도 확인(데이터 무관). ② 로그아웃 — 셸에 로그아웃 버튼 부재(코드 확인)라 POST /api/auth/logout으로 세션 쿠키만 파기(dev 세션은 Supabase IdP 세션 없음→공유 DB 불변)→/dashboard 재접근 시 홈 '다시 오셨네요'로 리다이렉트 단언. 명령 팔레트(Cmd/Ctrl+K)·통합 검색은 프로덕션 셸 미포팅(components/shell·app/(app) 코드 확인)이라 가정 단언 없이 생략+주석/리포트 사유. 타이밍 플레이크(6워커×원격 Supabase×Next dev 온디맨드, toHaveURL 5s 간헐 초과) 대응으로 playwright.config retries:2 추가(단언 불변, 회귀 미은폐). QA_REPORT.md 작성. 전체 16 passed·1 skip(단일 관리자 team ⋯메뉴)·0 failed, 종료 코드 0.",
-      "completed_at": "2026-06-14T23:18:24+0900"
+      "completed_at": "2026-06-14T23:19:15+0900"
     }
   ],
   "created_at": "2026-06-14T22:35:47+0900"
