@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-06-14T22:39:02+0900",
       "summary": "meeting.spec.ts에 F1 비파괴 분기 추가: 빈 상태 카피+[라이브 시작] 노출·활성(클릭 금지) 단언, 그리고 사이드바 [스케쥴] 링크로 /schedule 비파괴 내비 검증(빈 상태 [스케줄 보기] CTA는 프로덕션 미포팅—R21 단일 CTA). meeting 2 passed, 전체 9 passed·1 skip.",
-      "completed_at": "2026-06-14T22:46:00+0900"
+      "completed_at": "2026-06-14T22:44:33+0900"
     },
     {
       "step": 2,
