@@ -55,8 +55,13 @@ export function Sidebar({
         collapsed ? "w-[64px]" : "w-[260px]",
       )}
     >
-      {/* 로고 + 접기 토글 */}
-      <div className="flex items-center gap-2 px-3 py-4">
+      {/* 로고 + 접기 토글 — 접히면 64px 폭에 로고+토글이 안 들어가 겹치므로 세로로 쌓는다 */}
+      <div
+        className={cn(
+          "flex px-3 py-4",
+          collapsed ? "flex-col items-center gap-2" : "items-center gap-2",
+        )}
+      >
         <Link
           href="/dashboard"
           className="flex min-w-0 items-center gap-2"
@@ -75,7 +80,10 @@ export function Sidebar({
           type="button"
           onClick={onToggleCollapse}
           aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-          className="ml-auto grid size-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg"
+          className={cn(
+            "grid size-8 shrink-0 place-items-center rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg",
+            !collapsed && "ml-auto",
+          )}
         >
           {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
         </button>
