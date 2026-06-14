@@ -75,10 +75,10 @@ export function AuthScreen({
         <div className="relative z-10">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-md bg-accent text-[15px] font-bold text-accent-fg">
-              하박
+              모모
             </div>
             <div>
-              <div className="text-[17px] font-bold tracking-[-0.02em]">하박조팽</div>
+              <div className="text-[17px] font-bold tracking-[-0.02em]">모두의모임</div>
               <div className="mt-0.5 text-xs text-fg-muted">research workspace</div>
             </div>
           </div>
@@ -109,7 +109,7 @@ export function AuthScreen({
           </ul>
         </div>
 
-        <div className="relative z-10 text-xs text-fg-faint">© 2026 하박조팽</div>
+        <div className="relative z-10 text-xs text-fg-faint">© 2026 모두의모임</div>
       </aside>
 
       {/* 우측 로그인 폼 */}
