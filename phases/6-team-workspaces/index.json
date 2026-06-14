@@ -1,0 +1,11 @@
+{
+  "project": "하박조팽",
+  "phase": "6-team-workspaces",
+  "steps": [
+    { "step": 0, "name": "team-data-model", "status": "pending" },
+    { "step": 1, "name": "team-create", "status": "pending" },
+    { "step": 2, "name": "invite-tokens", "status": "pending" },
+    { "step": 3, "name": "entry-flow", "status": "pending" },
+    { "step": 4, "name": "team-ui", "status": "pending" }
+  ]
+}
