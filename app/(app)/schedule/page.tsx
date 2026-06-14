@@ -1,9 +1,9 @@
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
-import { FinesPanel, ScheduleBoard } from "@/components/schedule";
+import { FinesPanel, RotationPanel, ScheduleBoard } from "@/components/schedule";
 import { getSession } from "@/lib/auth";
 import { getFines, getMonth, getScheduleMembers } from "@/lib/schedule";
-import { draftMonthAction, saveMonth, updateFines } from "./actions";
+import { draftMonthAction, reorderRotation, saveMonth, updateFines } from "./actions";
 
 // 스케줄 — RSC. 읽기는 서버에서 Prisma 직접(ADR-015/R32). 쓰기는 actions.ts(Server Action).
 // CRITICAL: 빈 달은 자동 생성하지 않는다 — GET이 row를 만들지 않는다(R15/ADR-006).
@@ -43,7 +43,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
             세미나 스케줄
           </h1>
           <p className="text-[13px] text-fg-muted">
-            매주 토요일 · 4주차 로테이션 · 매달 직접 편성
+            매주 토요일 · 멤버 로테이션 · 매달 직접 편성
           </p>
         </div>
 
@@ -58,9 +58,14 @@ export default async function SchedulePage({ searchParams }: PageProps) {
           onSave={saveMonth}
         />
 
+        <RotationPanel
+          members={members}
+          isAdmin={isAdmin}
+          onReorder={reorderRotation}
+        />
+
         <FinesPanel
           fines={fines}
-          members={members}
           isAdmin={isAdmin}
           onUpdate={updateFines}
         />

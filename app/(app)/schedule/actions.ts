@@ -5,13 +5,14 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { getFines } from "@/lib/schedule";
+import { getFines, getScheduleMembers } from "@/lib/schedule";
 import {
   draftMonth as draftWeeks,
   ensureVersion,
 } from "@/lib/schedule-logic";
 import type {
   FinesView,
+  MemberOption,
   SaveMonthResult,
   ScheduleMonthView,
   ScheduleWeekView,
@@ -40,9 +41,10 @@ export async function draftMonthAction(
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "잘못된 달이에요.");
   }
-  // 기본 순번: 1주차 하수현 → 박진희 → 조성민 → 팽진욱(매달 같은 순서로 시작).
-  // 5주차가 있으면 draftWeeks가 방학으로 둔다.
-  return draftWeeks(parsed.data.year, parsed.data.month, 0);
+  // 로테이션 = 실제 멤버(가입순). 1주차부터 멤버 순서대로 배정하고,
+  // 멤버 수를 넘는 자투리 주는 draftWeeks가 방학으로 둔다.
+  const rotation = (await getScheduleMembers()).map((m) => m.id);
+  return draftWeeks(parsed.data.year, parsed.data.month, 0, rotation);
 }
 
 const WeekInputSchema = z.object({
@@ -137,7 +139,7 @@ export async function saveMonth(input: {
   }
   const { year, month, version, weeks } = parsed.data;
 
-  // 순번은 매달 1주차 하수현부터 다시 시작(기본 순서). 5주차 방학은 슬롯을 쓰지 않는다.
+  // 순번은 매달 1주차(멤버 가입순 첫 번째)부터 다시 시작. 자투리 방학 주는 슬롯을 쓰지 않는다.
   const pointer = 0;
 
   try {
@@ -217,4 +219,28 @@ export async function updateFines(input: {
   const fines = await getFines(year);
   if (!fines) throw new HttpError(404, "NOT_FOUND", "벌금 설정이 없어요.");
   return fines;
+}
+
+const ReorderInput = z.array(z.string().min(1)).min(1);
+
+/** 로테이션 순서(iteration) 편성 — 관리자만(👑). 보낸 순서대로 rotationOrder를 1..N으로 굳힌다. */
+export async function reorderRotation(orderedIds: string[]): Promise<MemberOption[]> {
+  await requireRole("관리자");
+  const parsed = ReorderInput.safeParse(orderedIds);
+  if (!parsed.success) {
+    throw new HttpError(400, "BAD_REQUEST", "순서를 확인해주세요.");
+  }
+
+  // 실제 멤버 id만 신뢰(R3) — 보낸 목록에서 존재하는 것만, 보낸 순서대로.
+  const existing = await prisma.member.findMany({ select: { id: true } });
+  const valid = new Set(existing.map((m) => m.id));
+  const ids = parsed.data.filter((id) => valid.has(id));
+
+  await prisma.$transaction(
+    ids.map((id, i) =>
+      prisma.member.update({ where: { id }, data: { rotationOrder: i + 1 } }),
+    ),
+  );
+  revalidatePath("/schedule");
+  return getScheduleMembers();
 }

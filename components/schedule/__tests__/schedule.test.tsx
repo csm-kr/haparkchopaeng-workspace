@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScheduleBoard } from "../schedule-board";
 import { FinesPanel } from "../fines-panel";
+import { RotationPanel } from "../rotation-panel";
 import type {
   FinesView,
   MemberOption,
@@ -121,7 +122,6 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
     render(
       <FinesPanel
         fines={fines}
-        members={members}
         isAdmin={false}
         onUpdate={vi.fn()}
       />,
@@ -141,7 +141,6 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
     render(
       <FinesPanel
         fines={fines}
-        members={members}
         isAdmin={false}
         onUpdate={vi.fn()}
       />,
@@ -159,7 +158,6 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
     render(
       <FinesPanel
         fines={fines}
-        members={members}
         isAdmin
         onUpdate={onUpdate}
       />,
@@ -180,5 +178,28 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
     await waitFor(() =>
       expect(screen.getByText("60,000원")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("RotationPanel — 로테이션 편성(관리자)", () => {
+  it("관리자가 아니면 편성 버튼을 노출하지 않는다(👑)", () => {
+    render(
+      <RotationPanel members={members} isAdmin={false} onReorder={vi.fn()} />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "편성" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("관리자가 순서를 바꿔 저장하면 onReorder가 새 순서로 호출된다", async () => {
+    const onReorder = vi.fn(async () => members);
+    render(<RotationPanel members={members} isAdmin onReorder={onReorder} />);
+    fireEvent.click(screen.getByRole("button", { name: "편성" }));
+    // 1번 하수현(ha)을 아래로 → [bak, ha, jo, paeng]
+    fireEvent.click(screen.getByRole("button", { name: "하수현 아래로" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    });
+    expect(onReorder).toHaveBeenCalledWith(["bak", "ha", "jo", "paeng"]);
   });
 });
