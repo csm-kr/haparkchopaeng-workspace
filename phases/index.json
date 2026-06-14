@@ -21,6 +21,10 @@
     {
       "dir": "4-rotation-quota-e2e",
       "status": "completed"
+    },
+    {
+      "dir": "5-full-qa",
+      "status": "pending"
     }
   ]
 }

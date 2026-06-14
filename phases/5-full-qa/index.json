@@ -1,0 +1,49 @@
+{
+  "project": "하박조팽",
+  "phase": "5-full-qa",
+  "steps": [
+    {
+      "step": 0,
+      "name": "e2e-baseline",
+      "status": "completed",
+      "started_at": "2026-06-14T22:35:47+0900",
+      "summary": "playwright webServer를 next dev로 전환해 클린 상태에서 e2e 8 passed·1 skip. 사전 기동 dev 서버 의존 제거."
+    },
+    {
+      "step": 1,
+      "name": "live-flow",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "schedule-flow",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "upload-flow",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "paper-flow",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "presentation-flow",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "team-flow",
+      "status": "pending"
+    },
+    {
+      "step": 7,
+      "name": "global-flow",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-06-14T22:35:47+0900"
+}
