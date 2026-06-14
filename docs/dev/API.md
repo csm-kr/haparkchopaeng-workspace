@@ -72,11 +72,13 @@
 | GET | `/api/schedule/:year/:month` | 해당 월(없으면 `null` = 빈 달) + `version` | 🔒 |
 | POST | `/api/schedule/:year/:month/draft` | 초안 생성(서버가 토요일·순번 계산) | 🔒 |
 | PUT | `/api/schedule/:year/:month` | 저장(영속화 + 순번 포인터 전진) — `If-Match: <version>` | 🔒 |
+| PUT | `/api/schedule/rotation` | 로테이션 순번(iteration) 편성 — 멤버 순서 저장(`Member.rotationOrder`) | 👑 |
 | GET | `/api/fines/:year` | 벌금 설정 + 멤버 장부 | 🔒 |
 | PUT | `/api/fines/:year` | 벌금 금액 수정 | 👑 |
 
 - **CRITICAL: GET이 월을 자동 생성하지 않는다.** 없으면 `data: null`을 반환할 뿐, row를 만들지 않는다(ADR-006).
 - **순번 포인터 전진은 PUT(저장) 시 서버에서 원자적으로** 처리한다. 클라이언트가 포인터를 보내지 않는다.
+- **로테이션 순번(iteration)은 멤버에 저장**한다(`Member.rotationOrder`). 초안(draft) 발표자 배정은 이 순서를 따르고, 순서가 없으면 가입순(`createdAt`)으로 fallback. 순서 편성은 관리자(👑)만.
 - **CRITICAL: 동시 편집 충돌은 낙관적 락으로.** PUT은 `If-Match`로 보낸 `version`이 현재와 다르면 `409` "다른 사람이 먼저 저장했어요"(→ [`./DB.md`](./DB.md) `ScheduleMonth.version`).
 - 누적 벌금·미납은 서버에서 파생 계산해 응답에 포함(저장 안 함).
 

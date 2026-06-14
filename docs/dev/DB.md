@@ -57,6 +57,7 @@ model Member {
   presence   String  @default("offline") // online | away | busy | offline
   status     String?
   availability String @default("active") // active | vacation
+  rotationOrder Int?   // 로테이션 순번(iteration). null이면 가입순(createdAt) fallback
   createdAt  DateTime @default(now())
 }
 
@@ -279,7 +280,9 @@ model Job {
 
 ## 시드 데이터
 
-`src/data.js`의 `window.TEAM/PAPERS/PRESENTATIONS/SCHEDULE/SEMINAR_STATS/ANALYSIS/PRES_EXTRA` 등을 시드 스크립트(`prisma/seed.ts`)로 옮긴다. 멤버 4인·논문 5건·발표 자료 3건·6월 스케줄·2026 장부가 최소 시드.
+초기 운영 시드(`prisma/seed.ts`)는 **단일 워크스페이스 + 관리자 1명**(실제 소유자)만 둔다 — 나머지 멤버·논문·발표·스케줄·장부는 실제 사용(초대·업로드·편성)으로 채워진다. 멤버는 관리자가 Team 화면에서 초대 → Google 로그인 시 자동 생성(초대 게이트, ADR-017).
+
+> (프로토타입 시절 목 데이터 — 멤버 4인·논문 5건·발표 3건·6월 스케줄·2026 장부 — 는 git 이력 참조. 운영 데이터를 실제 테스트로 채우기 위해 초기화했다.)
 
 ## 주의 (Don'ts)
 
