@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-06-14T22:44:33+0900",
       "summary": "schedule.spec.ts에 F4 비파괴 분기 2개 추가: 편집 모드 [취소] → 초안 폐기·빈 상태 복귀, 편집 중 [다음 달] 잠금(인라인 경고+달·URL 불변). [저장]은 누르지 않음([일정 짜기]=draftMonthAction은 순수 계산, 영속 쓰기 없음 코드 확인). schedule 3 passed, 전체 11 passed·1 skip.",
-      "completed_at": "2026-06-14T22:50:00+0900"
+      "completed_at": "2026-06-14T22:47:31+0900"
     },
     {
       "step": 3,
