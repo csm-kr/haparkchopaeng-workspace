@@ -23,7 +23,7 @@
       "name": "invite-tokens",
       "status": "completed",
       "started_at": "2026-06-15T08:11:17+0900",
-      "completed_at": "2026-06-15T08:28:00+0900",
+      "completed_at": "2026-06-15T08:28:48+0900",
       "summary": "초대를 이메일 매칭→랜덤 토큰 합류로 전환(ADR-018). schema: Invite 재설계(email/status/invitedBy 폐기 → teamId·token@unique·role(admin|member)·maxUses·usedCount·expiresAt·revokedAt·usedAt·createdBy + Team.invites 관계·@@index([teamId])). lib/invite.ts 전면 교체(서명 JWT 제거): generateInviteToken(randomBytes18.base64url)·inviteLink(/invite/{token})·createInvite(+7일)·getInviteForAcceptance(status 파생 not_found|revoked|expired|used_up|ready, 토큰 미노출)·acceptInvite($transaction+SELECT…FOR UPDATE 직렬화, 멱등/만료/회수/used_up, Membership+TeamInviteAcceptance+usedCount++). lib/invite-gate.ts: findOrCreateMember 추가(거부 없음), gateInvitedEmail은 멤버매칭만으로 단순화(step3에서 제거). API: POST/GET /api/invites(teamSlug·owner·admin만 isTeamAdmin, role admin|member)·DELETE [id](회수)·resend(활성시 링크). accept route 삭제. 소비처 컴파일 수정: PendingInviteView(이메일 제거·InviteRole·maxUses/usedCount)·lib/team.ts(invites:[])·team-manager(이메일 입력 제거, 토큰 초대 UI는 step4). 테스트 246 통과·build green. NOTE: 운영 Supabase prisma db push는 step 지시대로 미실행 — Invite 스키마 변경은 push 대기."
     },
     {
