@@ -48,7 +48,7 @@
       "status": "completed",
       "started_at": "2026-06-14T23:01:08+0900",
       "summary": "presentation.spec.ts에 F5 비파괴 조건부 테스트 추가: 기존 목록 스모크 유지 + 상세 검증. rows.count()===0이면 런타임 test.skip(발표 자료 유무 조건부), 있으면 첫 행 클릭→/presentations/:id 진입. 자료 뷰어 영역=h1 제목 노출, 회고 댓글 region(aria-label \"회고 댓글\")+입력 textarea(getByLabel \"댓글 내용\") 노출 단언. 댓글은 fill(\"리뷰 테스트\")→toHaveValue까지만(전송 금지: Cmd/Ctrl+Enter·[보내기] 미클릭—공유 DB 영구 생성 방지). 공유 DB에 자료 존재→상세 경로 실행, presentation 2 passed, 전체 14 passed·0 skip.",
-      "completed_at": "2026-06-14T23:06:30+0900"
+      "completed_at": "2026-06-14T23:04:29+0900"
     },
     {
       "step": 6,
