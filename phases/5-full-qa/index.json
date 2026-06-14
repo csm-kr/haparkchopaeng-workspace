@@ -29,7 +29,10 @@
     {
       "step": 3,
       "name": "upload-flow",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-14T22:47:32+0900",
+      "summary": "upload.spec.ts에 F2 비파괴 분기 보강: 모달 열기→PDF 전용+arXiv 입력+[파일 선택] 어포던스, 주간 분석 한도 표시(/이번 주 분석 \\d+\\/\\d+/ 데이터-무관), 비-PDF 인라인 거부 1개 + 잘못된 arXiv(비-arxiv 호스트) 인라인 거부·모달 유지 1개. 실제 업로드/arXiv 가져오기는 끝까지 안 감(서버 400/415 검증선까지). playwright.config webServer에 PAPER_WEEKLY_LIMIT=20 주입(dev 무제한이면 한도 표시 숨김 게이트 우회—모달 한정, 타 spec 무영향). upload 2 passed, 전체 12 passed·1 skip.",
+      "completed_at": "2026-06-14T22:54:48+0900"
     },
     {
       "step": 4,

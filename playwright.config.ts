@@ -22,5 +22,9 @@ export default defineConfig({
     url: BASE_URL,
     timeout: 180_000,
     reuseExistingServer: !process.env.CI,
+    // dev(NODE_ENV=development)는 PAPER_WEEKLY_LIMIT 미설정 시 0(무제한)이라 업로드 모달의
+    // "이번 주 분석 N/M" 한도 표시가 숨겨진다(lib/rate-limit·quota.limit>0 게이트). e2e가 한도
+    // 표시를 검증할 수 있게 운영과 동일한 20을 주입한다(데이터 무관: remaining>0 유지 → 다른 분기 불변).
+    env: { PAPER_WEEKLY_LIMIT: "20" },
   },
 });
