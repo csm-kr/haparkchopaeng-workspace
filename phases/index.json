@@ -17,6 +17,10 @@
     {
       "dir": "3-team-bootstrap",
       "status": "pending"
+    },
+    {
+      "dir": "4-rotation-quota-e2e",
+      "status": "pending"
     }
   ]
 }

@@ -1,0 +1,9 @@
+{
+  "project": "하박조팽",
+  "phase": "4-rotation-quota-e2e",
+  "steps": [
+    { "step": 0, "name": "rotation-advance", "status": "completed", "summary": "draftMonthAction·saveMonth가 resolveStartIdx+nextPointer로 직전 저장월 순번을 이어받음(연속 전진). startIdx=0/pointer=0 하드코딩 제거, 멤버 수 가변 반영. test 210 통과, next build OK." },
+    { "step": 1, "name": "quota-display", "status": "completed", "summary": "lib/rate-limit에 quotaStatus(memberId)→{limit,used,remaining} 추가(usedThisWeek로 중복 제거). 업로드 모달에 '이번 주 분석 N/20' 표시 + remaining 0이면 차단. dashboard/library page가 quotaStatus 조회해 UploadButton에 props 전달. test 215, build OK." },
+    { "step": 2, "name": "e2e-refresh", "status": "pending" }
+  ]
+}
