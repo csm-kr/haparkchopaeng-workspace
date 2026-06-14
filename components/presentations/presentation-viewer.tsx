@@ -1,6 +1,7 @@
 import { FileText, History } from "lucide-react";
 import { Avatar, Badge, Card } from "@/components/ui";
 import { SlideDeck } from "./slide-deck";
+import { PdfSlideViewer } from "./pdf-slide-viewer";
 import type {
   AssetView,
   PresentationMeta,
@@ -28,6 +29,8 @@ export function PresentationViewer({
   versions,
 }: PresentationViewerProps) {
   const { summary, keypoints, slides } = presentation;
+  // 첨부 PDF가 있으면 인라인 슬라이드 뷰어로 임베드한다(PPTX/note는 다운로드 유지).
+  const pdf = assets.find((a) => a.type === "pdf");
 
   return (
     <div className="flex flex-col gap-5">
@@ -55,6 +58,14 @@ export function PresentationViewer({
       )}
 
       {slides.length > 0 && <SlideDeck slides={slides} />}
+
+      {pdf && (
+        <PdfSlideViewer
+          presentationId={presentation.id}
+          assetId={pdf.id}
+          name={presentation.title}
+        />
+      )}
 
       {assets.length > 0 && (
         <Card className="p-4">
