@@ -44,6 +44,41 @@ model Invite {
   // CRITICAL: 합류는 초대 토큰 검증을 통해서만(공개 가입 없음, ADR-007)
 }
 
+// --- 멀티팀 워크스페이스 (ADR-018) ---
+// 단일 테넌트 폐기 → 멀티팀. RLS 미사용·앱레벨 권한(ADR-016). 권한은 Membership.role로 팀별 분리.
+
+model Team {
+  id          String       @id @default(cuid())
+  slug        String       @unique // 앱 검증: ^[a-z][a-z0-9-]{1,23}$
+  name        String // 앱 검증: 2–30자
+  createdBy   String // Member.id
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  // 전역 팀 상한 MAX_TEAMS(기본 2)는 앱레벨에서 강제(ADR-018).
+}
+
+model Membership {
+  teamId   String
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId String // Member.id
+  role     String // owner | admin | member (앱에서 검증). owner는 초대 부여 불가·팀당 ≥ 1 (ADR-018)
+  joinedAt DateTime @default(now())
+
+  @@id([teamId, memberId])
+  @@index([memberId])
+}
+
+model TeamInviteAcceptance {
+  id           String   @id @default(cuid())
+  inviteId     String
+  teamId       String
+  memberId     String
+  acceptedRole String // 합류 시 부여된 역할(owner 제외) — admin | member
+  acceptedAt   DateTime @default(now())
+
+  @@unique([inviteId, memberId]) // 합류 감사: 같은 초대로 한 멤버 중복 합류 방지
+}
+
 model Paper {
   id             String        @id @default(cuid())
   title          String

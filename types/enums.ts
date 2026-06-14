@@ -9,6 +9,9 @@ export type NoteLens = Lens | "any";
 /** 멤버 역할 (ADR-007) */
 export type Role = "관리자" | "멤버" | "게스트";
 
+/** 팀별 역할 (ADR-018). owner는 초대 부여 불가·팀당 ≥ 1. UI 표기도 영어 그대로. */
+export type TeamRole = "owner" | "admin" | "member";
+
 /** 멤버 접속 상태 */
 export type Presence = "online" | "away" | "busy" | "offline";
 

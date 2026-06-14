@@ -26,3 +26,26 @@ describe("seed — 깨끗한 시작 상태", () => {
     expect(await prisma.liveSession.count({ where: { active: true } })).toBe(0);
   });
 });
+
+describe("seed — 멀티팀 이관 (ADR-018)", () => {
+  it("하박조팽 워크스페이스가 Team 1개로 이관됐다", async () => {
+    const team = await prisma.team.findUnique({ where: { slug: "habakjopaeng" } });
+    expect(team?.name).toBe("하박조팽");
+  });
+
+  it("이관된 팀에 owner Membership이 존재한다 (팀당 owner ≥ 1)", async () => {
+    const team = await prisma.team.findUnique({ where: { slug: "habakjopaeng" } });
+    const owners = await prisma.membership.count({
+      where: { teamId: team!.id, role: "owner" },
+    });
+    expect(owners).toBeGreaterThanOrEqual(1);
+  });
+
+  it("owner는 기존 관리자(조성민/jo)다", async () => {
+    const team = await prisma.team.findUnique({ where: { slug: "habakjopaeng" } });
+    const owner = await prisma.membership.findFirst({
+      where: { teamId: team!.id, role: "owner" },
+    });
+    expect(owner?.memberId).toBe("jo");
+  });
+});
