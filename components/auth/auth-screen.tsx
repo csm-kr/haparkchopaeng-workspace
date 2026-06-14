@@ -25,7 +25,13 @@ const FEATURES = [
   { Icon: Calendar, title: "스케쥴 관리", desc: "발표 순번·로테이션·참여 현황을 한눈에" },
 ];
 
-export function AuthScreen({ members }: { members: QuickMember[] }) {
+export function AuthScreen({
+  members,
+  allowDevLogin = false,
+}: {
+  members: QuickMember[];
+  allowDevLogin?: boolean;
+}) {
   const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [loading, setLoading] = React.useState<string | null>(null);
@@ -125,6 +131,8 @@ export function AuthScreen({ members }: { members: QuickMember[] }) {
             Google로 로그인
           </a>
 
+          {allowDevLogin && (
+            <>
           <div className="my-6 flex items-center gap-3 text-xs text-fg-faint">
             <span className="h-px flex-1 bg-border" />
             또는 이메일로
@@ -184,6 +192,8 @@ export function AuthScreen({ members }: { members: QuickMember[] }) {
                 ))}
               </div>
             </div>
+          )}
+            </>
           )}
 
           <p className="mt-8 text-center text-xs leading-relaxed text-fg-faint">

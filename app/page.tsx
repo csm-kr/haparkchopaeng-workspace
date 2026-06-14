@@ -10,7 +10,11 @@ export default async function Home() {
   const session = await getSession();
   if (session) redirect("/dashboard");
 
-  const members = await prisma.member.findMany({ orderBy: { createdAt: "asc" } });
+  // dev 이메일/빠른 로그인은 로컬 개발에서만 — 프로덕션은 Google OAuth만(ADR-017).
+  const allowDevLogin = process.env.NODE_ENV !== "production";
+  const members = allowDevLogin
+    ? await prisma.member.findMany({ orderBy: { createdAt: "asc" } })
+    : [];
   const quick: QuickMember[] = members.map((m) => ({
     id: m.id,
     name: m.name,
@@ -20,5 +24,5 @@ export default async function Home() {
     role: m.role,
   }));
 
-  return <AuthScreen members={quick} />;
+  return <AuthScreen members={quick} allowDevLogin={allowDevLogin} />;
 }
