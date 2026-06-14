@@ -1,0 +1,10 @@
+{
+  "project": "하박조팽",
+  "phase": "3-team-bootstrap",
+  "steps": [
+    { "step": 0, "name": "docs-bootstrap-spec", "status": "pending" },
+    { "step": 1, "name": "workspace-domain", "status": "pending" },
+    { "step": 2, "name": "workspace-api", "status": "pending" },
+    { "step": 3, "name": "setup-ui-logout", "status": "pending" }
+  ]
+}
