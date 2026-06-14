@@ -7,7 +7,7 @@ test("설정에 들어가면 프로필 필드·테마 선택이 보이고 테마
 }) => {
   // 1) dev 로그인 — 시드 멤버(하수현) 이메일로 세션 쿠키 확보.
   const login = await page.request.post("/api/auth/login", {
-    data: { email: "ha@habakjopaeng.team" },
+    data: { email: "de8167@gmail.com" },
   });
   expect(login.ok()).toBeTruthy();
 
