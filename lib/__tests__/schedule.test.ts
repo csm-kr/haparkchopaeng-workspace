@@ -5,6 +5,7 @@ import {
   deriveFineSummary,
   draftMonth,
   ensureVersion,
+  isBreakWeek,
   nextPointer,
   saturdaysOf,
 } from "@/lib/schedule-logic";
@@ -51,6 +52,28 @@ describe("draftMonth (순번 배정)", () => {
       "jo",
       "paeng",
     ]);
+  });
+
+  it("5주가 있는 달은 1~4주 ha~paeng, 5주차는 방학(발표자 없음)", () => {
+    // 2026년 8월: 토요일 5개 → 5주차 방학
+    const weeks = draftMonth(2026, 8, 0);
+    expect(weeks).toHaveLength(5);
+    expect(weeks.map((w) => w.presenterId)).toEqual([
+      "ha",
+      "bak",
+      "jo",
+      "paeng",
+      null, // 5주차 방학
+    ]);
+    expect(weeks[4].topic).toBe("방학");
+  });
+});
+
+describe("isBreakWeek (5주차 방학)", () => {
+  it("토요일 5개인 달의 5주차만 방학", () => {
+    expect(isBreakWeek(5, 5)).toBe(true);
+    expect(isBreakWeek(4, 5)).toBe(false);
+    expect(isBreakWeek(4, 4)).toBe(false); // 4주 달엔 방학 없음
   });
 });
 

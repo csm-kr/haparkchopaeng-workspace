@@ -20,8 +20,16 @@ export function saturdaysOf(year: number, month: number): string[] {
 }
 
 /**
- * 빈 달의 초안을 만든다 — 토요일마다 startIdx부터 순번 발표자 배정, 주제 빈 값.
- * CRITICAL: 이 함수는 순수 계산이다. DB에 저장하지 않는다(초안, R16/ADR-006).
+ * 5개의 토요일이 있는 달의 마지막(5)주차는 방학 — 발표 없음.
+ * (멤버 4명이라 1~4주차가 한 바퀴, 5주차가 있으면 쉰다.)
+ */
+export function isBreakWeek(week: number, totalWeeks: number): boolean {
+  return totalWeeks === 5 && week === 5;
+}
+
+/**
+ * 빈 달의 초안을 만든다 — 1주차부터 순번(기본 하수현→박진희→조성민→팽진욱) 배정.
+ * 5주차가 있으면 방학(발표자 없음). CRITICAL: 순수 계산, DB 저장 안 함(초안, R16/ADR-006).
  */
 export function draftMonth(
   year: number,
@@ -30,16 +38,22 @@ export function draftMonth(
   rotation: readonly string[] = ROTATION,
 ): ScheduleWeekView[] {
   const len = rotation.length;
-  return saturdaysOf(year, month).map((date, i) => ({
-    week: i + 1,
-    date,
-    time: "10:00",
-    presenterId: len > 0 ? (rotation[(startIdx + i) % len] ?? null) : null,
-    topic: "",
-    confirmed: false,
-    status: "upcoming" as WeekStatus,
-    presentationId: null,
-  }));
+  const saturdays = saturdaysOf(year, month);
+  const total = saturdays.length;
+  return saturdays.map((date, i) => {
+    const week = i + 1;
+    const brk = isBreakWeek(week, total);
+    return {
+      week,
+      date,
+      time: "10:00",
+      presenterId: brk || len === 0 ? null : (rotation[(startIdx + i) % len] ?? null),
+      topic: brk ? "방학" : "",
+      confirmed: false,
+      status: "upcoming" as WeekStatus,
+      presentationId: null,
+    };
+  });
 }
 
 /** 저장 후 다음 달이 시작할 순번 인덱스. (start + 이번 달 주차수) % 멤버수 */

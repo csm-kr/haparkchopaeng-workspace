@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Avatar, Badge, Button, Card, EmptyState, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { currentWeekIndex } from "@/lib/schedule-logic";
+import { currentWeekIndex, isBreakWeek } from "@/lib/schedule-logic";
 import type {
   MemberOption,
   SaveMonthResult,
@@ -252,6 +252,7 @@ export function ScheduleBoard({
               const presenter = w.presenterId
                 ? memberById.get(w.presenterId)
                 : null;
+              const brk = isBreakWeek(w.week, draft.length);
               return (
                 <li key={w.week} className="flex flex-col gap-2 px-4 py-3">
                   <div className="flex flex-wrap items-center gap-3">
@@ -290,36 +291,42 @@ export function ScheduleBoard({
                         className="rounded-sm border border-border-strong bg-bg-elevated px-2 py-1 font-mono text-[12px] text-fg outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
                       />
                     </span>
-                    <span className="flex items-center gap-1.5">
-                      {presenter && <Avatar user={presenter} size="sm" />}
-                      <select
-                        value={w.presenterId ?? ""}
-                        onChange={(e) =>
-                          updateWeek(idx, {
-                            presenterId: e.target.value || null,
-                          })
-                        }
-                        aria-label={`${w.week}주차 발표자`}
-                        className="rounded-sm border border-border-strong bg-bg-elevated px-2 py-1 text-[12px] text-fg outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
-                      >
-                        {members.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                            {m.availability === "vacation" ? " (휴가)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                      {presenter?.availability === "vacation" && (
-                        <Badge className="bg-bg-subtle text-away">휴가</Badge>
-                      )}
-                    </span>
+                    {brk ? (
+                      <Badge className="bg-bg-subtle text-away">🌴 방학</Badge>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        {presenter && <Avatar user={presenter} size="sm" />}
+                        <select
+                          value={w.presenterId ?? ""}
+                          onChange={(e) =>
+                            updateWeek(idx, {
+                              presenterId: e.target.value || null,
+                            })
+                          }
+                          aria-label={`${w.week}주차 발표자`}
+                          className="rounded-sm border border-border-strong bg-bg-elevated px-2 py-1 text-[12px] text-fg outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
+                        >
+                          {members.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                              {m.availability === "vacation" ? " (휴가)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                        {presenter?.availability === "vacation" && (
+                          <Badge className="bg-bg-subtle text-away">휴가</Badge>
+                        )}
+                      </span>
+                    )}
                   </div>
-                  <Input
-                    value={w.topic}
-                    placeholder="발표 주제 입력…"
-                    aria-label={`${w.week}주차 주제`}
-                    onChange={(e) => updateWeek(idx, { topic: e.target.value })}
-                  />
+                  {!brk && (
+                    <Input
+                      value={w.topic}
+                      placeholder="발표 주제 입력…"
+                      aria-label={`${w.week}주차 주제`}
+                      onChange={(e) => updateWeek(idx, { topic: e.target.value })}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -376,8 +383,9 @@ function ConfirmedWeeks({
     <ul className="divide-y divide-border-token">
       {weeks.map((w, idx) => {
         const presenter = w.presenterId ? memberById.get(w.presenterId) : null;
+        const brk = isBreakWeek(w.week, weeks.length);
         const isDone = w.status === "done";
-        const isCurrent = !isDone && idx === currentIdx;
+        const isCurrent = !brk && !isDone && idx === currentIdx;
         return (
           <li
             key={w.week}
@@ -392,13 +400,18 @@ function ConfirmedWeeks({
               <span className="flex items-center gap-1 font-mono text-[12px] text-fg-muted">
                 <Calendar size={12} aria-hidden="true" /> {w.time}
               </span>
-              <span className="flex items-center gap-1.5">
-                {presenter && <Avatar user={presenter} size="sm" />}
-                <span className="text-[13px] font-medium text-fg">
-                  {presenter ? presenter.name : "미정"}
+              {brk ? (
+                <Badge className="bg-bg-subtle text-away">🌴 방학</Badge>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  {presenter && <Avatar user={presenter} size="sm" />}
+                  <span className="text-[13px] font-medium text-fg">
+                    {presenter ? presenter.name : "미정"}
+                  </span>
                 </span>
-              </span>
+              )}
               {/* 상태 알약 — 색 + 텍스트 병행(R29). current는 정적 도트(깜빡임 없음). */}
+              {!brk && (
               <span className="ml-auto flex items-center gap-2">
                 {isDone ? (
                   <Badge className="bg-bg-subtle text-fg-muted">완료</Badge>
@@ -438,15 +451,18 @@ function ConfirmedWeeks({
                   <span className="text-[12px] text-fg-faint">준비 전</span>
                 )}
               </span>
-            </div>
-            <p
-              className={cn(
-                "text-[13px]",
-                w.topic ? "text-fg-muted" : "text-fg-faint",
               )}
-            >
-              {w.topic || "주제 미정"}
-            </p>
+            </div>
+            {!brk && (
+              <p
+                className={cn(
+                  "text-[13px]",
+                  w.topic ? "text-fg-muted" : "text-fg-faint",
+                )}
+              >
+                {w.topic || "주제 미정"}
+              </p>
+            )}
           </li>
         );
       })}

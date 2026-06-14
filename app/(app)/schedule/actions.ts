@@ -5,12 +5,10 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { getFines, resolveStartIdx } from "@/lib/schedule";
+import { getFines } from "@/lib/schedule";
 import {
-  ROTATION,
   draftMonth as draftWeeks,
   ensureVersion,
-  nextPointer,
 } from "@/lib/schedule-logic";
 import type {
   FinesView,
@@ -42,8 +40,9 @@ export async function draftMonthAction(
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "잘못된 달이에요.");
   }
-  const startIdx = await resolveStartIdx(parsed.data.year, parsed.data.month);
-  return draftWeeks(parsed.data.year, parsed.data.month, startIdx);
+  // 기본 순번: 1주차 하수현 → 박진희 → 조성민 → 팽진욱(매달 같은 순서로 시작).
+  // 5주차가 있으면 draftWeeks가 방학으로 둔다.
+  return draftWeeks(parsed.data.year, parsed.data.month, 0);
 }
 
 const WeekInputSchema = z.object({
@@ -138,9 +137,8 @@ export async function saveMonth(input: {
   }
   const { year, month, version, weeks } = parsed.data;
 
-  // 순번은 서버가 결정한다 — 직전 저장월 기준 시작 인덱스 + 이번 달 주차수(R16).
-  const startIdx = await resolveStartIdx(year, month);
-  const pointer = nextPointer(startIdx, weeks.length, ROTATION.length);
+  // 순번은 매달 1주차 하수현부터 다시 시작(기본 순서). 5주차 방학은 슬롯을 쓰지 않는다.
+  const pointer = 0;
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
