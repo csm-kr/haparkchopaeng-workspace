@@ -121,16 +121,16 @@ describe("AnalysisView 관점 토글", () => {
 });
 
 describe("AnalysisView Figure 분석", () => {
-  it("두 관점 모두에서 figure가 공통으로 보인다", () => {
+  it("연구 관점에선 figure가 보이고, 재구현 관점에선 숨는다", () => {
     renderView();
     // 연구 관점에서 figure 노출.
     expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
     expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
 
-    // 재구현으로 토글해도 figure는 그대로.
+    // 재구현으로 토글하면 figure 섹션이 사라진다(figure는 연구 관점 전용).
     fireEvent.click(screen.getByRole("button", { name: /재구현 분석/ }));
-    expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
-    expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
+    expect(screen.queryByText("Figure 1 — 개요")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Figure 분석" })).toBeNull();
   });
 });
 
@@ -212,6 +212,27 @@ describe("AnalysisView 분석 상태", () => {
     renderView({ analysisStatus: "pending", research: null, repro: null });
     expect(screen.getByText("논문을 읽고 있어요…")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Contribution" })).toBeNull();
+  });
+
+  it("pending 동안 주기적으로 router.refresh로 자동 갱신한다", () => {
+    vi.useFakeTimers();
+    refresh.mockClear();
+    try {
+      renderView({ analysisStatus: "pending", research: null, repro: null });
+      // 마운트 직후엔 아직 호출 없음.
+      expect(refresh).not.toHaveBeenCalled();
+      // 인터벌마다 새로고침해 ready 전이를 자동 반영.
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(refresh).toHaveBeenCalledTimes(1);
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("failed면 다시 분석 안내를 보인다", () => {

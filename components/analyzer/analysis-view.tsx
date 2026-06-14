@@ -344,7 +344,8 @@ export function AnalysisView({
         })
       )}
 
-      {/* Figure 분석 — 두 관점 공통, 항상 하단 고정(ADR-004/R10). 노트는 lens:any(R11). */}
+      {/* Figure 분석 — 연구 관점 전용(재구현 관점엔 숨김). figure 노트(lens:any)도 함께 가려진다(R11). */}
+      {lens === "research" && (
       <section aria-labelledby="section-figures" className="flex flex-col gap-3">
         <h3 id="section-figures" className="text-[16px] font-semibold text-fg">
           Figure 분석
@@ -385,6 +386,7 @@ export function AnalysisView({
           {renderNotes(FIGURES_SECTION_ID, "Figure 분석")}
         </Card>
       </section>
+      )}
     </div>
   );
 }
@@ -400,6 +402,13 @@ function AnalysisStatusBlock({
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // pending인 동안 주기적으로 새로고침해 잡 완료(ready) 전이를 자동 반영한다(폴링).
+  React.useEffect(() => {
+    if (status !== "pending") return;
+    const id = setInterval(() => router.refresh(), 4000);
+    return () => clearInterval(id);
+  }, [status, router]);
 
   async function reanalyze() {
     setBusy(true);
