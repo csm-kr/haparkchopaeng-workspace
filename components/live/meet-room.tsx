@@ -18,6 +18,7 @@ import { MeetControls } from "./meet-controls";
 import { PeoplePanel } from "./people-panel";
 import { ReactionsLayer } from "./reactions-layer";
 import { RoomStage } from "./room-stage";
+import type { ActiveAnnotation, DrawInput } from "./annotation-overlay";
 import type { ChatEntry, FloatingReaction, LiveMember } from "./types";
 
 // MeetRoom — LiveKit 룸 컨텍스트 안의 Google Meet 스타일 셸.
@@ -50,6 +51,7 @@ export function MeetRoom({
   const [chat, setChat] = React.useState<ChatEntry[]>([]);
   const [floats, setFloats] = React.useState<FloatingReaction[]>([]);
   const [hands, setHands] = React.useState<Set<string>>(new Set());
+  const [annots, setAnnots] = React.useState<ActiveAnnotation[]>([]);
 
   const addFloat = React.useCallback((emoji: string) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -67,6 +69,17 @@ export function MeetRoom({
     });
   }, []);
 
+  // 화면공유 주석(펜/레이저) — 받는 즉시 추가하고 수명(펜 3초·레이저 1.2초) 뒤 제거(반응과 동일 패턴).
+  const addAnnot = React.useCallback((a: DrawInput) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setAnnots((prev) => [
+      ...prev,
+      { id, tool: a.tool, color: a.color, points: a.points },
+    ]);
+    const life = a.tool === "laser" ? 1200 : 3000;
+    setTimeout(() => setAnnots((prev) => prev.filter((x) => x.id !== id)), life);
+  }, []);
+
   // 수신: 작성자는 identity로 판별(R3), 형식 위반은 무시.
   const onMessage = React.useCallback(
     (msg: { payload: Uint8Array; from?: { identity?: string } }) => {
@@ -80,11 +93,13 @@ export function MeetRoom({
         ]);
       } else if (m.kind === "reaction") {
         addFloat(m.emoji);
-      } else {
+      } else if (m.kind === "hand") {
         setHand(identity, m.up);
+      } else {
+        addAnnot(m);
       }
     },
-    [addFloat, setHand],
+    [addFloat, setHand, addAnnot],
   );
 
   useDataChannel(DATA_TOPIC, onMessage);
@@ -98,6 +113,21 @@ export function MeetRoom({
       });
     },
     [room],
+  );
+
+  // 발표자 그리기 → 데이터 채널 전파 + 낙관적 로컬 표시(publishData는 본인에게 echo 안 됨).
+  const sendAnnot = React.useCallback(
+    (a: DrawInput) => {
+      publish({
+        kind: "annot",
+        tool: a.tool,
+        color: a.color,
+        points: a.points,
+        at: Date.now(),
+      });
+      addAnnot(a);
+    },
+    [publish, addAnnot],
   );
 
   function sendChat(text: string) {
@@ -131,6 +161,8 @@ export function MeetRoom({
             presenterId={presenterId}
             currentMemberId={currentMemberId}
             hands={hands}
+            annotations={annots}
+            onDraw={isPresenter ? sendAnnot : undefined}
           />
           <ReactionsLayer reactions={floats} />
         </div>

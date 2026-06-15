@@ -239,6 +239,17 @@ body {
   }
 }
 
+/* 화면공유 주석(펜/레이저) — 잠깐 보였다 사라짐 */
+@keyframes annotfade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* 헬퍼 클래스 — 컴포넌트가 참조 */
 .anim-shimmer {
   background: linear-gradient(
@@ -264,12 +275,22 @@ body {
   animation: floatup 2.4s ease-out forwards;
 }
 
+/* 화면공유 주석 — 펜 ~3초·레이저 ~1.2초 뒤 페이드 (허용 목록) */
+.anim-annotfade-pen {
+  animation: annotfade 3s ease-out forwards;
+}
+.anim-annotfade-laser {
+  animation: annotfade 1.2s ease-out forwards;
+}
+
 /* 모션 존중 — 깜빡임/시머/플로팅을 정적 표현으로 대체 (R29) */
 @media (prefers-reduced-motion: reduce) {
   .anim-shimmer,
   .anim-livepulse,
   .anim-slidein,
-  .anim-floatup {
+  .anim-floatup,
+  .anim-annotfade-pen,
+  .anim-annotfade-laser {
     animation: none;
   }
   .anim-shimmer {

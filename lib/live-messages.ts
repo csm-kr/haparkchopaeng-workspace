@@ -6,14 +6,35 @@
 export type LiveMessage =
   | { kind: "chat"; text: string; at: number }
   | { kind: "reaction"; emoji: string; at: number }
-  | { kind: "hand"; up: boolean; at: number };
+  | { kind: "hand"; up: boolean; at: number }
+  | {
+      kind: "annot";
+      tool: "pen" | "laser";
+      color: string;
+      /** 영상 박스 기준 정규화 좌표(0..1). 펜=스트로크, 레이저=한 점. */
+      points: [number, number][];
+      at: number;
+    };
 
 const MAX_CHAT_LEN = 500;
+const MAX_ANNOT_POINTS = 256; // 메시지 크기 상한(스트로크 점 수)
+const MAX_COLOR_LEN = 32;
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 /** LiveMessage → LiveKit publishData용 바이트(JSON + TextEncoder). chat은 길이 clamp. */
 export function encodeLiveMessage(m: LiveMessage): Uint8Array {
-  const out: LiveMessage =
-    m.kind === "chat" ? { ...m, text: m.text.slice(0, MAX_CHAT_LEN) } : m;
+  let out: LiveMessage = m;
+  if (m.kind === "chat") {
+    out = { ...m, text: m.text.slice(0, MAX_CHAT_LEN) };
+  } else if (m.kind === "annot") {
+    out = {
+      ...m,
+      color: m.color.slice(0, MAX_COLOR_LEN),
+      points: m.points
+        .slice(0, MAX_ANNOT_POINTS)
+        .map(([x, y]) => [clamp01(x), clamp01(y)] as [number, number]),
+    };
+  }
   return new TextEncoder().encode(JSON.stringify(out));
 }
 
@@ -45,6 +66,22 @@ export function decodeLiveMessage(bytes: Uint8Array): LiveMessage | null {
     case "hand": {
       if (typeof rec.up !== "boolean") return null;
       return { kind: "hand", up: rec.up, at };
+    }
+    case "annot": {
+      if (rec.tool !== "pen" && rec.tool !== "laser") return null;
+      if (typeof rec.color !== "string" || rec.color.length === 0) return null;
+      if (!Array.isArray(rec.points) || rec.points.length === 0) return null;
+      const points: [number, number][] = [];
+      for (const p of rec.points) {
+        if (!Array.isArray(p) || p.length !== 2) return null;
+        const [x, y] = p as unknown[];
+        if (typeof x !== "number" || typeof y !== "number") return null;
+        if (Number.isNaN(x) || Number.isNaN(y)) return null;
+        points.push([clamp01(x), clamp01(y)]);
+        if (points.length >= MAX_ANNOT_POINTS) break;
+      }
+      if (points.length === 0) return null;
+      return { kind: "annot", tool: rec.tool, color: rec.color.slice(0, MAX_COLOR_LEN), points, at };
     }
     default:
       return null;
