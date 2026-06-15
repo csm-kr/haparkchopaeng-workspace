@@ -32,7 +32,7 @@
       "status": "completed",
       "started_at": "2026-06-15T11:54:42+0900",
       "summary": "LiveKit 룸에 Meet/Zoom 유틸 추가: MeetHeader(startedAt 송출 타이머 fmtElapsed·LIVE 색+텍스트 R29), MeetControls(useLocalParticipant로 mic/cam/screen 토글·화면공유는 발표자만 R7·반응/손들기/채팅 토글·권한거부 graceful R30), ChatPanel/PeoplePanel/ReactionsLayer(anim-floatup)·RoomStage 추출(손들기 표시)·MeetRoom(데이터 채널 송수신: publishData(encode)·decode null 무시·작성자 identity R3, 자료 탭은 /presentations 링크 R21). live-room.tsx는 MeetHeader+MeetRoom으로 배선. 329 tests·build·lint green.",
-      "completed_at": "2026-06-15T12:14:00+0900"
+      "completed_at": "2026-06-15T12:15:53+0900"
     },
     {
       "step": 4,
