@@ -39,7 +39,7 @@
       "name": "team-ui",
       "status": "completed",
       "started_at": "2026-06-15T08:51:43+0900",
-      "completed_at": "2026-06-15T09:11:07+0900",
+      "completed_at": "2026-06-15T09:12:30+0900",
       "summary": "멀티팀 UI 완성(ADR-018): (1) app/(app)/teams/new — 팀 없음 착지(CreateTeamForm 섬→createTeamAction, TEAM_LIMIT/SLUG_TAKEN 인라인 R30, 성공→/dashboard) + 초대 링크 안내. (2) app/invite/[token] 재작성(RSC, getInviteForAcceptance status별 카드 not_found/revoked/expired/used_up 사유·ready 팀명+역할; 미로그인→/api/auth/google?next 로그인하고 합류, 로그인→AcceptInviteButton 섬→acceptInviteAction(requireAuth memberId 주입 R3, 성공→/dashboard)). (3) team-manager 재작성: 이메일 입력 제거→토큰 초대 발급(역할 admin|member·maxUses→POST /api/invites→링크 복사)+활성 초대 목록/회수(DELETE)+멤버 관리(역할 영어 owner/admin/member 배지, 역할변경/내보내기 fetch). currentUserRole 게이팅(owner·admin), owner 행 보호. (4) app/api/teams/[slug]/members/[memberId] PATCH(owner만·대상 owner 불가·admin|member만)/DELETE(본인탈퇴 비-owner·owner→비-owner·admin→member, owner 추방 차단=owner≥1). Badge owner 변형 추가(토큰만 R20). lib/teams listTeamMembers·lib/invite listActiveInvites 추가. 레거시 lib/team.ts·team/actions.ts(단일워크스페이스 Member.role) 제거. 유닛 +20(members-route 11·team 컴포넌트 9 갱신·accept-action 3·list-team-members 2·list-active-invites 1, 전체 280 통과)·build/lint green·e2e 19 통과(1 skip; entry/team spec를 토큰초대·status카드로 갱신). 실제 합류는 공유 운영 DB 비파괴 원칙상 유닛(acceptInvite race 포함)으로 커버. 운영 Supabase 스키마는 이미 동기화됨(e2e listActiveInvites/Membership 조회 성공)."
     }
   ],
