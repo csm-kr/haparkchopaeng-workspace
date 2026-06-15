@@ -9,7 +9,7 @@ import {
   type TrackReference,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { Hand, Mic, Minus, Plus, Radio } from "lucide-react";
+import { Hand, Maximize, Mic, Minimize, Minus, Plus, Radio } from "lucide-react";
 import { Avatar, Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -112,47 +112,141 @@ export function RoomStage({
       <RoomAudioRenderer />
 
       {screenShare ? (
-        <div className="flex gap-3">
-          {/* 공유 화면(크게) + 발표 중 라벨 */}
-          <div className="relative min-w-0 flex-1 overflow-hidden rounded-lg border border-border-token">
-            <div className="grid aspect-video place-items-center bg-bg-subtle">
-              <VideoTrack
-                trackRef={screenShare}
-                className="size-full object-contain"
-              />
-            </div>
-            <PresentingLabel
-              name={
-                members.find(
-                  (m) =>
-                    m.id === (screenShare.participant?.identity ?? presenterId),
-                )?.name ?? "발표자"
-              }
-            />
-            <AnnotationOverlay
-              isPresenter={currentMemberId === presenterId}
-              annotations={annotations ?? []}
-              onDraw={onDraw}
-            />
-          </div>
-
-          {/* 오른쪽 얼굴 스트립 + 개수 조절(−/+) */}
-          <FaceStrip
-            count={visibleCount}
-            max={participants.length}
-            onCountChange={setVisibleCount}
-          >
-            {orderParticipantsForStrip(participants, presenterId)
-              .slice(0, Math.min(visibleCount, participants.length))
-              .map(renderTile)}
-          </FaceStrip>
-        </div>
+        <ScreenShareStage
+          screenShare={screenShare}
+          presenterName={
+            members.find(
+              (m) => m.id === (screenShare.participant?.identity ?? presenterId),
+            )?.name ?? "발표자"
+          }
+          isPresenter={currentMemberId === presenterId}
+          annotations={annotations ?? []}
+          onDraw={onDraw}
+          count={visibleCount}
+          max={participants.length}
+          onCountChange={setVisibleCount}
+        >
+          {orderParticipantsForStrip(participants, presenterId)
+            .slice(0, Math.min(visibleCount, participants.length))
+            .map(renderTile)}
+        </ScreenShareStage>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {participants.map(renderTile)}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 화면공유 stage — 공유 화면(크게) + 얼굴 스트립 + 주석. 전체화면 토글을 소유한다.
+ * 전체화면에선 영상이 화면을 채우고 얼굴 스트립은 우측 오버레이로 떠 따라온다.
+ * 좌표 정규화(annotation-overlay)는 박스 기준이라 전체화면에서도 모두에게 같은 위치.
+ * 그리기는 발표자만(onDraw 유무) — 시청자는 전체화면으로 크게 보기만(R7).
+ */
+function ScreenShareStage({
+  screenShare,
+  presenterName,
+  isPresenter,
+  annotations,
+  onDraw,
+  count,
+  max,
+  onCountChange,
+  children,
+}: {
+  screenShare: TrackReference;
+  presenterName: string;
+  isPresenter: boolean;
+  annotations: ActiveAnnotation[];
+  onDraw?: (input: DrawInput) => void;
+  count: number;
+  max: number;
+  onCountChange: (n: number) => void;
+  children: React.ReactNode;
+}) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isFs, setIsFs] = React.useState(false);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    const onChange = () => setIsFs(document.fullscreenElement === el);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      // 공유 종료 등으로 언마운트될 때 이 컨테이너가 전체화면이면 해제.
+      if (document.fullscreenElement === el) void document.exitFullscreen?.();
+    };
+  }, []);
+
+  const toggleFs = () => {
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void containerRef.current?.requestFullscreen?.(); // 미지원 → no-op
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn("flex gap-3", isFs && "relative h-screen w-screen bg-black")}
+    >
+      {/* 공유 화면 + 발표 중 라벨 + 전체화면 토글 + 주석 */}
+      <div
+        className={cn(
+          "relative overflow-hidden",
+          isFs
+            ? "absolute inset-0"
+            : "min-w-0 flex-1 rounded-lg border border-border-token",
+        )}
+      >
+        <div
+          className={cn(
+            "grid place-items-center",
+            isFs ? "size-full bg-black" : "aspect-video bg-bg-subtle",
+          )}
+        >
+          <VideoTrack
+            trackRef={screenShare}
+            className="size-full object-contain"
+          />
+        </div>
+        <PresentingLabel name={presenterName} />
+        <FsButton isFs={isFs} onClick={toggleFs} />
+        <AnnotationOverlay
+          isPresenter={isPresenter}
+          annotations={annotations}
+          onDraw={onDraw}
+        />
+      </div>
+
+      {/* 얼굴 스트립 — 일반은 우측 컬럼, 전체화면은 우측 오버레이로 따라온다 */}
+      <FaceStrip
+        count={count}
+        max={max}
+        onCountChange={onCountChange}
+        floating={isFs}
+      >
+        {children}
+      </FaceStrip>
+    </div>
+  );
+}
+
+/** 전체화면 토글 — 공유 화면 우상단. 색만이 아니라 아이콘+레이블(R29). */
+function FsButton({ isFs, onClick }: { isFs: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={isFs ? "전체화면 종료" : "전체화면"}
+      onClick={onClick}
+      className="absolute top-2 right-2 z-20 grid size-8 place-items-center rounded-md bg-bg-elevated/90 text-fg-muted shadow-[var(--shadow-sm)] hover:bg-bg-hover hover:text-fg"
+    >
+      {isFs ? (
+        <Minimize size={15} aria-hidden="true" />
+      ) : (
+        <Maximize size={15} aria-hidden="true" />
+      )}
+    </button>
   );
 }
 
@@ -171,16 +265,25 @@ function FaceStrip({
   count,
   max,
   onCountChange,
+  floating = false,
   children,
 }: {
   count: number;
   max: number;
   onCountChange: (n: number) => void;
+  /** 전체화면일 때 공유 화면 위 우측 오버레이로 띄운다(가독성 위해 반투명 배경). */
+  floating?: boolean;
   children: React.ReactNode;
 }) {
   const clamped = Math.min(Math.max(1, count), Math.max(1, max));
   return (
-    <div className="flex w-40 shrink-0 flex-col gap-2 sm:w-44">
+    <div
+      className={cn(
+        "flex w-40 shrink-0 flex-col gap-2 sm:w-44",
+        floating &&
+          "absolute top-1/2 right-3 z-10 max-h-[calc(100vh-1.5rem)] -translate-y-1/2 rounded-lg bg-bg-elevated/85 p-2 backdrop-blur",
+      )}
+    >
       <div className="flex items-center justify-between rounded-md bg-bg-subtle px-2 py-1">
         <span className="text-[11px] font-medium text-fg-subtle">
           얼굴 {clamped}

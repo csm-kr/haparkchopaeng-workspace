@@ -67,6 +67,7 @@ export function LiveRoom({
   const [ending, setEnding] = React.useState(false);
   const [endError, setEndError] = React.useState(false);
   const [left, setLeft] = React.useState(false);
+  const [confirmLeave, setConfirmLeave] = React.useState(false);
 
   const isPresenter = !!session && session.presenterId === currentMemberId;
 
@@ -314,7 +315,7 @@ export function LiveRoom({
       라이브 종료
     </Button>
   ) : left ? null : (
-    <Button variant="secondary" onClick={handleLeave}>
+    <Button variant="secondary" onClick={() => setConfirmLeave(true)}>
       나가기
     </Button>
   );
@@ -338,10 +339,30 @@ export function LiveRoom({
 
       {/* 종료 확인 — 파괴적 액션은 확인을 거친다(R27) */}
       {confirmEnd && (
-        <ConfirmEndDialog
+        <ConfirmDialog
+          title="라이브를 종료할까요?"
+          body="모두의 세션이 끝나요. 다시 시작하려면 새로 열어야 해요."
+          confirmLabel="종료할게요"
+          busyLabel="종료 중…"
+          variant="danger"
           busy={ending}
           onCancel={() => setConfirmEnd(false)}
           onConfirm={handleEnd}
+        />
+      )}
+
+      {/* 나가기 확인 — 비파괴적이지만 실수 방지. 본인만 퇴장(R6) */}
+      {confirmLeave && (
+        <ConfirmDialog
+          title="라이브에서 나갈까요?"
+          body="언제든 다시 입장할 수 있어요."
+          confirmLabel="나갈게요"
+          variant="primary"
+          onCancel={() => setConfirmLeave(false)}
+          onConfirm={() => {
+            setConfirmLeave(false);
+            handleLeave();
+          }}
         />
       )}
     </div>
@@ -374,13 +395,26 @@ function RoomErrorCard({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/** 종료 확인 다이얼로그(파괴적, R27). 포커스 트랩까지는 다음 단계 — 최소 확인 게이트. */
-function ConfirmEndDialog({
-  busy,
+/**
+ * 확인 다이얼로그 — 종료(파괴적, R27)·나가기(비파괴적) 공용. 포커스 트랩까지는 다음 단계.
+ * variant로 확인 버튼 강조를 가른다(danger=파괴적, primary=일반).
+ */
+function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  busyLabel,
+  variant = "danger",
+  busy = false,
   onCancel,
   onConfirm,
 }: {
-  busy: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  busyLabel?: string;
+  variant?: "danger" | "primary";
+  busy?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -392,22 +426,20 @@ function ConfirmEndDialog({
       <Card
         role="dialog"
         aria-modal="true"
-        aria-label="라이브 종료 확인"
+        aria-label={title}
         className="flex w-full max-w-sm flex-col gap-4 p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col gap-1">
-          <p className="text-[15px] font-semibold text-fg">라이브를 종료할까요?</p>
-          <p className="text-[13px] text-fg-muted">
-            모두의 세션이 끝나요. 다시 시작하려면 새로 열어야 해요.
-          </p>
+          <p className="text-[15px] font-semibold text-fg">{title}</p>
+          <p className="text-[13px] text-fg-muted">{body}</p>
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onCancel} disabled={busy}>
             취소
           </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={busy}>
-            {busy ? "종료 중…" : "종료할게요"}
+          <Button variant={variant} onClick={onConfirm} disabled={busy}>
+            {busy ? (busyLabel ?? confirmLabel) : confirmLabel}
           </Button>
         </div>
       </Card>

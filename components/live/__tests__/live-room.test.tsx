@@ -254,14 +254,52 @@ describe("LiveRoom", () => {
       screen.queryByRole("button", { name: /라이브 종료/ }),
     ).toBeNull();
 
-    // 나가기 = 본인만 퇴장 → /leave 호출.
-    fireEvent.click(screen.getByRole("button", { name: /나가기/ }));
+    // 나가기 = 확인 다이얼로그를 거쳐 본인만 퇴장.
+    fireEvent.click(screen.getByRole("button", { name: "나가기" }));
+    // 즉시 나가지 않는다 — 확인을 먼저 띄운다.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/라이브에서 나갈까요/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/live/s1/leave",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    // 확인하면 /leave 호출.
+    fireEvent.click(screen.getByRole("button", { name: "나갈게요" }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/live/s1/leave",
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("시청자 나가기: 취소하면 룸에 그대로 남는다(퇴장 안 함)", async () => {
+    const fetchMock = route((url, method) => {
+      if (url === "/api/live/s1/join" && method === "POST")
+        return res(200, { data: { token: "TKN-viewer", url: "wss://lk.example" } });
+      if (url === "/api/live/s1/leave" && method === "POST") return res(200, {});
+      return res(500, {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderRoom({
+      currentMemberId: "jo",
+      initialLive: true,
+      initialSession: { id: "s1", presenterId: "ha", participantIds: [] },
+    });
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "나가기" }));
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+
+    // 다이얼로그가 닫히고, /leave는 호출되지 않으며, 룸에 그대로 남는다.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/live/s1/leave",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.getByTestId("livekit-room")).toBeInTheDocument();
   });
 
   it("참가자 타일: 카메라 트랙이 있으면 비디오, 없으면 아바타(이니셜)", async () => {
