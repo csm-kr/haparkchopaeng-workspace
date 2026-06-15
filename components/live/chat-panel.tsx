@@ -58,7 +58,9 @@ export function ChatPanel({ messages, members, onSend }: ChatPanelProps) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // 한글/일본어 등 IME 조합 중 Enter는 조합 확정용 — 전송하지 않는다.
+            // (조합 중 전송하면 "대박" + 남은 조합 "박"으로 쪼개진다.)
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
             }

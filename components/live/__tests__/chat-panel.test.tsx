@@ -60,4 +60,18 @@ describe("ChatPanel", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  it("IME 조합 중(isComposing) Enter는 전송하지 않는다 — 한글 마지막 음절 중복 방지", () => {
+    const onSend = vi.fn();
+    render(<ChatPanel messages={[]} members={members} onSend={onSend} />);
+    const input = screen.getByPlaceholderText(/메시지/) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "대박" } });
+    // 한글 조합 중 Enter는 IME 확정용 — 전송하면 "대박" + 남은 "박"으로 쪼개진다.
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(onSend).not.toHaveBeenCalled();
+    // 조합이 끝난 뒤 Enter에만 전송한다.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith("대박");
+  });
 });
