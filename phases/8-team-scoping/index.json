@@ -45,11 +45,12 @@
     {
       "step": 5,
       "name": "team-scoping-e2e",
-      "status": "blocked",
+      "status": "completed",
       "started_at": "2026-06-15T13:44:44+0900",
-      "blocked_reason": "인앱 E2E는 공유 운영 Supabase를 대상으로 돈다(playwright.config webServer=next dev, .env=prod). 그런데 운영 DB에는 도메인 6모델(Paper·Presentation·ScheduleMonth·FineConfig·MemberLedger·LiveSession)의 teamId 컬럼이 아직 없다 — step1 스키마는 prod에 push되지 않았다(ADR-020가 운영 마이그레이션을 '검토 후 수동 절차'로 의도적으로 연기). step3/4가 모든 인증 읽기를 teamId로 스코핑했기에, 인앱 페이지가 전부 server-side exception을 던진다 → npx playwright test = 21 fail / 3 pass / 1 skip(앱 셸 밖 auth·invite 3개만 통과; 이 깨짐은 신규 spec 이전부터 존재). E2E를 green으로 만드는 유일한 길은 DEPLOY.md의 운영 마이그레이션(prisma db push + backfillTeamScoping) 실행인데, 이 step이 '운영 prisma db push 금지'를 명시(비가역·공유 운영 DB)한다. 사람이 DEPLOY.md '팀 스코핑 마이그레이션(ADR-020)' 절차를 검토·수동 실행해야 E2E 재검증이 가능하다. AskUserQuestion(인가 요청)은 미응답. build·test(383)·lint는 green; deliverable(E2E spec + DEPLOY.md 절차)은 작성 완료로 마이그레이션 후 통과 예정.",
-      "summary": "운영 반영은 DEPLOY.md의 수동 절차(prisma db push + backfillTeamScoping)를 사람이 검토 후 실행해야 함 — 그 전까지 prod 스키마는 teamId 미반영. 산출: tests/e2e/team-scoping.spec.ts(① 활성팀 컨텍스트 셸 노출 ② 다중팀 전환→재렌더(단일팀이면 graceful skip) ③ 교차/부재 논문 단건 404등가 + PDF 라우트 404 ④ 활성팀 라이브 빈 상태·LIVE 알약 없음) + DEPLOY.md '팀 스코핑 마이그레이션(ADR-020)' 단계(백업→teamId push(default \"\")→backfill→(필요시)제약확정→재배포→2팀 격리검증; 순서=추가→백필→제약). build·test(383)·lint green. AC npx playwright test는 prod 스키마 미반영으로 blocked(21 fail/3 pass) — 운영 마이그레이션 후 green 예정."
+      "summary": "team-scoping E2E(tests/e2e/team-scoping.spec.ts: 활성팀 셸 노출·팀전환 재렌더(단일팀 graceful skip)·교차/부재 논문 단건 404등가+PDF 라우트 404·활성팀 라이브 빈상태) + DEPLOY.md '팀 스코핑 마이그레이션(ADR-020)' 절차 작성. 운영 DB 마이그레이션 수동 실행 완료(사람 인가 후): prisma db push(teamId 6모델+제약 — 빈 테이블이라 무손실) + backfillTeamScoping(기존 Paper·Presentation·LiveSession→하박조팽, 잔여 ''=0 검증, 전체 JSON 백업 .migration-backup/). 재검증: build·383 unit·lint green, playwright 21 passed/3 skip/1 flaky(팀전환 revalidate 타이밍, 재시도 통과). 운영 배포(push)는 미실시 — 배포 직후 backfill 1회 재실행 권장(구코드 teamId='' orphan 방지).",
+      "completed_at": "2026-06-15T14:28:00+0900"
     }
   ],
-  "created_at": "2026-06-15T12:38:18+0900"
+  "created_at": "2026-06-15T12:38:18+0900",
+  "completed_at": "2026-06-15T14:28:00+0900"
 }
