@@ -23,8 +23,10 @@ export async function getMonth(
   year: number,
   month: number,
 ): Promise<ScheduleMonthView | null> {
-  const m = await prisma.scheduleMonth.findUnique({
-    where: { year_month: { year, month } },
+  // 복합 unique가 [teamId, year, month]로 바뀜(ADR-020) — 팀 스코핑(teamId 필터)은 step 3/4에서.
+  // 그전까지는 단일 워크스페이스라 (year, month)로 findFirst하면 동일하게 ≤1건이다.
+  const m = await prisma.scheduleMonth.findFirst({
+    where: { year, month },
     include: { weeks: { orderBy: { week: "asc" } } },
   });
   if (!m) return null;
@@ -78,7 +80,9 @@ export async function getScheduleMembers(): Promise<MemberOption[]> {
  * 해당 연도 설정이 없으면 null.
  */
 export async function getFines(year: number): Promise<FinesView | null> {
-  const config = await prisma.fineConfig.findUnique({
+  // FineConfig PK가 [teamId, year]로 바뀜(ADR-020) — 팀 스코핑은 step 3/4. 단일 워크스페이스라
+  // (year)만으로 findFirst하면 동일하게 ≤1건.
+  const config = await prisma.fineConfig.findFirst({
     where: { year },
     include: { ledgers: true },
   });

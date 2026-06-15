@@ -150,8 +150,10 @@ export async function saveMonth(input: {
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
-      const existing = await tx.scheduleMonth.findUnique({
-        where: { year_month: { year, month } },
+      // 복합 unique가 [teamId, year, month]로 바뀜(ADR-020) — 팀 스코핑은 step 3/4.
+      // 단일 워크스페이스라 (year, month) findFirst로 동일하게 ≤1건.
+      const existing = await tx.scheduleMonth.findFirst({
+        where: { year, month },
       });
 
       if (existing) {
@@ -216,7 +218,9 @@ export async function updateFines(input: {
   }
   const { year, finePresenter, fineAbsent } = parsed.data;
 
-  await prisma.fineConfig.update({
+  // FineConfig PK가 [teamId, year]로 바뀜(ADR-020) — update는 unique를 요구하므로 updateMany로.
+  // 단일 워크스페이스라 (year) 한 건만 갱신된다. 팀 스코핑은 step 3/4.
+  await prisma.fineConfig.updateMany({
     where: { year },
     data: { finePresenter, fineAbsent },
   });

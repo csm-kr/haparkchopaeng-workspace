@@ -3,7 +3,7 @@
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL") // pooler(6543) — 런타임
-  directUrl = env("DIRECT_URL")   // 직결(5432) — 마이그레이션/db push
+  directUrl = env("DIRECT_URL") // 직결(5432) — 마이그레이션/db push
 }
 
 generator client {
@@ -20,18 +20,18 @@ model Workspace {
 }
 
 model Member {
-  id           String   @id // "ha" | "bak" | "jo" | "paeng" …
-  name         String
-  handle       String   @unique // "@hajieun"
-  email        String   @unique
-  role         String // 관리자 | 멤버 | 게스트 (앱에서 검증)
-  color        String // CSS 토큰명 e.g. "var(--m-ha)"
-  initial      String
-  presence     String   @default("offline") // online | away | busy | offline
-  status       String?
-  availability String   @default("active") // active | vacation
+  id            String   @id // "ha" | "bak" | "jo" | "paeng" …
+  name          String
+  handle        String   @unique // "@hajieun"
+  email         String   @unique
+  role          String // 관리자 | 멤버 | 게스트 (앱에서 검증)
+  color         String // CSS 토큰명 e.g. "var(--m-ha)"
+  initial       String
+  presence      String   @default("offline") // online | away | busy | offline
+  status        String?
+  availability  String   @default("active") // active | vacation
   rotationOrder Int? // 로테이션 순서(iteration). null이면 가입순(createdAt)으로 fallback.
-  createdAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
 // 초대 토큰 (ADR-018). 합류는 랜덤 토큰 검증으로만 — 이메일 매칭 폐기, 공개 가입 없음(R18).
@@ -91,6 +91,7 @@ model TeamInviteAcceptance {
 
 model Paper {
   id             String        @id @default(cuid())
+  teamId         String        @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 "default 후 백필"용 마이그레이션 sentinel — step 4가 쓰기 시 명시 주입.
   title          String
   authors        String
   venue          String?
@@ -108,6 +109,8 @@ model Paper {
   notes          SectionNote[]
   // CRITICAL: 업로드는 PDF 전용(ADR-003). kind 같은 타입 필드 두지 말 것.
   // CRITICAL: 분석 실패가 Paper 저장을 막지 않는다 — analysisStatus=failed로 두고 재시도(API /reanalyze).
+
+  @@index([teamId])
 }
 
 model Analysis {
@@ -148,6 +151,7 @@ model SectionNote {
 
 model Presentation {
   id          String                @id @default(cuid())
+  teamId      String                @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
   title       String
   presenterId String
   date        DateTime
@@ -160,6 +164,8 @@ model Presentation {
   assets      PresentationAsset[]
   versions    PresentationVersion[]
   comments    Comment[]
+
+  @@index([teamId])
 }
 
 model PresentationAsset {
@@ -206,6 +212,7 @@ model Reaction {
 
 model ScheduleMonth {
   id                   String         @id @default(cuid())
+  teamId               String         @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
   year                 Int
   month                Int
   day                  String         @default("토요일")
@@ -213,9 +220,10 @@ model ScheduleMonth {
   rotationPointerAfter Int // 이 달 저장 후 다음 시작 인덱스(순번 전진 결과)
   version              Int            @default(0) // 낙관적 락 — 두 관리자 동시 편집 충돌 방지
   weeks                ScheduleWeek[]
-
-  @@unique([year, month]) // CRITICAL: 자동 생성 금지 — row 부재 = 빈 달(ADR-006)
   // 저장 시 version 불일치면 409 "다른 사람이 먼저 저장했어요" (API: If-Match)
+
+  @@unique([teamId, year, month]) // CRITICAL: 팀별 독립(ADR-020) · 자동 생성 금지 — row 부재 = 빈 달(ADR-006)
+  @@index([teamId])
 }
 
 model ScheduleWeek {
@@ -233,28 +241,35 @@ model ScheduleWeek {
 }
 
 model FineConfig {
-  year          Int            @id
+  teamId        String         @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
+  year          Int
   finePresenter Int            @default(30000) // 발표자 불참
   fineAbsent    Int            @default(10000) // 일반 불참
   ledgers       MemberLedger[]
+
+  @@id([teamId, year]) // CRITICAL: 팀별 독립(ADR-020) — 기존 year 단독 PK 폐기
+  @@index([teamId])
 }
 
 model MemberLedger {
   id              String     @id @default(cuid())
+  teamId          String     @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
   year            Int
-  config          FineConfig @relation(fields: [year], references: [year])
+  config          FineConfig @relation(fields: [teamId, year], references: [teamId, year])
   memberId        String
   count           Int        @default(0) // 참여
   missedPresenter Int        @default(0)
   missedAbsent    Int        @default(0)
   paid            Int        @default(0)
-
-  @@unique([year, memberId])
   // 누적 벌금 = missedPresenter*finePresenter + missedAbsent*fineAbsent (파생, 저장 안 함)
+
+  @@unique([teamId, year, memberId]) // CRITICAL: 팀별 독립(ADR-020)
+  @@index([teamId])
 }
 
 model LiveSession {
   id                    String        @id @default(cuid())
+  teamId                String        @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
   active                Boolean       @default(true)
   presenterId           String
   cloudflareLiveInputId String? // Cloudflare Stream Live Input UID
@@ -262,7 +277,9 @@ model LiveSession {
   startedAt             DateTime      @default(now())
   endedAt               DateTime?
   participants          Participant[]
-  // CRITICAL: 동시 active 세션은 1개 — 앱 전역 live 상태와 1:1 매핑(ADR-001)
+  // CRITICAL: 동시 active 세션은 팀당 1개 — 팀 전역 live 상태와 1:1 매핑(ADR-020이 ADR-019 "전역 1개" 개정)
+
+  @@index([teamId])
 }
 
 model Participant {
@@ -277,17 +294,17 @@ model Participant {
 }
 
 model Job {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   type        String // analyze_paper | fetch_arxiv | process_recording
-  status      String   @default("queued") // queued | running | done | failed
+  status      String    @default("queued") // queued | running | done | failed
   payload     Json // { paperId } 등
-  attempts    Int      @default(0)
-  maxAttempts Int      @default(3)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
   lastError   String?
-  runAfter    DateTime @default(now()) // 재시도 백오프
+  runAfter    DateTime  @default(now()) // 재시도 백오프
   claimedAt   DateTime? // 워커가 원자적으로 claim(중복 처리 방지)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  // 분석 등 분 단위 작업은 요청 경로가 아니라 이 잡으로 처리(ADR-013).
 
   @@index([status, runAfter])
-  // 분석 등 분 단위 작업은 요청 경로가 아니라 이 잡으로 처리(ADR-013).
 }
