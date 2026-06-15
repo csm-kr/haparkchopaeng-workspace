@@ -147,3 +147,38 @@ export async function listMemberships(memberId: string): Promise<TeamSummary[]> 
   });
   return rows.map((m) => ({ slug: m.team.slug, name: m.team.name, role: toTeamRole(m.role) }));
 }
+
+/** 팀 관리 화면용 멤버 행 — 멤버십 역할 + Member 표시 정보. */
+export interface TeamMemberRow {
+  id: string; // Member.id
+  name: string;
+  handle: string;
+  email: string;
+  color: string;
+  initial: string;
+  role: TeamRole;
+}
+
+/** 한 팀의 멤버 목록(합류 순). 멤버십 ⨝ Member. 관리 화면이 props로 받는다(ADR-015/R32). */
+export async function listTeamMembers(teamId: string): Promise<TeamMemberRow[]> {
+  const memberships = await prisma.membership.findMany({
+    where: { teamId },
+    orderBy: { joinedAt: "asc" },
+  });
+  const members = await prisma.member.findMany({
+    where: { id: { in: memberships.map((m) => m.memberId) } },
+  });
+  const byId = new Map(members.map((m) => [m.id, m]));
+  return memberships.map((ms) => {
+    const m = byId.get(ms.memberId);
+    return {
+      id: ms.memberId,
+      name: m?.name ?? ms.memberId,
+      handle: m?.handle ?? "",
+      email: m?.email ?? "",
+      color: m?.color ?? "var(--m-jo)",
+      initial: m?.initial ?? "?",
+      role: toTeamRole(ms.role),
+    };
+  });
+}

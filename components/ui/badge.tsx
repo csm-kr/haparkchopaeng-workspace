@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
  * 상태 배지는 색 점 + 텍스트를 병행한다.
  */
 export type BadgeVariant =
-  | "admin" // 관리자 — 액센트 틴트
-  | "member" // 멤버 — 중립
+  | "owner" // owner — 액센트(가장 강조). 팀 멤버십 역할(ADR-018)
+  | "admin" // admin/관리자 — 액센트 틴트
+  | "member" // member/멤버 — 중립
   | "guest" // 게스트 — 앰버 틴트
   | "online"
   | "away"
@@ -21,6 +22,8 @@ const STATUS: Record<string, string> = {
 };
 
 const ROLE_CLASS: Record<string, string> = {
+  // owner는 admin보다 강조 — 솔리드 액센트(토큰만, R20)
+  owner: "bg-accent text-accent-fg",
   admin: "bg-accent-soft text-accent",
   member: "bg-bg-subtle text-fg-muted",
   // 앰버 틴트 — --away(앰버) 토큰에서 파생(색 하드코딩 없음)

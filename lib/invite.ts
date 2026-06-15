@@ -89,6 +89,37 @@ function toInviteRole(value: string): InviteRole {
   return value === "admin" ? "admin" : "member";
 }
 
+/** 팀 관리 화면의 활성 초대 행(점선). 토큰은 노출하지 않는다(목록엔 베어러 자격증명 비포함). */
+export interface ActiveInviteRow {
+  id: string;
+  role: InviteRole;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  createdAt: string;
+}
+
+/**
+ * 한 팀의 활성 초대 목록 — 회수 안 됨 + 미만료 + 사용 여력 있음. 최근 발급 순.
+ * (usedCount<maxUses는 컬럼 비교라 JS에서 거른다 — GET /api/invites와 동일 규칙.)
+ */
+export async function listActiveInvites(teamId: string): Promise<ActiveInviteRow[]> {
+  const invites = await prisma.invite.findMany({
+    where: { teamId, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  return invites
+    .filter((i) => i.usedCount < i.maxUses)
+    .map((i) => ({
+      id: i.id,
+      role: toInviteRole(i.role),
+      maxUses: i.maxUses,
+      usedCount: i.usedCount,
+      expiresAt: i.expiresAt.toISOString(),
+      createdAt: i.createdAt.toISOString(),
+    }));
+}
+
 interface LockedInviteRow {
   id: string;
   teamId: string;
