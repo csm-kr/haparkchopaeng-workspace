@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-06-15T12:43:54+0900",
       "summary": "6개 모델(Paper·Presentation·ScheduleMonth·FineConfig·MemberLedger·LiveSession)에 teamId String @default(\"\") + @@index([teamId]) 추가, 복합 제약 팀 포함으로 변경(ScheduleMonth @@unique([teamId,year,month])·FineConfig @@id([teamId,year])·MemberLedger relation+unique). lib/backfill-teams.ts(부트스트랩 팀=최초 createdAt, \"\"행만 채움, 멱등, 0팀 no-op) + prisma/__tests__/backfill-teams.test.ts(4 케이스, 목). default \"\"는 step의 'default 후 백필' sentinel — 기존 create 사이트 무수정 컴파일. 제약 rename으로 깨진 스케줄 4함수는 findUnique/update→findFirst/updateMany로 동작 보존 컴파일-shim(실제 teamId 스코핑은 step 3/4). generate·build·test(318)·lint green. 운영 prisma db push·백필 실행은 step 5 수동 절차(ADR-020) — prod 미적용.",
-      "completed_at": "2026-06-15T13:00:00+0900"
+      "completed_at": "2026-06-15T12:58:40+0900"
     },
     {
       "step": 2,
