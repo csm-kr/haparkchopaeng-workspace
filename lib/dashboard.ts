@@ -13,17 +13,22 @@ export interface DashboardData {
   recentPresentations: RecentPresentation[];
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(
+  teamId: string,
+): Promise<DashboardData> {
+  // CRITICAL: 카운트·최근 목록을 활성 팀으로 스코핑(R37/ADR-020) — 다른 팀 수치가 섞이지 않는다.
   const [paperCount, presentationCount, papers, presentations] =
     await Promise.all([
-      prisma.paper.count(),
-      prisma.presentation.count(),
+      prisma.paper.count({ where: { teamId } }),
+      prisma.presentation.count({ where: { teamId } }),
       prisma.paper.findMany({
+        where: { teamId },
         orderBy: { uploadedAt: "desc" },
         take: RECENT_LIMIT,
         select: { id: true, title: true, authors: true, uploadedAt: true },
       }),
       prisma.presentation.findMany({
+        where: { teamId },
         orderBy: { date: "desc" },
         take: RECENT_LIMIT,
         select: { id: true, title: true, date: true },

@@ -29,7 +29,10 @@
     {
       "step": 3,
       "name": "scoped-reads",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-15T13:09:04+0900",
+      "summary": "도메인 읽기 7개 함수에 teamId 필터 추가(R37/ADR-020): getPapers·getPresentations·getDashboardData(where:{teamId}), getMonth·getFines(where:{teamId,...}), 단건 getPaperDetail·getPresentationDetail은 findUnique→findFirst({id,teamId})로 교차 팀이면 null(404 등가, R19). GET 라우트 2개도 활성 팀 스코핑: /api/papers/[id]/pdf(findFirst{id,teamId}), /api/figures/[id]/image(findFirst{id,paper:{teamId}}) — 다른 팀 id면 404. RSC 페이지 6개(dashboard·library·presentations·papers/[id]·presentations/[id]·schedule)가 getActiveTeam 해소 후 team.id 전달(팀 없으면 /teams/new 리다이렉트). updateFines는 getFines read-back용 활성 팀 해소(쓰기 updateMany 스코핑은 step 4). 멤버는 전역(스코핑 대상 아님), resolveStartIdx·live·DELETE·reanalyze는 step 4. TDD: 신규 테스트 5파일(papers·presentations·dashboard·schedule-reads·papers-pdf)+figures-image 갱신, 교차 팀 격리·빈 팀·단건 404 검증. test 352·build·lint·tsc green. 운영 DB 미접촉(전부 목).",
+      "completed_at": "2026-06-15T13:23:25+0900"
     },
     {
       "step": 4,

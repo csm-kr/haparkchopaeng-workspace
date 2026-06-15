@@ -63,11 +63,15 @@ function toRef(m: MemberRow | undefined): MemberRef | null {
   };
 }
 
-export async function getPresentations(): Promise<PresentationListItem[]> {
+export async function getPresentations(
+  teamId: string,
+): Promise<PresentationListItem[]> {
   // 발표 자료 + 발표자(Member)를 함께 읽는다. presenterId는 Member.id이지만
   // 스키마에 관계가 없어 멤버를 한 번에 조회해 맵으로 합친다(getPapers와 동일 패턴).
+  // CRITICAL: 활성 팀으로 스코핑(R37/ADR-020). 멤버는 전역(스코핑 대상 아님).
   const [presentations, members] = await Promise.all([
     prisma.presentation.findMany({
+      where: { teamId },
       orderBy: { date: "desc" },
       select: {
         id: true,
@@ -99,10 +103,12 @@ export async function getPresentations(): Promise<PresentationListItem[]> {
 
 export async function getPresentationDetail(
   id: string,
+  teamId: string,
 ): Promise<PresentationDetailView | null> {
   // 발표 자료 + 에셋 + 버전 + 댓글(반응 포함)을 함께 읽는다(ADR-015/R32).
-  const pres = await prisma.presentation.findUnique({
-    where: { id },
+  // CRITICAL: 활성 팀 일치 확인(R37/R19) — 다른 팀 자료면 null(존재 숨김 → 404). findUnique→findFirst.
+  const pres = await prisma.presentation.findFirst({
+    where: { id, teamId },
     include: {
       assets: true,
       versions: { orderBy: { createdAt: "desc" } },

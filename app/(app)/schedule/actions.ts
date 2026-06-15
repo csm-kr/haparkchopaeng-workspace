@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { getFines, getScheduleMembers, resolveStartIdx } from "@/lib/schedule";
@@ -211,22 +212,26 @@ export async function updateFines(input: {
   finePresenter: number;
   fineAbsent: number;
 }): Promise<FinesView> {
-  await requireRole("관리자");
+  const session = await requireRole("관리자");
   const parsed = UpdateFinesSchema.safeParse(input);
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "금액을 확인해주세요.");
   }
   const { year, finePresenter, fineAbsent } = parsed.data;
 
+  // 읽기(read-back)는 활성 팀으로 스코핑한다(R37) — getFines가 teamId를 요구.
+  const team = await getActiveTeam(session.memberId);
+  if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
+
   // FineConfig PK가 [teamId, year]로 바뀜(ADR-020) — update는 unique를 요구하므로 updateMany로.
-  // 단일 워크스페이스라 (year) 한 건만 갱신된다. 팀 스코핑은 step 3/4.
+  // NOTE: 쓰기(updateMany) 자체의 팀 스코핑(where에 teamId)은 step 4(scoped-writes) 범위다.
   await prisma.fineConfig.updateMany({
     where: { year },
     data: { finePresenter, fineAbsent },
   });
   revalidatePath("/schedule");
 
-  const fines = await getFines(year);
+  const fines = await getFines(year, team.id);
   if (!fines) throw new HttpError(404, "NOT_FOUND", "벌금 설정이 없어요.");
   return fines;
 }
