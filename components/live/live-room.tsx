@@ -1,17 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { Copy, Radio, Video } from "lucide-react";
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  VideoTrack,
+  useParticipants,
+  useTracks,
+  type TrackReference,
+} from "@livekit/components-react";
+import { Track } from "livekit-client";
+import { Mic, Radio, Video } from "lucide-react";
 import { useLive } from "@/components/providers";
 import { Avatar, Badge, Button, Card, EmptyState } from "@/components/ui";
-import { HlsPlayer } from "./hls-player";
-import { BroadcastPanel } from "./broadcast-panel";
+import { cn } from "@/lib/utils";
 
-// 세미나 라이브 룸 — 'use client' 인터랙티브 섬(R32).
+// 세미나 라이브 룸 — LiveKit 다자간 화상(ADR-019, ADR-002 대체). 'use client' 인터랙티브 섬(R32).
 // CRITICAL: `live`는 화면 state로 보관하지 않는다 — 앱 레벨 useLive()가 단일 소스(ADR-001/R5).
-// CRITICAL: 송출 자격증명(RTMPS/Stream Key·SRT)은 발표자 본인 뷰에만(SECURITY/R7).
+// CRITICAL: 접속 토큰은 라우트(/start·/join)에서만 받는다 — 클라가 DB/LiveKit 서버 키를 직접 보지 않는다(R2/R32).
 // CRITICAL: 종료(/end)만 전역 종료(파괴적, 확인) — 나가기(/leave)는 본인만(ADR-001/R6·R27).
-// CRITICAL: DB/Cloudflare 직접 호출 금지 — route handler만 fetch(API.md).
+// 이 단계는 영상 연결 + 타일 + 생명주기까지. 컨트롤바·채팅·반응·타이머는 다음 단계.
 
 export interface LiveRoomMember {
   id: string;
@@ -34,13 +42,13 @@ export interface LiveRoomProps {
   members: LiveRoomMember[];
 }
 
-interface Credentials {
-  rtmps: { url: string; streamKey: string };
-  srt: { url: string; streamId: string; passphrase: string };
-  webRTC: { url: string };
+/** 라우트가 준 LiveKit 접속 정보(참가자별·단기). */
+interface Connection {
+  token: string;
+  url: string;
 }
 
-/** 시작/입장/종료/나가기 중 에러 분기. */
+/** 시작 시 에러 분기. */
 type StartError = "conflict" | "error" | null;
 
 export function LiveRoom({
@@ -53,18 +61,25 @@ export function LiveRoom({
   const [session, setSession] = React.useState<LiveRoomSession | null>(
     initialSession,
   );
-  const [credentials, setCredentials] = React.useState<Credentials | null>(null);
-  const [playback, setPlayback] = React.useState<{ hls: string } | null>(null);
+  const [connection, setConnection] = React.useState<Connection | null>(null);
+  const [connected, setConnected] = React.useState(false);
+  const [roomError, setRoomError] = React.useState(false);
+  const [reconnect, setReconnect] = React.useState(0);
+
   const [starting, setStarting] = React.useState(false);
   const [startError, setStartError] = React.useState<StartError>(null);
   // 서버가 준 친절한 사유(예: 송출 미설정 503)를 그대로 보여준다(R30).
   const [startErrorMsg, setStartErrorMsg] = React.useState<string | null>(null);
+  const [joinError, setJoinError] = React.useState(false);
   const [confirmEnd, setConfirmEnd] = React.useState(false);
   const [ending, setEnding] = React.useState(false);
   const [endError, setEndError] = React.useState(false);
   const [left, setLeft] = React.useState(false);
 
   const isPresenter = !!session && session.presenterId === currentMemberId;
+
+  const handleConnected = React.useCallback(() => setConnected(true), []);
+  const handleRoomError = React.useCallback(() => setRoomError(true), []);
 
   // 전이 반영: live가 켜졌는데(다른 사람이 시작) 로컬 세션 정보가 없으면 서버에서 보강.
   React.useEffect(() => {
@@ -88,22 +103,30 @@ export function LiveRoom({
     };
   }, [live, session]);
 
-  // 시청자: 룸에 들어오면 시청 등록(join) → 재생 정보(HLS) 수신. 발표자는 송출자라 join 안 함.
+  // 시청자: 룸에 들어오면 join → LiveKit 토큰 수신(발표자는 시작 시 받았으므로 join 안 함).
   React.useEffect(() => {
-    if (!live || !session || isPresenter || left || playback) return;
+    if (!live || !session || isPresenter || left || connection || joinError)
+      return;
     let cancelled = false;
     fetch(`/api/live/${session.id}/join`, { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (!cancelled) setPlayback({ hls: j?.data?.playback?.hls ?? "" });
+        if (cancelled) return;
+        if (j?.data?.token && j?.data?.url) {
+          setConnected(false);
+          setRoomError(false);
+          setConnection({ token: j.data.token, url: j.data.url });
+        } else {
+          setJoinError(true);
+        }
       })
       .catch(() => {
-        if (!cancelled) setPlayback({ hls: "" });
+        if (!cancelled) setJoinError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [live, session, isPresenter, left, playback]);
+  }, [live, session, isPresenter, left, connection, joinError]);
 
   async function handleStart() {
     setStarting(true);
@@ -130,11 +153,9 @@ export function LiveRoom({
         presenterId: j.data.session.presenterId,
         participantIds: [j.data.session.presenterId],
       });
-      setCredentials({
-        rtmps: j.data.rtmps,
-        srt: j.data.srt,
-        webRTC: j.data.webRTC,
-      });
+      setConnected(false);
+      setRoomError(false);
+      setConnection({ token: j.data.token, url: j.data.url });
       setLive(true); // 낙관적 — Realtime이 확정(R33)
     } catch {
       setStartError("error");
@@ -162,8 +183,8 @@ export function LiveRoom({
       }
       setConfirmEnd(false);
       setSession(null);
-      setCredentials(null);
-      setPlayback(null);
+      setConnection(null);
+      setConnected(false);
       setLive(false); // 낙관적 — Realtime이 확정
     } catch {
       setEndError(true);
@@ -172,16 +193,27 @@ export function LiveRoom({
     }
   }
 
-  // 나가기: 본인만 퇴장. 전역 live는 유지(전역 종료 아님, R6).
+  // 나가기: 본인만 퇴장. 전역 live는 유지(전역 종료 아님, R6). LiveKit 룸은 연결 해제(언마운트).
   async function handleLeave() {
     if (!session) return;
     setLeft(true);
-    setPlayback(null);
+    setConnection(null);
+    setConnected(false);
     try {
       await fetch(`/api/live/${session.id}/leave`, { method: "POST" });
     } catch {
       // best-effort — 화면은 이미 퇴장 상태로 전환
     }
+  }
+
+  function handleReenter() {
+    setLeft(false); // join effect가 다시 토큰을 받아온다
+  }
+
+  function handleRetry() {
+    setRoomError(false);
+    setConnected(false);
+    setReconnect((n) => n + 1); // LiveKitRoom 강제 재마운트
   }
 
   // ── 라이브 없음 (기본) ───────────────────────────────────────────────
@@ -224,20 +256,72 @@ export function LiveRoom({
 
   // ── 라이브 중인데 로컬 세션 정보 보강 전 ────────────────────────────
   if (!session) {
-    return (
-      <Card
-        role="status"
-        className="grid place-items-center px-6 py-12 text-center"
-      >
-        <p className="text-[13px] text-fg-muted">라이브 룸을 불러오는 중이에요…</p>
-      </Card>
-    );
+    return <ConnectingCard />;
   }
 
   const presenter = members.find((m) => m.id === session.presenterId);
-  // 현재 접속자: 발표자 + 참가자(중복 제거).
-  const attendeeIds = Array.from(
-    new Set([session.presenterId, ...session.participantIds]),
+
+  // 본문: 발표자 새로고침(토큰 유실) / 나감 / 접속 대기 / 룸.
+  let body: React.ReactNode;
+  if (isPresenter && !connection) {
+    // 발표자 화면 자격증명은 시작 시 1회만 받는다 — 새로고침 등으로 유실되면 재시작 안내(graceful, R30).
+    body = (
+      <Card className="grid place-items-center px-6 py-12 text-center">
+        <p className="max-w-sm text-[13px] text-fg-muted">
+          발표 화면을 다시 불러오려면 종료 후 다시 시작해주세요.
+        </p>
+      </Card>
+    );
+  } else if (left) {
+    body = (
+      <Card className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+        <p className="text-[13px] text-fg-muted">라이브에서 나왔어요.</p>
+        <Button onClick={handleReenter}>다시 입장</Button>
+      </Card>
+    );
+  } else if (!connection) {
+    body = joinError ? (
+      <RoomErrorCard onRetry={() => setJoinError(false)} />
+    ) : (
+      <ConnectingCard />
+    );
+  } else {
+    body = (
+      <LiveKitRoom
+        key={reconnect}
+        serverUrl={connection.url}
+        token={connection.token}
+        connect
+        audio={false}
+        video={false}
+        screen={false}
+        onConnected={handleConnected}
+        onError={handleRoomError}
+        className="flex flex-col gap-3"
+      >
+        {roomError ? (
+          <RoomErrorCard onRetry={handleRetry} />
+        ) : !connected ? (
+          <ConnectingCard />
+        ) : (
+          <RoomStage
+            members={members}
+            session={session}
+            currentMemberId={currentMemberId}
+          />
+        )}
+      </LiveKitRoom>
+    );
+  }
+
+  const action = isPresenter ? (
+    <Button variant="danger" onClick={() => setConfirmEnd(true)}>
+      라이브 종료
+    </Button>
+  ) : left ? null : (
+    <Button variant="secondary" onClick={handleLeave}>
+      나가기
+    </Button>
   );
 
   return (
@@ -254,61 +338,10 @@ export function LiveRoom({
           </span>
           {presenter ? `${presenter.name}님이 발표 중` : "세미나 진행 중"}
         </span>
-        {isPresenter ? (
-          <Button variant="danger" onClick={() => setConfirmEnd(true)}>
-            라이브 종료
-          </Button>
-        ) : (
-          <Button variant="secondary" onClick={handleLeave}>
-            나가기
-          </Button>
-        )}
+        {action}
       </div>
 
-      {/* 본문: 발표자=송출 안내 / 시청자=플레이어 */}
-      {isPresenter ? (
-        <PresenterPanel credentials={credentials} />
-      ) : left ? (
-        <Card className="grid place-items-center gap-3 px-6 py-12 text-center">
-          <p className="text-[13px] text-fg-muted">라이브에서 나왔어요.</p>
-          <Button onClick={() => setLeft(false)}>다시 입장</Button>
-        </Card>
-      ) : (
-        <HlsPlayer src={playback?.hls ?? ""} />
-      )}
-
-      {/* 참가자 목록 — 색+텍스트로 발표자/시청자 구분(R29) */}
-      <Card className="flex flex-col gap-3 p-4">
-        <p className="text-[12px] font-semibold text-fg-subtle">
-          참가자 {attendeeIds.length}명
-        </p>
-        <ul className="flex flex-col gap-2">
-          {attendeeIds.map((id) => {
-            const m = members.find((x) => x.id === id);
-            if (!m) return null;
-            const presenting = id === session.presenterId;
-            return (
-              <li key={id} className="flex items-center gap-2.5">
-                <Avatar user={m} size="md" />
-                <span className="flex-1 truncate text-[13px] text-fg">
-                  {m.name}
-                  {id === currentMemberId && (
-                    <span className="ml-1 text-fg-subtle">(나)</span>
-                  )}
-                </span>
-                {presenting ? (
-                  <Badge variant="admin">
-                    <Radio size={11} aria-hidden="true" />
-                    발표자
-                  </Badge>
-                ) : (
-                  <Badge variant="member">시청자</Badge>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </Card>
+      {body}
 
       {endError && (
         <p className="text-[12px] text-busy">
@@ -328,91 +361,170 @@ export function LiveRoom({
   );
 }
 
-/** 발표자 송출 — 브라우저 송출(BroadcastPanel) + OBS 폴백(접이식). 본인에게만 보인다(R7). */
-function PresenterPanel({ credentials }: { credentials: Credentials | null }) {
-  if (!credentials) {
-    // 새로고침 등으로 자격증명이 없으면(키는 시작 시 1회만) graceful 안내(R30).
-    return (
-      <Card className="flex flex-col gap-2 p-4">
-        <p className="text-[13px] font-semibold text-fg">발표자 송출</p>
-        <p className="text-[13px] text-fg-muted">
-          송출 정보는 라이브를 시작한 화면에서만 보여요. 새 정보가 필요하면 종료 후
-          다시 시작해주세요.
-        </p>
-      </Card>
+/**
+ * 룸 stage — LiveKit 컨텍스트 안에서 참가자 타일을 렌더(다음 단계가 컨트롤을 끼울 seam).
+ * 화면공유 트랙이 있으면 메인 stage로 크게, 카메라는 filmstrip으로. 없으면 그리드.
+ */
+function RoomStage({
+  members,
+  session,
+  currentMemberId,
+}: {
+  members: LiveRoomMember[];
+  session: LiveRoomSession;
+  currentMemberId: string;
+}) {
+  const participants = useParticipants();
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+
+  const screenShare = tracks.find(
+    (t) => t.source === Track.Source.ScreenShare && t.publication,
+  );
+  const cameraOf = (identity: string) =>
+    tracks.find(
+      (t) =>
+        t.source === Track.Source.Camera &&
+        t.publication &&
+        t.participant?.identity === identity,
     );
-  }
+
+  const tiles = participants.map((p) => {
+    const member = members.find((m) => m.id === p.identity);
+    return (
+      <ParticipantTile
+        key={p.identity}
+        identity={p.identity}
+        member={
+          member ?? {
+            id: p.identity,
+            name: p.name || p.identity,
+            initial: (p.name || p.identity).slice(0, 1).toUpperCase(),
+            color: "var(--fg-faint)",
+          }
+        }
+        cameraTrack={cameraOf(p.identity)}
+        isPresenter={p.identity === session.presenterId}
+        isSelf={p.identity === currentMemberId}
+        speaking={!!p.isSpeaking}
+        compact={!!screenShare}
+      />
+    );
+  });
+
   return (
     <div className="flex flex-col gap-3">
-      {/* 기본: 브라우저에서 바로 송출(화면공유+마이크 → WHIP). */}
-      <BroadcastPanel webRTCUrl={credentials.webRTC?.url ?? null} />
+      {/* 음성 재생(트랙 구독). 화면엔 보이지 않는다. */}
+      <RoomAudioRenderer />
 
-      {/* 고급: OBS 등 외부 인코더로 송출(폴백). 자격증명은 발표자 본인에게만(R7). */}
-      <details className="rounded-lg border border-border-token bg-bg-subtle p-3">
-        <summary className="cursor-pointer text-[12px] font-medium text-fg-muted">
-          고급: OBS로 송출
-        </summary>
-        <div className="mt-3 flex flex-col gap-3">
-          <p className="text-[12px] text-fg-muted">
-            OBS 등 외부 인코더에 아래 정보를 넣어 송출할 수도 있어요. 이 정보는 발표자
-            본인에게만 보여요.
-          </p>
-          <CopyField label="RTMPS URL" value={credentials.rtmps.url} />
-          <CopyField label="Stream Key" value={credentials.rtmps.streamKey} secret />
-          <CopyField label="SRT URL" value={credentials.srt.url} />
-          <CopyField
-            label="SRT Passphrase"
-            value={credentials.srt.passphrase}
-            secret
-          />
-        </div>
-      </details>
+      {screenShare ? (
+        <>
+          <Card className="overflow-hidden p-0">
+            <div className="grid aspect-video place-items-center bg-bg-subtle">
+              <VideoTrack
+                trackRef={screenShare}
+                className="size-full object-contain"
+              />
+            </div>
+          </Card>
+          <div className="flex gap-2 overflow-x-auto pb-1">{tiles}</div>
+        </>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{tiles}</div>
+      )}
+
+      <p className="text-[12px] font-semibold text-fg-subtle">
+        참가자 {participants.length}명
+      </p>
     </div>
   );
 }
 
-function CopyField({
-  label,
-  value,
-  secret = false,
+/** 참가자 타일 — 카메라 트랙이 있으면 비디오, 없으면 아바타(정직한 재현). 발화는 색+텍스트(R29). */
+function ParticipantTile({
+  identity,
+  member,
+  cameraTrack,
+  isPresenter,
+  isSelf,
+  speaking,
+  compact,
 }: {
-  label: string;
-  value: string;
-  secret?: boolean;
+  identity: string;
+  member: LiveRoomMember;
+  cameraTrack: TrackReference | undefined;
+  isPresenter: boolean;
+  isSelf: boolean;
+  speaking: boolean;
+  compact: boolean;
 }) {
-  const [copied, setCopied] = React.useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard?.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // 클립보드 미지원 — 값은 화면에 노출돼 있으니 수동 복사 가능
-    }
-  }
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-fg-subtle">{label}</span>
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-sm border border-border-token bg-bg-subtle px-2.5 py-1.5 font-mono text-[12px] text-fg">
-          {value}
-        </code>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={copy}
-          aria-label={`${label} 복사`}
-        >
-          <Copy size={13} aria-hidden="true" />
-          {copied ? "복사됨" : "복사"}
-        </Button>
-      </div>
-      {secret && (
-        <span className="text-[11px] text-fg-subtle">
-          이 값은 공유하지 마세요.
-        </span>
+    <div
+      data-identity={identity}
+      className={cn(
+        "relative overflow-hidden rounded-lg border bg-bg-subtle",
+        compact ? "w-40 shrink-0" : "",
+        speaking ? "border-online ring-2 ring-online/40" : "border-border-token",
       )}
+    >
+      <div className="grid aspect-video place-items-center">
+        {cameraTrack ? (
+          <VideoTrack
+            trackRef={cameraTrack}
+            className="size-full object-cover"
+          />
+        ) : (
+          <Avatar user={member} size="xl" />
+        )}
+      </div>
+
+      {/* 하단 오버레이: 이름 + 발화 + 역할(색+텍스트 병행, R29) */}
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[color-mix(in_oklch,var(--bg)_55%,transparent)] px-2 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-fg">
+          {member.name}
+          {isSelf && <span className="ml-1 text-fg-subtle">(나)</span>}
+        </span>
+        {speaking && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-online">
+            <Mic size={11} aria-hidden="true" />
+            말하는 중
+          </span>
+        )}
+        {isPresenter ? (
+          <Badge variant="admin">
+            <Radio size={11} aria-hidden="true" />
+            발표자
+          </Badge>
+        ) : (
+          <Badge variant="member">시청자</Badge>
+        )}
+      </div>
     </div>
+  );
+}
+
+/** 접속 대기(로딩) — 상태 3종의 로딩(R26). */
+function ConnectingCard() {
+  return (
+    <Card
+      role="status"
+      className="grid place-items-center px-6 py-12 text-center"
+    >
+      <p className="text-[13px] text-fg-muted">연결 중이에요…</p>
+    </Card>
+  );
+}
+
+/** 접속 실패(에러) — 다시 시도(R26/R30). 화면을 통째로 날리지 않는다. */
+function RoomErrorCard({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <p className="text-[13px] text-fg-muted">
+        룸에 연결하지 못했어요. 잠깐 후 다시 시도해주세요.
+      </p>
+      <Button variant="secondary" onClick={onRetry}>
+        다시 시도
+      </Button>
+    </Card>
   );
 }
 

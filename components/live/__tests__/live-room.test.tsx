@@ -1,18 +1,77 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
-// LiveRoom 단위 테스트 — 분기·권한·낙관적 전이(fetch 모킹).
-// 검증: 라이브 없음→시작 / 발표자=자격증명+종료(확인) / 시청자=자격증명 미표시+나가기 / 409→입장.
+// LiveRoom 단위 테스트 — LiveKit 다자간 화상(ADR-019)으로 재작성.
+// 검증: 라이브 없음→시작 / 발표자=룸 진입+종료(확인) / 시청자=join+나가기 / 409→입장 / 503 사유 /
+//       참가자 타일(카메라=비디오, 미카메라=아바타).
+//
+// CRITICAL: livekit-client·@livekit/components-react는 가짜로(실제 WebSocket 연결 금지).
+//   참가자/트랙은 테스트가 lk.* 로 주입한다.
 
-// Realtime 구독은 graceful no-op로(키 부재). hls.js는 동적 import라 미지원 클래스로 모킹.
-vi.mock("@/lib/supabase/browser", () => ({ createBrowserSupabase: () => null }));
-vi.mock("hls.js", () => ({
-  default: class {
-    static isSupported() {
-      return false;
-    }
+const lk = vi.hoisted(() => ({
+  participants: [] as Array<{
+    identity: string;
+    name?: string;
+    isSpeaking?: boolean;
+    isLocal?: boolean;
+  }>,
+  tracks: [] as Array<{
+    participant: { identity: string };
+    source: string;
+    publication?: unknown;
+  }>,
+}));
+
+vi.mock("livekit-client", () => ({
+  Track: {
+    Source: {
+      Camera: "camera",
+      ScreenShare: "screen_share",
+      Microphone: "microphone",
+      ScreenShareAudio: "screen_share_audio",
+    },
   },
 }));
+
+vi.mock("@livekit/components-react", async () => {
+  const React = await import("react");
+  return {
+    // 토큰으로 룸 컨텍스트를 제공하는 척만 한다 — 접속되면 onConnected를 부른다.
+    LiveKitRoom: ({
+      children,
+      onConnected,
+    }: {
+      children: React.ReactNode;
+      onConnected?: () => void;
+    }) => {
+      React.useEffect(() => {
+        onConnected?.();
+      }, [onConnected]);
+      return React.createElement("div", { "data-testid": "livekit-room" }, children);
+    },
+    RoomAudioRenderer: () => null,
+    VideoTrack: ({
+      trackRef,
+    }: {
+      trackRef?: { participant?: { identity?: string } };
+    }) =>
+      React.createElement("div", {
+        "data-testid": "video-tile",
+        "data-identity": trackRef?.participant?.identity,
+      }),
+    useParticipants: () => lk.participants,
+    useTracks: () => lk.tracks,
+  };
+});
+
+// Realtime 구독은 graceful no-op(키 부재).
+vi.mock("@/lib/supabase/browser", () => ({ createBrowserSupabase: () => null }));
 
 const { LiveProvider } = await import("@/components/providers/live-provider");
 const { LiveRoom } = await import("@/components/live/live-room");
@@ -58,7 +117,11 @@ function renderRoom(props: {
   );
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  lk.participants = [];
+  lk.tracks = [];
+});
 afterEach(() => cleanup());
 
 describe("LiveRoom", () => {
@@ -72,18 +135,20 @@ describe("LiveRoom", () => {
     ).toBeInTheDocument();
   });
 
-  it("발표자: 시작 성공 → 자격증명(Stream Key) 표시 + [라이브 종료]는 확인 다이얼로그를 거친다", async () => {
+  it("발표자: 시작 성공 → LiveKit 룸 진입 + [라이브 종료]는 확인 다이얼로그를 거친다", async () => {
     vi.stubGlobal(
       "fetch",
       route((url, method) => {
         if (url === "/api/live/start" && method === "POST")
           return res(201, {
             data: {
-              session: { id: "s1", presenterId: "ha" },
-              rtmps: { url: "rtmps://send/", streamKey: "KEY-12345" },
-              srt: { url: "srt://send/", streamId: "sid", passphrase: "pass" },
-              webRTC: { url: "https://whip/publish" },
-              playback: { hls: "" },
+              session: {
+                id: "s1",
+                presenterId: "ha",
+                startedAt: "2026-06-15T01:00:00Z",
+              },
+              token: "TKN-presenter",
+              url: "wss://lk.example",
             },
           });
         return res(500, {});
@@ -93,48 +158,39 @@ describe("LiveRoom", () => {
     renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });
     fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
 
-    // 발표자 뷰: 브라우저 송출 시작 버튼이 보인다(BroadcastPanel).
-    expect(
-      await screen.findByRole("button", { name: /송출 시작/ }),
-    ).toBeInTheDocument();
-    // OBS 폴백(고급)에 송출 자격증명이 본인에게만 노출된다.
-    expect(screen.getByText("KEY-12345")).toBeInTheDocument();
-    const endBtn = screen.getByRole("button", { name: /라이브 종료/ });
-    expect(endBtn).toBeInTheDocument();
+    // 토큰으로 LiveKit 룸 컨텍스트에 진입한다.
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+    // 송출 자격증명(Stream Key 등)은 더 이상 노출하지 않는다(LiveKit 토큰만).
+    expect(screen.queryByText(/Stream Key/i)).not.toBeInTheDocument();
 
+    const endBtn = screen.getByRole("button", { name: /라이브 종료/ });
     // 종료는 파괴적(R27) — 즉시 실행하지 않고 확인 다이얼로그를 띄운다.
     fireEvent.click(endBtn);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText(/모두의 세션이 끝나요/)).toBeInTheDocument();
   });
 
-  it("시청자: 자격증명 미표시 + [나가기](전역 종료 아님) + join 호출", async () => {
-    const fetchMock = route((url, method) => {
-      if (url === "/api/live/s1/join" && method === "POST")
-        return res(200, { data: { playback: { hls: "https://play/x.m3u8" } } });
-      return res(500, {});
-    });
-    vi.stubGlobal("fetch", fetchMock);
+  it("시작 시 미설정(503) → 서버의 친절한 사유를 그대로 노출(R30)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      route((url, method) => {
+        if (url === "/api/live/start" && method === "POST")
+          return res(503, {
+            error: {
+              code: "LIVE_UNCONFIGURED",
+              message: "세미나 라이브가 아직 연결되지 않았어요.",
+            },
+          });
+        return res(500, {});
+      }),
+    );
 
-    renderRoom({
-      currentMemberId: "jo",
-      initialLive: true,
-      initialSession: { id: "s1", presenterId: "ha", participantIds: [] },
-    });
+    renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });
+    fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
 
     expect(
-      await screen.findByRole("button", { name: /나가기/ }),
+      await screen.findByText(/세미나 라이브가 아직 연결되지 않았어요/),
     ).toBeInTheDocument();
-    // 송출 자격증명은 시청자에게 절대 보이지 않는다(SECURITY/R7).
-    expect(screen.queryByText(/Stream Key/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /라이브 종료/ })).toBeNull();
-    // 마운트 시 join 호출(시청 등록).
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/live/s1/join",
-        expect.objectContaining({ method: "POST" }),
-      ),
-    );
   });
 
   it("시작 시 이미 진행 중(409) → 충돌이 아니라 입장으로 안내", async () => {
@@ -154,5 +210,78 @@ describe("LiveRoom", () => {
       await screen.findByText(/이미 라이브가 진행 중이에요/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /입장/ })).toBeInTheDocument();
+  });
+
+  it("시청자: join 호출 + 룸 진입(자격증명 미표시) + [나가기]는 본인만 퇴장", async () => {
+    const fetchMock = route((url, method) => {
+      if (url === "/api/live/s1/join" && method === "POST")
+        return res(200, { data: { token: "TKN-viewer", url: "wss://lk.example" } });
+      if (url === "/api/live/s1/leave" && method === "POST") return res(200, {});
+      return res(500, {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderRoom({
+      currentMemberId: "jo",
+      initialLive: true,
+      initialSession: { id: "s1", presenterId: "ha", participantIds: [] },
+    });
+
+    // 마운트 시 join 호출(시청 등록 + 토큰).
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/live/s1/join",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    // 토큰으로 룸 컨텍스트에 진입한다.
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+    // 종료(전역)는 발표자만 — 시청자에겐 없다(R6).
+    expect(
+      screen.queryByRole("button", { name: /라이브 종료/ }),
+    ).toBeNull();
+
+    // 나가기 = 본인만 퇴장 → /leave 호출.
+    fireEvent.click(screen.getByRole("button", { name: /나가기/ }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/live/s1/leave",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("참가자 타일: 카메라 트랙이 있으면 비디오, 없으면 아바타(이니셜)", async () => {
+    lk.participants = [
+      { identity: "ha", name: "하수현", isSpeaking: false },
+      { identity: "jo", name: "조성민", isSpeaking: false, isLocal: true },
+    ];
+    // ha만 카메라 트랙을 publish 중.
+    lk.tracks = [
+      { participant: { identity: "ha" }, source: "camera", publication: {} },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      route((url, method) => {
+        if (url === "/api/live/s1/join" && method === "POST")
+          return res(200, { data: { token: "TKN-viewer", url: "wss://lk.example" } });
+        return res(500, {});
+      }),
+    );
+
+    renderRoom({
+      currentMemberId: "jo",
+      initialLive: true,
+      initialSession: { id: "s1", presenterId: "ha", participantIds: [] },
+    });
+
+    // 카메라 켠 ha → 비디오 타일.
+    const video = await screen.findByTestId("video-tile");
+    expect(video).toHaveAttribute("data-identity", "ha");
+    // 카메라 끈 jo → 아바타(이니셜).
+    expect(screen.getByLabelText("조성민 아바타")).toBeInTheDocument();
+    // ha는 비디오라 아바타가 아니다.
+    expect(screen.queryByLabelText("하수현 아바타")).toBeNull();
   });
 });
