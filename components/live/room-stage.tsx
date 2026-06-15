@@ -12,6 +12,11 @@ import { Track } from "livekit-client";
 import { Hand, Mic, Minus, Plus, Radio } from "lucide-react";
 import { Avatar, Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import {
+  AnnotationOverlay,
+  type ActiveAnnotation,
+  type DrawInput,
+} from "./annotation-overlay";
 import type { LiveMember } from "./types";
 
 // 룸 stage — LiveKit 컨텍스트 안에서 참가자 타일을 렌더한다.
@@ -26,6 +31,10 @@ export interface RoomStageProps {
   currentMemberId: string;
   /** 손든 참가자 identity 집합. */
   hands: Set<string>;
+  /** 화면공유 주석(펜/레이저) — 부모(MeetRoom)가 데이터 채널로 모은 것. */
+  annotations?: ActiveAnnotation[];
+  /** 발표자가 그릴 때 호출(없으면 그리기 비활성). */
+  onDraw?: (input: DrawInput) => void;
 }
 
 interface StripParticipant {
@@ -54,6 +63,8 @@ export function RoomStage({
   presenterId,
   currentMemberId,
   hands,
+  annotations,
+  onDraw,
 }: RoomStageProps) {
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
@@ -117,6 +128,11 @@ export function RoomStage({
                     m.id === (screenShare.participant?.identity ?? presenterId),
                 )?.name ?? "발표자"
               }
+            />
+            <AnnotationOverlay
+              isPresenter={currentMemberId === presenterId}
+              annotations={annotations ?? []}
+              onDraw={onDraw}
             />
           </div>
 

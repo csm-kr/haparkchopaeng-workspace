@@ -23,6 +23,31 @@ describe("encode/decode 왕복", () => {
     const m: LiveMessage = { kind: "hand", up: true, at: 3000 };
     expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
   });
+
+  it("annot (펜 스트로크)", () => {
+    const m: LiveMessage = {
+      kind: "annot",
+      tool: "pen",
+      color: "var(--busy)",
+      points: [
+        [0.1, 0.2],
+        [0.3, 0.4],
+      ],
+      at: 4000,
+    };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
+
+  it("annot (레이저 한 점)", () => {
+    const m: LiveMessage = {
+      kind: "annot",
+      tool: "laser",
+      color: "var(--online)",
+      points: [[0.5, 0.5]],
+      at: 5000,
+    };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
 });
 
 describe("chat 길이 clamp", () => {
@@ -73,5 +98,46 @@ describe("방어적 디코드", () => {
       JSON.stringify({ kind: "reaction", emoji: "", at: 1 }),
     );
     expect(decodeLiveMessage(badReaction)).toBeNull();
+  });
+});
+
+describe("annot 검증", () => {
+  const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+
+  it("좌표는 0..1로 clamp된다", () => {
+    const decoded = decodeLiveMessage(
+      encodeLiveMessage({
+        kind: "annot",
+        tool: "pen",
+        color: "var(--accent)",
+        points: [[-0.5, 1.5]],
+        at: 1,
+      }),
+    );
+    expect(decoded).toMatchObject({ kind: "annot", points: [[0, 1]] });
+  });
+
+  it("잘못된 tool·빈 색·빈 점·비-숫자 좌표는 null", () => {
+    expect(
+      decodeLiveMessage(enc({ kind: "annot", tool: "spray", color: "x", points: [[0, 0]], at: 1 })),
+    ).toBeNull();
+    expect(
+      decodeLiveMessage(enc({ kind: "annot", tool: "pen", color: "", points: [[0, 0]], at: 1 })),
+    ).toBeNull();
+    expect(
+      decodeLiveMessage(enc({ kind: "annot", tool: "pen", color: "x", points: [], at: 1 })),
+    ).toBeNull();
+    expect(
+      decodeLiveMessage(enc({ kind: "annot", tool: "pen", color: "x", points: [["a", 0]], at: 1 })),
+    ).toBeNull();
+  });
+
+  it("점 수는 256으로 제한된다", () => {
+    const many: [number, number][] = Array.from({ length: 400 }, () => [0.5, 0.5]);
+    const decoded = decodeLiveMessage(
+      encodeLiveMessage({ kind: "annot", tool: "pen", color: "var(--busy)", points: many, at: 1 }),
+    );
+    expect(decoded?.kind).toBe("annot");
+    if (decoded?.kind === "annot") expect(decoded.points.length).toBe(256);
   });
 });
