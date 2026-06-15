@@ -31,6 +31,7 @@ export default async function MeetingPage() {
             ? {
                 id: active.id,
                 presenterId: active.presenterId,
+                startedAt: active.startedAt.toISOString(),
                 participantIds: active.participants
                   .filter((p) => !p.leftAt)
                   .map((p) => p.memberId),

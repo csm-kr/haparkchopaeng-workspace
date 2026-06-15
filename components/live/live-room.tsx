@@ -1,36 +1,28 @@
 "use client";
 
 import * as React from "react";
-import {
-  LiveKitRoom,
-  RoomAudioRenderer,
-  VideoTrack,
-  useParticipants,
-  useTracks,
-  type TrackReference,
-} from "@livekit/components-react";
-import { Track } from "livekit-client";
-import { Mic, Radio, Video } from "lucide-react";
+import { LiveKitRoom } from "@livekit/components-react";
+import { Video } from "lucide-react";
 import { useLive } from "@/components/providers";
-import { Avatar, Badge, Button, Card, EmptyState } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import { Button, Card, EmptyState } from "@/components/ui";
+import { MeetHeader } from "./meet-header";
+import { MeetRoom } from "./meet-room";
+import type { LiveMember } from "./types";
 
 // 세미나 라이브 룸 — LiveKit 다자간 화상(ADR-019, ADR-002 대체). 'use client' 인터랙티브 섬(R32).
 // CRITICAL: `live`는 화면 state로 보관하지 않는다 — 앱 레벨 useLive()가 단일 소스(ADR-001/R5).
 // CRITICAL: 접속 토큰은 라우트(/start·/join)에서만 받는다 — 클라가 DB/LiveKit 서버 키를 직접 보지 않는다(R2/R32).
 // CRITICAL: 종료(/end)만 전역 종료(파괴적, 확인) — 나가기(/leave)는 본인만(ADR-001/R6·R27).
-// 이 단계는 영상 연결 + 타일 + 생명주기까지. 컨트롤바·채팅·반응·타이머는 다음 단계.
+// 영상/타일/생명주기는 MeetRoom(룸 컨텍스트), 타이머/LIVE는 MeetHeader(컨텍스트 밖)로 분리.
 
-export interface LiveRoomMember {
-  id: string;
-  name: string;
-  initial: string;
-  color: string;
-}
+/** live-room 멤버 표시 타입 — 공용 LiveMember와 동형(하위 호환 유지). */
+export type LiveRoomMember = LiveMember;
 
 export interface LiveRoomSession {
   id: string;
   presenterId: string;
+  /** 서버 LiveSession.startedAt(ISO) — 송출 타이머 기준. 없으면 00:00부터. */
+  startedAt?: string;
   /** 현재 접속 중(leftAt=null)인 멤버 id. */
   participantIds: string[];
 }
@@ -92,6 +84,7 @@ export function LiveRoom({
         setSession({
           id: j.data.id,
           presenterId: j.data.presenterId,
+          startedAt: j.data.startedAt,
           participantIds: (j.data.participants ?? [])
             .filter((p: { leftAt: string | null }) => !p.leftAt)
             .map((p: { memberId: string }) => p.memberId),
@@ -151,6 +144,7 @@ export function LiveRoom({
       setSession({
         id: j.data.session.id,
         presenterId: j.data.session.presenterId,
+        startedAt: j.data.session.startedAt,
         participantIds: [j.data.session.presenterId],
       });
       setConnected(false);
@@ -304,10 +298,11 @@ export function LiveRoom({
         ) : !connected ? (
           <ConnectingCard />
         ) : (
-          <RoomStage
+          <MeetRoom
             members={members}
-            session={session}
+            presenterId={session.presenterId}
             currentMemberId={currentMemberId}
+            isPresenter={isPresenter}
           />
         )}
       </LiveKitRoom>
@@ -326,20 +321,12 @@ export function LiveRoom({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 룸 헤더: LIVE 표시(색+텍스트 병행, R29) + 본인 역할에 맞는 액션 */}
-      <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-2 text-[13px] font-medium text-fg">
-          <span
-            aria-hidden="true"
-            className="anim-livepulse size-2 rounded-full bg-busy"
-          />
-          <span className="rounded-[10px] bg-busy/10 px-2 py-0.5 text-[11px] font-semibold text-busy">
-            LIVE
-          </span>
-          {presenter ? `${presenter.name}님이 발표 중` : "세미나 진행 중"}
-        </span>
-        {action}
-      </div>
+      {/* 룸 헤더: LIVE 표시(색+텍스트 병행, R29) + 송출 타이머 + 본인 역할 액션 */}
+      <MeetHeader
+        startedAt={session.startedAt}
+        presenterName={presenter?.name}
+        action={action}
+      />
 
       {body}
 
@@ -357,147 +344,6 @@ export function LiveRoom({
           onConfirm={handleEnd}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * 룸 stage — LiveKit 컨텍스트 안에서 참가자 타일을 렌더(다음 단계가 컨트롤을 끼울 seam).
- * 화면공유 트랙이 있으면 메인 stage로 크게, 카메라는 filmstrip으로. 없으면 그리드.
- */
-function RoomStage({
-  members,
-  session,
-  currentMemberId,
-}: {
-  members: LiveRoomMember[];
-  session: LiveRoomSession;
-  currentMemberId: string;
-}) {
-  const participants = useParticipants();
-  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
-
-  const screenShare = tracks.find(
-    (t) => t.source === Track.Source.ScreenShare && t.publication,
-  );
-  const cameraOf = (identity: string) =>
-    tracks.find(
-      (t) =>
-        t.source === Track.Source.Camera &&
-        t.publication &&
-        t.participant?.identity === identity,
-    );
-
-  const tiles = participants.map((p) => {
-    const member = members.find((m) => m.id === p.identity);
-    return (
-      <ParticipantTile
-        key={p.identity}
-        identity={p.identity}
-        member={
-          member ?? {
-            id: p.identity,
-            name: p.name || p.identity,
-            initial: (p.name || p.identity).slice(0, 1).toUpperCase(),
-            color: "var(--fg-faint)",
-          }
-        }
-        cameraTrack={cameraOf(p.identity)}
-        isPresenter={p.identity === session.presenterId}
-        isSelf={p.identity === currentMemberId}
-        speaking={!!p.isSpeaking}
-        compact={!!screenShare}
-      />
-    );
-  });
-
-  return (
-    <div className="flex flex-col gap-3">
-      {/* 음성 재생(트랙 구독). 화면엔 보이지 않는다. */}
-      <RoomAudioRenderer />
-
-      {screenShare ? (
-        <>
-          <Card className="overflow-hidden p-0">
-            <div className="grid aspect-video place-items-center bg-bg-subtle">
-              <VideoTrack
-                trackRef={screenShare}
-                className="size-full object-contain"
-              />
-            </div>
-          </Card>
-          <div className="flex gap-2 overflow-x-auto pb-1">{tiles}</div>
-        </>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{tiles}</div>
-      )}
-
-      <p className="text-[12px] font-semibold text-fg-subtle">
-        참가자 {participants.length}명
-      </p>
-    </div>
-  );
-}
-
-/** 참가자 타일 — 카메라 트랙이 있으면 비디오, 없으면 아바타(정직한 재현). 발화는 색+텍스트(R29). */
-function ParticipantTile({
-  identity,
-  member,
-  cameraTrack,
-  isPresenter,
-  isSelf,
-  speaking,
-  compact,
-}: {
-  identity: string;
-  member: LiveRoomMember;
-  cameraTrack: TrackReference | undefined;
-  isPresenter: boolean;
-  isSelf: boolean;
-  speaking: boolean;
-  compact: boolean;
-}) {
-  return (
-    <div
-      data-identity={identity}
-      className={cn(
-        "relative overflow-hidden rounded-lg border bg-bg-subtle",
-        compact ? "w-40 shrink-0" : "",
-        speaking ? "border-online ring-2 ring-online/40" : "border-border-token",
-      )}
-    >
-      <div className="grid aspect-video place-items-center">
-        {cameraTrack ? (
-          <VideoTrack
-            trackRef={cameraTrack}
-            className="size-full object-cover"
-          />
-        ) : (
-          <Avatar user={member} size="xl" />
-        )}
-      </div>
-
-      {/* 하단 오버레이: 이름 + 발화 + 역할(색+텍스트 병행, R29) */}
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[color-mix(in_oklch,var(--bg)_55%,transparent)] px-2 py-1.5">
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-fg">
-          {member.name}
-          {isSelf && <span className="ml-1 text-fg-subtle">(나)</span>}
-        </span>
-        {speaking && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-online">
-            <Mic size={11} aria-hidden="true" />
-            말하는 중
-          </span>
-        )}
-        {isPresenter ? (
-          <Badge variant="admin">
-            <Radio size={11} aria-hidden="true" />
-            발표자
-          </Badge>
-        ) : (
-          <Badge variant="member">시청자</Badge>
-        )}
-      </div>
     </div>
   );
 }

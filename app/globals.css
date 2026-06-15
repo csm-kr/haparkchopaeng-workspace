@@ -259,11 +259,17 @@ body {
   animation: slidein 0.2s ease;
 }
 
-/* 모션 존중 — 깜빡임/시머를 정적 표현으로 대체 (R29) */
+/* 미팅 반응 이모지 — 떠올랐다 사라짐 (DESIGN_GUIDE §애니메이션 허용 목록) */
+.anim-floatup {
+  animation: floatup 2.4s ease-out forwards;
+}
+
+/* 모션 존중 — 깜빡임/시머/플로팅을 정적 표현으로 대체 (R29) */
 @media (prefers-reduced-motion: reduce) {
   .anim-shimmer,
   .anim-livepulse,
-  .anim-slidein {
+  .anim-slidein,
+  .anim-floatup {
     animation: none;
   }
   .anim-shimmer {

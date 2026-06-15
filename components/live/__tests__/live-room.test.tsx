@@ -67,6 +67,19 @@ vi.mock("@livekit/components-react", async () => {
       }),
     useParticipants: () => lk.participants,
     useTracks: () => lk.tracks,
+    // 컨트롤바·채팅(MeetRoom/MeetControls)이 쓰는 훅 — 실제 연결 없이 no-op 목.
+    useRoomContext: () => ({ localParticipant: { publishData: vi.fn() } }),
+    useLocalParticipant: () => ({
+      isMicrophoneEnabled: false,
+      isCameraEnabled: false,
+      isScreenShareEnabled: false,
+      localParticipant: {
+        setMicrophoneEnabled: vi.fn(),
+        setCameraEnabled: vi.fn(),
+        setScreenShareEnabled: vi.fn(),
+      },
+    }),
+    useDataChannel: () => ({ send: vi.fn(), message: undefined, isSending: false }),
   };
 });
 
