@@ -40,7 +40,7 @@
       "status": "completed",
       "started_at": "2026-06-15T12:15:54+0900",
       "summary": "죽은 Cloudflare 단방향 방송 코드 9개 삭제(lib/cloudflare·whip, components/live/broadcast-panel·hls-player, app/api/webhooks/cloudflare + 각 테스트), components/live/index.ts의 HlsPlayer export·package.json의 hls.js 제거(lockfile 동기), lib/live.ts 주석 LiveKit화. live 경로(app/lib/components)에 Cloudflare/HLS/WHIP 코드 잔여 참조 0 — 남은 cloudflareLiveInputId는 미사용 레거시 DB 컬럼(스키마 무변경·db push 없음, ADR-019). tests/e2e/meeting.spec.ts를 LiveKit 룸 흐름으로 갱신: 빈 상태+[라이브 시작] CTA·사이드바 /meeting 링크 셸 정합·키 미설정 시 503 친절 안내(R30) 노출+전역 live 미점화 검증(비파괴: 키 없으면 /start가 세션 생성 전 503). build·314 tests·lint·playwright(16 pass/1 skip) green. 실 다자간 검증은 LiveKit Cloud 키(LIVEKIT_URL/LIVEKIT_API_KEY/LIVEKIT_API_SECRET) 주입 후 수동.",
-      "completed_at": "2026-06-15T12:31:00+0900"
+      "completed_at": "2026-06-15T12:26:50+0900"
     }
   ],
   "created_at": "2026-06-15T11:25:18+0900"
