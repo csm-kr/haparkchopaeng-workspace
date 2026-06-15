@@ -80,21 +80,24 @@
 - **CRITICAL: 동시 편집 충돌은 낙관적 락으로.** PUT은 `If-Match`로 보낸 `version`이 현재와 다르면 `409` "다른 사람이 먼저 저장했어요"(→ [`./DB.md`](./DB.md) `ScheduleMonth.version`).
 - 누적 벌금·미납은 서버에서 파생 계산해 응답에 포함(저장 안 함).
 
-### 라이브 세미나 (Cloudflare Stream Live)
+### 라이브 세미나 (LiveKit · ADR-019)
 | 메서드 | 경로 | 설명 | 권한 |
 |---|---|---|---|
 | GET | `/api/live` | 현재 세션(없으면 `null`) | 🔒 |
 | (구독) | **Supabase Realtime 채널** | live.started/ended·@멘션 — 클라가 직접 구독 | 🔒 |
-| POST | `/api/live/start` | Cloudflare Live Input 생성 → 세션 시작 | 🔒 |
-| POST | `/api/live/:id/join` | 참가 등록 + 시청용 HLS/재생 정보 | 🔒 |
+| POST | `/api/live/start` | 세션 시작 + 발표자 LiveKit 토큰 발급(publish + 화면공유) | 🔒 |
+| POST | `/api/live/:id/join` | 참가 등록 + 참가자 LiveKit 토큰 발급(카메라/마이크 publish) | 🔒 |
 | POST | `/api/live/:id/leave` | 본인 퇴장 | 🔒 |
-| POST | `/api/live/:id/end` | 세션 종료(전체) + 녹화 처리 | ✍️(발표자/관리자) |
+| POST | `/api/live/:id/end` | 세션 종료(전체) + LiveKit 룸 정리 | ✍️(발표자/관리자) |
 
-- **`/start` 응답**(발표자 전용): `{ rtmps: {url, streamKey}, srt: {...}, playback: {hls} }`. **Stream Key는 발표자 본인에게만** 노출(→ SECURITY).
-- **`/join` 응답**(시청자): 재생용 `{ playback: { hls } }`만. 송출 자격증명 절대 미포함.
+- **`/start` 응답**(발표자): `{ session, token, url }`. 토큰 grant에 화면공유 포함. **토큰은 발표자 본인에게만**.
+- **`/join` 응답**(참가자): `{ token, url }`. 카메라/마이크 publish 가능, 화면공유 grant 없음.
+- **CRITICAL: 토큰 신원은 세션에서.** identity=`Member.id`, 클라가 보낸 식별자 미신뢰(R3). 토큰을 다른 사람에게 돌려주지 않는다(R7).
 - **CRITICAL: 동시 active 세션 1개.** `/start`는 이미 active 세션이 있으면 `409`. 앱 전역 `live`와 1:1(ADR-001).
-- **`/end`만 전역 종료.** `/leave`는 본인 `Participant`만 닫는다.
-- **CRITICAL: 전이 전파는 Supabase Realtime으로.** `/start`·`/end` 핸들러가 Realtime 채널에 broadcast(또는 `LiveSession` 변경→`postgres_changes`)하고, 클라이언트는 폴링 없이 그 채널을 구독해 배지·배너·룸을 동시 갱신한다(ADR-014→016).
+- **`/end`만 전역 종료.** `/leave`는 본인 `Participant`만 닫는다(LiveKit 연결 종료는 클라이언트). 종료 시 LiveKit 룸 삭제는 best-effort.
+- **채팅·반응·손들기**는 HTTP 엔드포인트가 아니라 **LiveKit 데이터 채널**로 룸 내부 전송한다(휘발·미저장).
+- **CRITICAL: 미설정(키 부재) 시 `/start`·`/join`은 `503`**("아직 연결 안 됨", R30). build/test는 키 없이 통과(R2).
+- **전이 전파는 Supabase Realtime으로**(R33) — `/start`·`/end` 핸들러가 broadcast하고 클라는 폴링 없이 구독해 배지·배너·룸을 동시 갱신한다(ADR-014→016).
 
 ### 업로드 / 스토리지
 | 메서드 | 경로 | 설명 | 권한 |
@@ -106,13 +109,11 @@
 ### 내부 / 웹훅 (인증은 서명 검증)
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST | `/api/webhooks/cloudflare` | 녹화 완료 등 Stream Live 이벤트 수신(HMAC 검증) |
-
-- 녹화 완료 시 발표 자료 아카이브 여부 결정(미결 → [`../agent/ISSUES.md`](../agent/ISSUES.md) I-3). 세션 인증이 아니라 **서명 검증**으로 보호.
+| — | (현재 없음) | 녹화 웹훅 폐기 — LiveKit 전환(ADR-019). 녹화는 미결(ISSUES) |
 
 ## 외부 연동
 
-- **Cloudflare Stream Live:** Live Input 생성/조회/삭제, 녹화 조회. 앱은 방송 생성·권한 체크·플레이어 노출만 담당(인코딩/HLS/CDN은 위임, ADR-002). 자격증명은 서버 환경변수. **녹화 완료는 웹훅**으로 수신.
+- **LiveKit(SFU):** 앱은 입장 토큰 발급·권한 체크·룸 정리만 담당하고, 영상·음성·화면공유 트랙 라우팅은 LiveKit에 위임(ADR-019). 토큰 서명 키(`LIVEKIT_API_SECRET`)는 서버 환경변수. 화면공유 grant는 발표자에게만.
 - **파일 스토리지:** 원문 PDF·발표 에셋·figure 이미지. 업로드는 **프리사인 직접 업로드**, 다운로드는 **서명 URL**(직접 공개 버킷 금지 → SECURITY).
 - **arXiv:** **워커**가 `arxiv.org/pdf/{id}` PDF를 가져와 스토리지에 저장(요청 경로 아님, ADR-013). SSRF 화이트리스트.
 - **Gemini(`@google/genai`):** 논문 분석. **Inngest 잡에서만** 호출(분 단위, ADR-013→016 → [`./ENV.md`](./ENV.md)).

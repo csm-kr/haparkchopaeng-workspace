@@ -138,3 +138,23 @@
 - 초대 링크 = 베어러 자격증명 → 유출 시 누구나(부여 역할로) 합류. N인·만료·회수로 완화(세션 무효화·정원 예약은 미도입).
 - 과도기: 기존 기능이 비스코핑이라 2번째 팀은 기존 데이터를 공유한다(팀 스코핑 단계 전까지). 의도된 단계적 전환.
 - `R17`(논문 목록 필터 "전체" 하나만)은 **영향 없음** — 그대로 유지.
+
+### ADR-019: 라이브는 LiveKit 다자간 화상 컨퍼런스 (ADR-002 대체)
+
+> **이 ADR은 ADR-002(라이브 비디오 = Cloudflare Stream Live, 1인 송출 + 다수 HLS 시청)를 대체한다.** ADR-001(`live` 앱 레벨·단일 세션)·R6(동시 1개)·R33(전이는 Supabase Realtime)·ADR-015(읽기 RSC·쓰기 라우트)·R2(키는 서버·키 없이 build/test 통과)는 그대로 유지한다.
+
+**결정**: 세미나 라이브를 **1인 송출 단방향 방송에서 다자간 실시간 화상 컨퍼런스로 전환**한다. 영상·음성·화면공유 트랙은 **LiveKit(SFU)**가 나른다(Cloudflare Stream Live 폐기). 참가자는 모두 같은 LiveKit 룸에 접속하며(카메라는 선택 — 끄면 아바타 타일), 발표자는 화면공유 권한을 추가로 가진다.
+
+- **영상/음성/화면공유**: LiveKit. 룸 이름은 `LiveSession.id`에서 파생(`live-{id}`). 참가자 신원(identity) = `Member.id`(아바타·이름 매핑용).
+- **입장 토큰**: 서버가 참가자별 LiveKit AccessToken을 발급한다(`/start`는 발표자, `/join`은 시청자). **화면공유 grant(`canPublishSources`의 screen_share)는 발표자 토큰에만** 넣는다(R7 개정). 토큰은 본인에게만 응답하고, 신원은 세션에서 주입한다 — 클라가 보낸 식별자 미신뢰(R3).
+- **채팅·반응·손들기**: 별도 서버/인프라 없이 **LiveKit 데이터 채널**로 룸 내부에서 주고받는다(휘발·미저장 — 4인 세미나에 충분). 메시지 작성자는 LiveKit 참가자 identity로 판별하고, 페이로드의 author는 신뢰하지 않는다.
+- **송출 타이머**: 서버 `LiveSession.startedAt` 기준으로 클라이언트가 경과 시간을 표시한다.
+- **앱 전역 `live` 전이**(사이드바 LIVE 배지·홈 배너): 변경 없이 **Supabase Realtime**(`live.started`/`live.ended`)을 유지한다(R33). 룸 내부 presence는 LiveKit, 앱 전역 on/off는 Supabase — 역할이 다르다.
+
+**이유**: PRD가 가정한 "1인 송출 + 다수 시청"(ADR-002)은 실제 기대("서로 얼굴 보이는 화상 세미나")와 어긋났다. 4인 그룹엔 SFU 한 대로 충분하고, 영상 인프라는 여전히 빌린다(R8 정신 유지 — 위탁 대상만 Cloudflare→LiveKit). 채팅 등은 룸에 이미 붙은 데이터 채널로 처리해 이중 presence/시그널링을 피한다.
+
+**트레이드오프**:
+- 외부 벤더가 Cloudflare Stream → LiveKit으로 교체된다(비용·약관). 새 키 `LIVEKIT_URL`/`LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`이 필요 — 키가 없으면 `/start`·`/join`이 `503`으로 친절히 안내(R30)하고, build/test는 키 없이 통과한다(R2).
+- 단방향 HLS의 "녹화 자동" 이점을 잃는다 — 녹화는 LiveKit Egress로 가능하나 **이번 범위 밖**(미결 → ISSUES). 기존 `recordingUrl`·Cloudflare 웹훅 경로는 폐기한다.
+- `LiveSession.cloudflareLiveInputId` 컬럼은 미사용으로 남긴다(무해한 레거시, 후속 마이그레이션에서 제거) — 이번 phase는 스키마 변경·`prisma db push` 없음.
+- 라이브는 **여전히 단일 전역 세션**이며 팀 스코핑하지 않는다(ADR-018 범위 유지 — 팀 분리는 다음 phase).

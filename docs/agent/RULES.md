@@ -22,8 +22,8 @@
 
 - **R5. `live`는 앱 레벨 상태다.** 화면 컴포넌트 안에 `live`를 보관하지 마라. 이유: 사이드바 배지·홈 배너·룸이 어긋난다. (ADR-001, [`./STATE.md`](./STATE.md))
 - **R6. 동시 active 라이브 세션은 1개.** `/start`가 이미 active면 `409`. `/end`만 전역 종료, `/leave`는 본인만. (ADR-001, [`../dev/API.md`](../dev/API.md))
-- **R7. Stream Key는 발표자에게만.** 시청자 응답엔 재생 HLS만. ([`../security/SECURITY.md`](../security/SECURITY.md))
-- **R8. 영상 인프라를 직접 만들지 마라.** Cloudflare Stream Live에 위임. (ADR-002)
+- **R7. LiveKit 토큰은 참가자별 서버 발급 · 본인에게만.** 모든 참가자는 자기 카메라/마이크를 publish할 수 있으나 **화면공유 grant는 발표자 토큰에만** 넣는다. 신원(identity)은 세션에서 주입(R3) — 클라가 보낸 식별자 미신뢰. (ADR-019, [`../security/SECURITY.md`](../security/SECURITY.md))
+- **R8. 영상 인프라를 직접 만들지 마라.** 다자간 화상은 **LiveKit(SFU)**에 위임. (ADR-019, ADR-002 대체)
 
 ## 논문 분석
 
