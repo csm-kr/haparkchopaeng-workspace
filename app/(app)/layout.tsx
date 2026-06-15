@@ -63,7 +63,7 @@ export default async function AppLayout({
   const active = activeTeam ? await getActiveSession(activeTeam.id) : null;
 
   return (
-    <AppProviders initialLive={!!active}>
+    <AppProviders initialLive={!!active} activeTeamId={activeTeam?.id ?? null}>
       <AppShell
         members={roster.map((m) => ({
           id: m.id,
