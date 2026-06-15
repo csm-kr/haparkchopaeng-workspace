@@ -40,7 +40,7 @@
       "status": "completed",
       "started_at": "2026-06-15T13:24:34+0900",
       "summary": "도메인 쓰기를 활성 팀으로 스코핑(R3/R37)·라이브 팀당 1개(ADR-020). 생성 라우트(POST papers·presentations·live/start)는 getActiveTeam으로 teamId 주입(클라 teamId 무시) + 활성 팀 없으면 403. 변이/삭제(DELETE papers·presentations·reanalyze)는 findUnique→findFirst({id,teamId})로 교차 팀 404(존재 비노출, R19). Server Action: notes(addNote/deleteNote)·comments(addComment)·reactions(toggleReaction)는 부모 Paper/Presentation/Comment의 teamId로 검사(교차 팀 404). schedule saveMonth는 (teamId,year,month) findFirst+create teamId 주입(낙관적 락 R35는 팀 스코프 안)·draftMonthAction·resolveStartIdx(teamId 인자 추가)로 순번 연속도 팀별·updateFines updateMany where teamId. 라이브: getActiveSession()→getActiveSession(teamId)(where active+teamId), start 충돌검사·create 팀 스코프(팀당 1개·팀B 독립 시작), join/leave/end는 세션 teamId가 내 활성 팀일 때만(교차 팀 404, 권한체크 전). /end만 전역 종료·/leave 본인(R6)·화면공유 발표자만(R7) 불변 유지. layout·meeting RSC가 getActiveTeam 해소 후 getActiveSession(team.id). TeamSwitcher는 step2 revalidatePath('/','layout')로 이미 전환 마무리(무변경). TDD: 신규 6 + 갱신 4 테스트(라이브 교차팀·생성 teamId 주입·삭제/재분석/노트/댓글/반응/스케줄/벌금 교차팀). build·test(383)·lint green. 운영 DB 미접촉(전부 목) — db push·백필은 step 5 수동.",
-      "completed_at": "2026-06-15T13:43:30+0900"
+      "completed_at": "2026-06-15T13:44:43+0900"
     },
     {
       "step": 5,
