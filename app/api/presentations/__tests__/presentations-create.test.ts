@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// POST /api/presentations 단위 테스트 — auth/prisma 모킹.
-// 검증: 제목 필수·발표자 세션 주입(클라 presenterId 무시)·첨부 자료 생성·타입 유도·객체 키 위조 방지.
+// POST /api/presentations 단위 테스트 — auth/active-team/prisma 모킹.
+// 검증: 제목 필수·발표자 세션 주입(클라 presenterId 무시)·teamId 활성 팀 주입(R3/R37)·
+//       활성 팀 없으면 403·첨부 자료 생성·타입 유도·객체 키 위조 방지.
 
 const { requireAuthMock } = vi.hoisted(() => ({ requireAuthMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireAuth: requireAuthMock }));
+
+const { getActiveTeamMock } = vi.hoisted(() => ({ getActiveTeamMock: vi.fn() }));
+vi.mock("@/lib/active-team", () => ({ getActiveTeam: getActiveTeamMock }));
 
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: { presentation: { create: vi.fn() } },
@@ -23,6 +27,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.presentation.create.mockResolvedValue({ id: "pres-new" });
   requireAuthMock.mockResolvedValue({ memberId: "ha", role: "멤버" });
+  getActiveTeamMock.mockResolvedValue({ id: "tA", slug: "alpha", role: "member" });
 });
 
 describe("POST /api/presentations", () => {
@@ -32,11 +37,21 @@ describe("POST /api/presentations", () => {
     expect(prismaMock.presentation.create).not.toHaveBeenCalled();
   });
 
-  it("발표자는 세션에서 취하고 생성한다(클라 presenterId 무시)", async () => {
-    const res = await POST(req({ title: "MoD 리뷰", presenterId: "해커" }));
+  it("활성 팀이 없으면 403 (생성 안 함)", async () => {
+    getActiveTeamMock.mockResolvedValue(null);
+    const res = await POST(req({ title: "MoD 리뷰" }));
+    expect(res.status).toBe(403);
+    expect(prismaMock.presentation.create).not.toHaveBeenCalled();
+  });
+
+  it("발표자·teamId는 세션/활성 팀에서 취하고 생성한다(클라 입력 무시)", async () => {
+    const res = await POST(
+      req({ title: "MoD 리뷰", presenterId: "해커", teamId: "해커팀" }),
+    );
     expect(res.status).toBe(201);
     const arg = prismaMock.presentation.create.mock.calls[0][0];
     expect(arg.data.presenterId).toBe("ha");
+    expect(arg.data.teamId).toBe("tA"); // 클라가 보낸 teamId 무시(R3)
     expect(arg.data.title).toBe("MoD 리뷰");
     expect(arg.data.assets).toBeUndefined();
   });

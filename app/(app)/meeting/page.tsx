@@ -2,6 +2,7 @@ import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { LiveRoom } from "@/components/live";
 import { getSession } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { getActiveSession } from "@/lib/live";
 import { prisma } from "@/lib/prisma";
 
@@ -15,8 +16,10 @@ export default async function MeetingPage() {
     const session = await getSession();
     if (!session) throw new Error("no session"); // 레이아웃이 보장하지만 방어적으로
 
+    // 활성 팀으로 스코핑(R37/ADR-020) — 룸은 팀 스코프. 팀이 없으면 라이브도 없다.
+    const team = await getActiveTeam(session.memberId);
     const [active, members] = await Promise.all([
-      getActiveSession(),
+      team ? getActiveSession(team.id) : Promise.resolve(null),
       prisma.member.findMany({
         orderBy: { createdAt: "asc" },
         select: { id: true, name: true, initial: true, color: true },

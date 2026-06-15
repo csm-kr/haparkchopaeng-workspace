@@ -1,10 +1,12 @@
 import { requireAuth } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { deleteRoom } from "@/lib/livekit";
 import { broadcastLive } from "@/lib/realtime";
 
 // POST /api/live/:id/end — 세션 전체 종료. ✍️ 발표자 본인 또는 관리자(👑)만.
+// CRITICAL: 세션이 내 활성 팀(=멤버십) 것일 때만 — 교차 팀 라이브는 차단(R19/ADR-020).
 // CRITICAL: /end만 전역 종료(active=false) — /leave는 본인만(ADR-001/R6).
 // CRITICAL: 권한은 진입부에서(R19). presenterId·role은 세션/DB에서, 클라 입력 미신뢰(R3).
 export async function POST(
@@ -15,11 +17,15 @@ export async function POST(
     const session = await requireAuth();
     const { id } = await params;
 
+    const team = await getActiveTeam(session.memberId);
     const live = await prisma.liveSession.findUnique({
       where: { id },
-      select: { id: true, presenterId: true },
+      select: { id: true, presenterId: true, teamId: true },
     });
-    if (!live) return fail(404, "NOT_FOUND", "진행 중인 라이브가 없어요.");
+    // 없음·교차 팀이면 404(권한 체크 전에 막는다 — 다른 팀 세션 존재를 드러내지 않는다, R19).
+    if (!live || !team || live.teamId !== team.id) {
+      return fail(404, "NOT_FOUND", "진행 중인 라이브가 없어요.");
+    }
 
     const isPresenter = live.presenterId === session.memberId;
     const isAdmin = session.role === "관리자";

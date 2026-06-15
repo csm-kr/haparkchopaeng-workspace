@@ -125,15 +125,18 @@ export async function getFines(
 }
 
 /**
- * 새 달 초안·저장의 시작 순번 — 직전 저장된 달의 rotationPointerAfter(없으면 0).
+ * 새 달 초안·저장의 시작 순번 — 같은 팀의 직전 저장된 달의 rotationPointerAfter(없으면 0).
  * 클라이언트가 포인터를 보내지 않는다 — 서버에서 취한다(R16).
+ * CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 다른 팀의 저장월이 순번에 끼어들지 않는다.
  */
 export async function resolveStartIdx(
   year: number,
   month: number,
+  teamId: string,
 ): Promise<number> {
   const prev = await prisma.scheduleMonth.findFirst({
     where: {
+      teamId,
       saved: true,
       OR: [{ year: { lt: year } }, { year, month: { lt: month } }],
     },
