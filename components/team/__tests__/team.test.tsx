@@ -127,6 +127,29 @@ describe("TeamManager", () => {
     );
   });
 
+  it("대기 초대의 '링크' 버튼은 resend API로 초대 링크를 다시 노출한다", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonRes({ invite: invites[0], link: "https://app.test/invite/again" }),
+      );
+    renderTeam();
+    const section = screen.getByRole("region", { name: "대기 중인 초대" });
+    await act(async () => {
+      fireEvent.click(
+        within(section).getAllByRole("button", { name: "초대 링크 다시 보기" })[0],
+      );
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/invites/i1/resend",
+      expect.objectContaining({ method: "POST" }),
+    );
+    // 다시 받은 링크가 복사 UI에 노출된다.
+    expect(
+      screen.getByText("https://app.test/invite/again"),
+    ).toBeInTheDocument();
+  });
+
   it("내보내기는 확인 다이얼로그를 거쳐 DELETE 멤버 API를 호출한다(R27)", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonRes({ memberId: "jo" }));
     renderTeam({ currentUserId: "ha", currentUserRole: "owner" });
