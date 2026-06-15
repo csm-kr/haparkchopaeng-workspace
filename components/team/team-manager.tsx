@@ -166,6 +166,22 @@ export function TeamManager({
     }
   }
 
+  // 활성 초대의 링크를 다시 노출(resend). 토큰은 목록에 없으므로 서버에서 받아온다(owner·admin만, R19).
+  async function resendInvite(invite: PendingInviteView) {
+    setActionError(null);
+    try {
+      const { link } = await callJson<{ link: string }>(
+        `/api/invites/${invite.id}/resend`,
+        { method: "POST" },
+      );
+      await copy(link);
+    } catch (e) {
+      setActionError(
+        e instanceof Error ? e.message : "초대 링크를 불러오지 못했어요.",
+      );
+    }
+  }
+
   async function changeRole(member: TeamMemberView, role: InviteRole) {
     setMenuFor(null);
     setActionError(null);
@@ -399,6 +415,14 @@ export function TeamManager({
                     {inv.usedCount}/{inv.maxUses} 사용됨
                   </span>
                 </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => resendInvite(inv)}
+                  aria-label="초대 링크 다시 보기"
+                >
+                  <Copy size={13} aria-hidden="true" /> 링크
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => revokeInvite(inv)}>
                   회수
                 </Button>
