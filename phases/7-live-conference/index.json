@@ -7,7 +7,8 @@
       "name": "docs-adr-019",
       "status": "completed",
       "started_at": "2026-06-15T11:25:18+0900",
-      "summary": "ADR-019(ADR-002 대체)·RULES R7/R8·API/ARCHITECTURE/STATE/ENV/.env.example를 LiveKit 다자간 화상으로 갱신. 코드 변경 없음."
+      "summary": "ADR-019(ADR-002 대체)·RULES R7/R8·API/ARCHITECTURE/STATE/ENV/.env.example를 LiveKit 다자간 화상으로 갱신. 코드 변경 없음.",
+      "completed_at": "2026-06-15T11:29:51+0900"
     },
     {
       "step": 1,
