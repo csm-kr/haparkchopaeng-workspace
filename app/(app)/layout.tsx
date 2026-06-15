@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveSession } from "@/lib/live";
-import { listMemberships } from "@/lib/teams";
+import { listMemberships, listTeamMembers } from "@/lib/teams";
 import { getActiveTeam } from "@/lib/active-team";
 import { needsTeamOnboarding } from "@/lib/redirect";
 import { AppProviders } from "@/components/providers";
@@ -40,8 +40,9 @@ export default async function AppLayout({
   const session = await getSession();
   if (!session) redirect("/");
 
-  const members = await prisma.member.findMany({ orderBy: { createdAt: "asc" } });
-  const current = members.find((m) => m.id === session.memberId);
+  const current = await prisma.member.findUnique({
+    where: { id: session.memberId },
+  });
   if (!current) redirect("/");
 
   // 팀 없음 진입 가드(ADR-018). 멤버십이 없으면 팀 만들기로(단, /teams/new 자신은 예외 → 루프 방지).
@@ -55,13 +56,23 @@ export default async function AppLayout({
   // 활성 팀 해소(ADR-020/R37) — 쿠키가 내 멤버십이면 그걸, 아니면 최근 합류로 폴백.
   const activeTeam = await getActiveTeam(session.memberId);
 
+  // 셸 로스터는 활성 팀 멤버만 보인다(ADR-020/R37) — 전역 Member 전체가 아니라 멤버십 기준.
+  const roster = activeTeam ? await listTeamMembers(activeTeam.id) : [];
+
   // 현재 live 여부를 활성 팀으로 스코핑해 첫 렌더부터 일관되게(ADR-001/R37). 이후 전이는 Realtime.
   const active = activeTeam ? await getActiveSession(activeTeam.id) : null;
 
   return (
     <AppProviders initialLive={!!active}>
       <AppShell
-        members={members.map(toShellMember)}
+        members={roster.map((m) => ({
+          id: m.id,
+          name: m.name,
+          initial: m.initial,
+          color: m.color,
+          role: m.role,
+          status: null,
+        }))}
         currentUser={toShellMember(current)}
         teams={teams.map((t) => ({ slug: t.slug, name: t.name }))}
         activeTeamSlug={activeTeam?.slug ?? null}

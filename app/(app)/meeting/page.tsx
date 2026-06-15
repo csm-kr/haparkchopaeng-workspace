@@ -4,7 +4,7 @@ import { LiveRoom } from "@/components/live";
 import { getSession } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
 import { getActiveSession } from "@/lib/live";
-import { prisma } from "@/lib/prisma";
+import { listTeamMembers } from "@/lib/teams";
 
 // 세미나 라이브 — RSC. 현재 세션·멤버를 서버에서 직접 조회해 룸(인터랙티브 섬)에 주입(ADR-015).
 // CRITICAL: live는 여기 보관하지 않는다 — 앱 레벨 LiveProvider가 단일 소스(ADR-001/R5).
@@ -18,13 +18,17 @@ export default async function MeetingPage() {
 
     // 활성 팀으로 스코핑(R37/ADR-020) — 룸은 팀 스코프. 팀이 없으면 라이브도 없다.
     const team = await getActiveTeam(session.memberId);
-    const [active, members] = await Promise.all([
+    const [active, teamMembers] = await Promise.all([
       team ? getActiveSession(team.id) : Promise.resolve(null),
-      prisma.member.findMany({
-        orderBy: { createdAt: "asc" },
-        select: { id: true, name: true, initial: true, color: true },
-      }),
+      team ? listTeamMembers(team.id) : Promise.resolve([]),
     ]);
+    // 라이브 룸 참가자 표시는 활성 팀 멤버만(ADR-020/R37) — 다른 팀 멤버 이름을 클라로 보내지 않는다.
+    const members = teamMembers.map((m) => ({
+      id: m.id,
+      name: m.name,
+      initial: m.initial,
+      color: m.color,
+    }));
 
     content = (
       <LiveRoom
