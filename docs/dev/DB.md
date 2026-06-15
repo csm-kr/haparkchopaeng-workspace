@@ -7,7 +7,8 @@
 - **ORM:** Prisma
 - **DB:** **Supabase Postgres**(개발·운영 공통, ADR-016). `provider="postgresql"` + `directUrl`(마이그레이션/`db push`). 초기 스키마는 `prisma db push`로 동기화(Supabase shadow DB 권한 이슈 회피); prod 마이그레이션 파일은 추후 정식화.
 - (이력) 시작은 SQLite였으나 Supabase 채택으로 Postgres로 전환(ADR-010→016).
-- **단일 테넌트:** 워크스페이스는 1개 — `Workspace` row는 한 개만 존재한다(멀티테넌트 아님, ADR-007).
+- **멀티팀(ADR-018→020):** `Member`는 여러 `Team`에 속할 수 있고, 도메인 엔티티(`Paper`·`Presentation`·`ScheduleMonth`·`FineConfig`·`MemberLedger`·`LiveSession`)는 `teamId`로 스코핑된다. (단일 테넌트 `Workspace` 전제는 ADR-007→018에서 폐기.)
+- **CRITICAL — 팀 스코핑 운영 반영은 검토된 수동 단계(ADR-020):** `teamId` 컬럼 추가 + 제약/PK 변경 + 기존 행 백필을 담은 `prisma db push`(실 반영)는 **공유 운영 DB**라 코드와 분리해 사람이 검토 후 실행한다. harness step은 스키마·백필·테스트 코드까지만 만든다. 기존 행은 전부 부트스트랩된 "하박조팽" 팀(가장 먼저 생성된 팀)으로 백필하며 멱등이어야 한다.
 
 ### SQLite 제약 (구현 시 주의)
 - **`enum` 미지원.** 역할·관점·상태 등은 `String`으로 저장하고 애플리케이션 레이어(zod 등)에서 검증한다. 허용값은 각 필드 주석에 명시.
@@ -72,6 +73,7 @@ model Invite {
 
 model Paper {
   id         String  @id @default(cuid())
+  teamId     String                // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020, R37)
   title      String
   authors    String
   venue      String?
@@ -87,8 +89,10 @@ model Paper {
   analyses   Analysis[]
   figures    Figure[]
   notes      SectionNote[]
+  @@index([teamId])
   // CRITICAL: 업로드는 PDF 전용(ADR-003). kind 같은 타입 필드 두지 말 것.
   // CRITICAL: 분석 실패가 Paper 저장을 막지 않는다 — analysisStatus=failed로 두고 재시도(API /reanalyze).
+  // CRITICAL: 모든 조회·변이는 활성 팀(teamId)으로 스코핑(ADR-020, R37).
 }
 
 model Analysis {
@@ -127,6 +131,7 @@ model SectionNote {
 
 model Presentation {
   id          String @id @default(cuid())
+  teamId      String               // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020, R37)
   title       String
   presenterId String
   date        DateTime
@@ -139,6 +144,7 @@ model Presentation {
   assets      PresentationAsset[]
   versions    PresentationVersion[]
   comments    Comment[]
+  @@index([teamId])
 }
 
 model PresentationAsset {
@@ -184,6 +190,7 @@ model Reaction {
 
 model ScheduleMonth {
   id                 String @id @default(cuid())
+  teamId             String  // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020, R37)
   year               Int
   month              Int
   day                String @default("토요일")
@@ -191,7 +198,8 @@ model ScheduleMonth {
   rotationPointerAfter Int   // 이 달 저장 후 다음 시작 인덱스(순번 전진 결과)
   version            Int @default(0) // 낙관적 락 — 두 관리자 동시 편집 충돌 방지
   weeks              ScheduleWeek[]
-  @@unique([year, month])  // CRITICAL: 자동 생성 금지 — row 부재 = 빈 달(ADR-006)
+  @@unique([teamId, year, month])  // CRITICAL: 팀별 독립(ADR-020) · 자동 생성 금지 — row 부재 = 빈 달(ADR-006)
+  @@index([teamId])
   // 저장 시 version 불일치면 409 "다른 사람이 먼저 저장했어요" (API: If-Match)
 }
 
@@ -210,27 +218,33 @@ model ScheduleWeek {
 }
 
 model FineConfig {
-  year         Int   @id
+  teamId        String              // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020, R37)
+  year         Int
   finePresenter Int  @default(30000) // 발표자 불참
   fineAbsent    Int  @default(10000) // 일반 불참
   ledgers      MemberLedger[]
+  @@id([teamId, year])  // CRITICAL: 팀별 독립(ADR-020) — 기존 year 단독 PK 폐기
+  @@index([teamId])
 }
 
 model MemberLedger {
   id              String @id @default(cuid())
+  teamId          String  // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020, R37)
   year            Int
-  config          FineConfig @relation(fields: [year], references: [year])
+  config          FineConfig @relation(fields: [teamId, year], references: [teamId, year])
   memberId        String
   count           Int @default(0) // 참여
   missedPresenter Int @default(0)
   missedAbsent    Int @default(0)
   paid            Int @default(0)
-  @@unique([year, memberId])
+  @@unique([teamId, year, memberId])  // CRITICAL: 팀별 독립(ADR-020)
+  @@index([teamId])
   // 누적 벌금 = missedPresenter*finePresenter + missedAbsent*fineAbsent (파생, 저장 안 함)
 }
 
 model LiveSession {
   id                  String @id @default(cuid())
+  teamId              String  // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020, R37)
   active              Boolean @default(true)
   presenterId         String
   cloudflareLiveInputId String?   // Cloudflare Stream Live Input UID
@@ -238,7 +252,8 @@ model LiveSession {
   startedAt           DateTime @default(now())
   endedAt             DateTime?
   participants        Participant[]
-  // CRITICAL: 동시 active 세션은 1개 — 앱 전역 live 상태와 1:1 매핑(ADR-001)
+  @@index([teamId])
+  // CRITICAL: 동시 active 세션은 팀당 1개 — 팀 전역 live 상태와 1:1 매핑(ADR-020이 ADR-019 "전역 1개" 개정)
 }
 
 model Participant {

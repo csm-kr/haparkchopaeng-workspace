@@ -5,7 +5,7 @@
 ## 원칙
 
 - **CRITICAL: 모든 서버/외부 로직은 Next.js App Router의 route handler(`app/api/**/route.ts`) 또는 Server Action에서만 처리한다.** 클라이언트 컴포넌트에서 DB·Cloudflare·파일 스토리지를 직접 호출하지 않는다(CLAUDE.md 규칙).
-- **단일 테넌트:** 워크스페이스 ID를 경로에 노출하지 않는다. 모든 요청은 암묵적으로 그 하나의 워크스페이스에 속한다.
+- **CRITICAL: 활성 팀(쿠키)으로 암묵 스코핑(ADR-020, R37).** 경로에 `teamId`를 노출하지 않는다 — 서버가 세션의 **활성 팀**(쿠키, 반드시 검증된 멤버십)으로 조회를 필터하고 변이의 `teamId`를 주입한다(클라가 보낸 `teamId` 미신뢰, R3). 다른 팀 엔티티 접근은 `403`(R19).
 - **인증 필수:** 모든 엔드포인트는 세션(초대 기반 로그인)을 요구한다. 미인증 → `401`. 권한 부족 → `403`. 자세한 권한 표는 [`../security/SECURITY.md`](../security/SECURITY.md).
 - **응답 포맷:** `{ data }` 또는 `{ error: { code, message } }`. 목록은 `{ data: [...] }`.
 
@@ -32,6 +32,9 @@
 | POST | `/api/invites/accept` | 토큰으로 합류 | — (토큰 검증) |
 | PATCH | `/api/members/:id/role` | 역할 변경 | 👑 |
 | DELETE | `/api/members/:id` | 내보내기 | 👑 |
+| POST | `/api/teams/active` | 활성 팀 전환 `{teamId}` → 쿠키 설정 + revalidate | 🔒 |
+
+- **CRITICAL: 활성 팀 전환은 검증된 멤버십만(ADR-020, R37).** `POST /api/teams/active`(또는 동등한 Server Action)는 `teamId`가 **내 멤버십**일 때만 쿠키를 설정한다 — 아니면 `403`. 미설정/무효 쿠키는 가장 최근 합류 팀(`resolveEntryTeam`)으로 폴백. 전환 후 화면을 revalidate한다.
 
 ### 논문 · 분석
 | 메서드 | 경로 | 설명 | 권한 |
@@ -52,6 +55,7 @@
 - **CRITICAL: 업로드 성공과 분석 성공을 분리한다.** `POST /api/papers`는 분석이 실패해도 `Paper`를 저장하고 `analysisStatus: pending|failed`로 응답한다. UI는 논문을 열고 분석 섹션만 재시도 상태로 보인다(→ [`./ENV.md`](./ENV.md), [`../design/SCREENS.md`](../design/SCREENS.md)). 원문 PDF 다운로드는 분석 상태와 무관하게 동작.
 - **노트 작성자**는 서버가 세션에서 강제 주입한다. 클라이언트가 보낸 `authorId`는 신뢰하지 않는다.
 - `lens`는 `sectionId === "figures"`일 때 서버가 `any`로 강제한다(ADR-005).
+- **CRITICAL: 활성 팀 스코핑(ADR-020, R37).** 목록은 활성 팀의 논문만 반환하고, `POST /api/papers`는 활성 팀 `teamId`를 주입한다. `:id` 접근은 그 논문이 활성 팀 소유일 때만 — 아니면 `403`.
 
 ### 발표 자료 · 댓글
 | 메서드 | 경로 | 설명 | 권한 |
@@ -65,6 +69,7 @@
 | DELETE | `/api/presentations/:id` | 발표 자료 삭제(에셋·버전·댓글 정리) | ✍️ |
 
 - `@멘션`은 본문 파싱으로 추출 → 알림 트리거(→ [`../agent/ISSUES.md`](../agent/ISSUES.md) 알림 채널 미결).
+- **CRITICAL: 활성 팀 스코핑(ADR-020, R37).** 목록·`:id`는 활성 팀의 발표 자료만, `POST`는 활성 팀 `teamId` 주입. 다른 팀 자료/댓글 접근은 `403`.
 
 ### 스케줄 · 책임
 | 메서드 | 경로 | 설명 | 권한 |
@@ -79,6 +84,7 @@
 - **순번 포인터 전진은 PUT(저장) 시 서버에서 원자적으로** 처리한다. 클라이언트가 포인터를 보내지 않는다.
 - **CRITICAL: 동시 편집 충돌은 낙관적 락으로.** PUT은 `If-Match`로 보낸 `version`이 현재와 다르면 `409` "다른 사람이 먼저 저장했어요"(→ [`./DB.md`](./DB.md) `ScheduleMonth.version`).
 - 누적 벌금·미납은 서버에서 파생 계산해 응답에 포함(저장 안 함).
+- **CRITICAL: 활성 팀 스코핑(ADR-020, R37).** 스케줄·벌금은 활성 팀(`teamId`)으로 조회·저장한다 — `(teamId, year, month)`·`(teamId, year)`가 팀별 독립이므로 같은 달/연도라도 팀마다 별개다. 다른 팀의 월·벌금 접근은 `403`.
 
 ### 라이브 세미나 (LiveKit · ADR-019)
 | 메서드 | 경로 | 설명 | 권한 |
@@ -93,7 +99,7 @@
 - **`/start` 응답**(발표자): `{ session, token, url }`. 토큰 grant에 화면공유 포함. **토큰은 발표자 본인에게만**.
 - **`/join` 응답**(참가자): `{ token, url }`. 카메라/마이크 publish 가능, 화면공유 grant 없음.
 - **CRITICAL: 토큰 신원은 세션에서.** identity=`Member.id`, 클라가 보낸 식별자 미신뢰(R3). 토큰을 다른 사람에게 돌려주지 않는다(R7).
-- **CRITICAL: 동시 active 세션 1개.** `/start`는 이미 active 세션이 있으면 `409`. 앱 전역 `live`와 1:1(ADR-001).
+- **CRITICAL: 동시 active 세션은 팀당 1개(ADR-020이 ADR-019 "전역 1개" 개정).** `/start`는 **활성 팀**에 이미 active 세션이 있으면 `409`. `getActiveSession(teamId)`로 조회하고 `LiveSession.teamId`를 주입하며 LiveKit 룸 이름에 팀을 포함한다. 팀 전역 `live`와 1:1(ADR-001). 다른 팀 세션 `:id` 접근은 `403`.
 - **`/end`만 전역 종료.** `/leave`는 본인 `Participant`만 닫는다(LiveKit 연결 종료는 클라이언트). 종료 시 LiveKit 룸 삭제는 best-effort.
 - **채팅·반응·손들기**는 HTTP 엔드포인트가 아니라 **LiveKit 데이터 채널**로 룸 내부 전송한다(휘발·미저장).
 - **CRITICAL: 미설정(키 부재) 시 `/start`·`/join`은 `503`**("아직 연결 안 됨", R30). build/test는 키 없이 통과(R2).

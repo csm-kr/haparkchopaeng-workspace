@@ -1,0 +1,39 @@
+{
+  "project": "하박조팽",
+  "phase": "8-team-scoping",
+  "steps": [
+    {
+      "step": 0,
+      "name": "docs-adr-020",
+      "status": "completed",
+      "started_at": "2026-06-15T12:38:18+0900",
+      "summary": "ADR-020(엔티티 팀 스코핑·ADR-019 전역→팀당 개정)·R37 추가, DB.md 6개 모델에 teamId+제약 변경, API.md 활성 팀 암묵 스코핑+POST /api/teams/active, STATE.md activeTeam 행 — 문서 전용, build·grep AC 통과"
+    },
+    {
+      "step": 1,
+      "name": "team-scoped-schema",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "active-team-context",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "scoped-reads",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "scoped-writes-live",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "team-scoping-e2e",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-06-15T12:38:18+0900"
+}
