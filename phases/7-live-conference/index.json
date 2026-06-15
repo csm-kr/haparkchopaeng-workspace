@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-06-15T11:39:58+0900",
       "summary": "live-room.tsx를 LiveKit 다자간 화상으로 재작성(@livekit/components-react·livekit-client 설치): /start·/join 토큰으로 LiveKitRoom 접속, RoomStage 참가자 타일(카메라=VideoTrack/미카메라=아바타)·화면공유 메인 stage+filmstrip, 발화 색+텍스트(R29), 상태 3종(연결중/빈/에러)·종료 확인(R27). live는 useLive() 단일 소스 유지(R5), HLS/BroadcastPanel 미import. 301 tests·build·lint green.",
-      "completed_at": "2026-06-15T11:52:00+0900"
+      "completed_at": "2026-06-15T11:54:42+0900"
     },
     {
       "step": 3,
