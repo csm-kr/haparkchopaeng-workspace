@@ -132,3 +132,97 @@ describe("RoomStage 화면공유", () => {
     ).toBeNull();
   });
 });
+
+describe("RoomStage 전체화면", () => {
+  // JSDOM은 Fullscreen API 미구현 — requestFullscreen이 호출되면 그 요소를
+  // fullscreenElement로 두고 fullscreenchange를 디스패치해 실제 동작을 흉내낸다.
+  let reqSpy: ReturnType<typeof vi.fn>;
+  let exitSpy: ReturnType<typeof vi.fn>;
+
+  function setFsElement(el: Element | null) {
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      value: el,
+    });
+  }
+
+  beforeEach(() => {
+    setFsElement(null);
+    reqSpy = vi.fn(function (this: Element) {
+      setFsElement(this);
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    exitSpy = vi.fn(() => {
+      setFsElement(null);
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    Element.prototype.requestFullscreen =
+      reqSpy as unknown as typeof Element.prototype.requestFullscreen;
+    (document as { exitFullscreen: typeof document.exitFullscreen }).exitFullscreen =
+      exitSpy as unknown as typeof document.exitFullscreen;
+  });
+
+  afterEach(() => {
+    delete (Element.prototype as Partial<Element>).requestFullscreen;
+    delete (document as Partial<Document>).exitFullscreen;
+    setFsElement(null);
+  });
+
+  it("화면공유 중엔 전체화면 버튼을 보이고, 공유가 없으면 없다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    lk.tracks = [share()];
+    const { rerender } = renderStage();
+    expect(
+      screen.getByRole("button", { name: "전체화면" }),
+    ).toBeInTheDocument();
+
+    lk.tracks = [];
+    rerender(
+      <RoomStage
+        members={members}
+        presenterId="jo"
+        currentMemberId="ha"
+        hands={new Set()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "전체화면" })).toBeNull();
+  });
+
+  it("전체화면 버튼: 클릭하면 requestFullscreen, 다시 누르면 exitFullscreen", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    lk.tracks = [share()];
+    renderStage();
+
+    fireEvent.click(screen.getByRole("button", { name: "전체화면" }));
+    expect(reqSpy).toHaveBeenCalledTimes(1);
+
+    // 진입 후 버튼은 '종료'로 바뀐다.
+    const exitBtn = screen.getByRole("button", { name: "전체화면 종료" });
+    fireEvent.click(exitBtn);
+    expect(exitSpy).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "전체화면" }),
+    ).toBeInTheDocument();
+  });
+
+  it("전체화면에서도 얼굴 스트립(−/+)이 따라온다", () => {
+    lk.participants = [
+      { identity: "jo" },
+      { identity: "ha" },
+      { identity: "bak" },
+    ];
+    lk.tracks = [share()];
+    const { container } = renderStage();
+
+    fireEvent.click(screen.getByRole("button", { name: "전체화면" }));
+    // 진입 후에도 얼굴·개수 컨트롤이 그대로 있다.
+    expect(
+      screen.getByRole("button", { name: "얼굴 수 늘리기" }),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelectorAll("[data-identity]").length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+});
