@@ -24,8 +24,8 @@
 | `INVITE_TOKEN_SECRET` | 초대 토큰 서명 | **비밀** (초대 전용, ADR-007) |
 | `APP_BASE_URL` | 초대 링크·OAuth 리디렉트 | 예: `http://localhost:3000` |
 | `SUPABASE_STORAGE_BUCKET` | PDF·에셋·figure 스토리지 | 비공개 버킷 + 서명 URL(→ [`../security/SECURITY.md`](../security/SECURITY.md)) |
-| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_STREAM_API_TOKEN` | 라이브(Stream Live) | **비밀.** ADR-002 |
-| `CLOUDFLARE_WEBHOOK_SECRET` | 녹화 완료 등 Stream Live 웹훅 HMAC 검증 | **비밀.** 세션 인증 아님 — 서명 검증(S4.6) |
+| `LIVEKIT_URL` | 라이브 다자간 화상(LiveKit) WebSocket URL | 예: `wss://xxx.livekit.cloud`. ADR-019 |
+| `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit 입장 토큰 서명 | **비밀. 서버 전용.** ADR-019 |
 
 ## 인증 (Google OAuth via Supabase Auth)
 

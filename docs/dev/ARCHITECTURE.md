@@ -14,7 +14,7 @@
 | 언어 | TypeScript strict | CLAUDE.md |
 | 스타일 | Tailwind + `styles.css` 토큰 이식 + shadcn/ui | 토큰 기반 라이트/다크([`../design/DESIGN_GUIDE.md`](../design/DESIGN_GUIDE.md)) |
 | DB/ORM | **Prisma + SQLite** | 4인 단일 그룹 경량 시작, Postgres 이전 경로 유지 |
-| 라이브 | **Cloudflare Stream Live** (MVP 포함) | 영상 인프라 위임(ADR-002) |
+| 라이브 | **LiveKit(SFU)** | 다자간 화상 위임(ADR-019, ADR-002 대체) |
 | 검증/테스트 | zod · Vitest+RTL(TDD) | API 경계 검증, CLAUDE.md TDD |
 
 > ADR-008은 Vite/React를 *예시*로 들었으나, CLAUDE.md의 "서버 로직은 route handler에서만" 규칙과의 정합성 때문에 **Next.js 15로 확정**한다. 이 변경의 근거는 [`../agent/ADR.md`](../agent/ADR.md) ADR-009 참조.
@@ -33,7 +33,7 @@
    │
 [외부 durable 잡 러너] ──> [Gemini API]  (분석; Vercel 함수 시간제한 밖)
         ↑ 잡 적재(Job)            └──> [Supabase Storage]  (PDF·에셋·figure, 서명 URL)
-[Vercel route handler]      ──webhook──< [Cloudflare Stream Live]  (Live Input·HLS·녹화)
+[브라우저] ──WebRTC──> [LiveKit SFU]  (다자간 영상·음성·화면공유 트랙; 채팅·반응은 데이터 채널)
 ```
 - **앱은 Vercel 서버리스.** "상시 Node 서버·SQLite 파일·인-프로세스 워커"를 가정하지 않는다(ADR-016이 ADR-010/012 개정).
 - 로컬 개발은 SQLite(Prisma) 유지 — `DATABASE_URL`만 Supabase Postgres로 교체하면 운영.
@@ -71,7 +71,7 @@ Supabase Realtime 채널 ── live.started / live.ended / mention ──> 구�
 - @멘션·라이브 시작 알림 채널(인앱/이메일/푸시)은 미결 → ISSUES I-5. 인앱(Realtime)은 기본.
 
 ### 외부 서비스 경계
-- **Cloudflare Stream Live:** 앱은 Live Input 생성·권한 체크·플레이어 노출만(ADR-002). **녹화 완료는 Cloudflare 웹훅**으로 Vercel route handler가 수신(HMAC 검증) → 발표 자료 아카이브 여부(미결 I-3). 송출 자격증명은 발표자에게만([`../security/SECURITY.md`](../security/SECURITY.md)).
+- **LiveKit(SFU):** 앱은 입장 토큰 발급·권한 체크·룸 정리만(ADR-019). 영상·음성·화면공유 트랙과 룸 presence는 LiveKit이 담당하고, 채팅·반응·손들기는 LiveKit 데이터 채널로 룸 내부 전송한다. 화면공유 grant는 발표자 토큰에만([`../security/SECURITY.md`](../security/SECURITY.md)). 녹화(Egress)는 미결(ISSUES).
 - **Supabase Storage:** PDF/에셋은 **프리사인 업로드**(클라이언트→Storage 직접, 서버는 서명만). 다운로드는 단기 **서명 URL**(비공개 버킷). arXiv는 잡 러너가 가져온다(SSRF 화이트리스트).
 - **Supabase Auth:** Google OAuth + 초대 게이트(ADR-017). service role 키는 서버 전용.
 
@@ -141,5 +141,5 @@ src/
 | `data.js`의 `window.*` 전역 | API + 타입드 모델 / DB |
 | 파일별 로컬 `useState` 별칭 | 실제 상태 관리 + 서버 영속화 |
 | `<image-slot>` 플레이스홀더 | 실제 이미지 업로드 / 렌더링된 PDF figure |
-| `getUserMedia` 프리뷰 + 정적 아바타 | Cloudflare Stream Live |
+| `getUserMedia` 프리뷰 + 정적 아바타 | **LiveKit(SFU)** — 실제 다자간 참가자 비디오 타일·화면공유 |
 | `tweaks-panel.jsx` | **제거** |

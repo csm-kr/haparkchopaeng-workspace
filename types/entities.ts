@@ -266,6 +266,23 @@ export interface Participant {
   leftAt?: string | null;
 }
 
+/** /start 응답 — 발표자에게 LiveKit 토큰(화면공유 grant 포함) + 접속 URL (ADR-019). */
+export interface LiveStartResponse {
+  session: { id: string; presenterId: string; startedAt: string };
+  /** 발표자 LiveKit AccessToken(JWT) — 본인에게만(R7). */
+  token: string;
+  /** wss:// 접속 URL. */
+  url: string;
+}
+
+/** /join 응답 — 참가자 LiveKit 토큰(화면공유 grant 없음) + 접속 URL (ADR-019). */
+export interface LiveJoinResponse {
+  /** 참가자 LiveKit AccessToken(JWT) — 카메라/마이크 publish, 화면공유 grant 없음(R7). */
+  token: string;
+  /** wss:// 접속 URL. */
+  url: string;
+}
+
 // --- 백그라운드 잡 (ADR-013) ---
 
 /** 잡 페이로드 — type에 따라 다름(예: { paperId }). 값은 앱에서 좁혀 사용. */

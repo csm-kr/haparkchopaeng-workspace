@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import {
+  decodeLiveMessage,
+  encodeLiveMessage,
+  type LiveMessage,
+} from "@/lib/live-messages";
+
+// lib/live-messages.ts 단위 테스트 — 데이터 채널 프로토콜(순수 함수).
+// 작성자(누가)는 페이로드에 없다 — 수신 측이 LiveKit identity로 판별(R3 정신).
+
+describe("encode/decode 왕복", () => {
+  it("chat", () => {
+    const m: LiveMessage = { kind: "chat", text: "안녕하세요", at: 1000 };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
+
+  it("reaction", () => {
+    const m: LiveMessage = { kind: "reaction", emoji: "👏", at: 2000 };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
+
+  it("hand", () => {
+    const m: LiveMessage = { kind: "hand", up: true, at: 3000 };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
+});
+
+describe("chat 길이 clamp", () => {
+  it("500자를 넘으면 잘라낸다", () => {
+    const long = "가".repeat(600);
+    const decoded = decodeLiveMessage(
+      encodeLiveMessage({ kind: "chat", text: long, at: 1 }),
+    );
+    expect(decoded?.kind).toBe("chat");
+    if (decoded?.kind === "chat") {
+      expect(decoded.text.length).toBe(500);
+    }
+  });
+
+  it("빈 문자열 chat은 무시한다(null)", () => {
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({ kind: "chat", text: "", at: 1 }),
+    );
+    expect(decodeLiveMessage(bytes)).toBeNull();
+  });
+});
+
+describe("방어적 디코드", () => {
+  it("알 수 없는 kind는 null", () => {
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({ kind: "explode", at: 1 }),
+    );
+    expect(decodeLiveMessage(bytes)).toBeNull();
+  });
+
+  it("깨진 JSON 바이트는 null", () => {
+    const bytes = new TextEncoder().encode("{not json");
+    expect(decodeLiveMessage(bytes)).toBeNull();
+  });
+
+  it("비-객체(JSON 배열/원시값)는 null", () => {
+    expect(decodeLiveMessage(new TextEncoder().encode("42"))).toBeNull();
+    expect(decodeLiveMessage(new TextEncoder().encode("null"))).toBeNull();
+    expect(decodeLiveMessage(new TextEncoder().encode("[1,2]"))).toBeNull();
+  });
+
+  it("필드 타입 위반은 null", () => {
+    const badHand = new TextEncoder().encode(
+      JSON.stringify({ kind: "hand", up: "yes", at: 1 }),
+    );
+    expect(decodeLiveMessage(badHand)).toBeNull();
+    const badReaction = new TextEncoder().encode(
+      JSON.stringify({ kind: "reaction", emoji: "", at: 1 }),
+    );
+    expect(decodeLiveMessage(badReaction)).toBeNull();
+  });
+});

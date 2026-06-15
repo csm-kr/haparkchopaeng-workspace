@@ -30,6 +30,7 @@
 프로덕션:    /api/live/{start|end} ──> LiveSession.active + Realtime broadcast
                                    ──> 모든 구독 클라 배지·배너·룸 동시 갱신
 ```
+> 룸 내부 참가자 타일·화면공유·채팅·반응·손들기는 **LiveKit(SFU·데이터 채널, ADR-019)**가 담당한다. 앱 전역 `live` on/off만 Supabase Realtime — 역할이 다르다.
 
 ## 서버 영속 상태 (도메인)
 

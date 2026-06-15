@@ -1,0 +1,48 @@
+{
+  "project": "하박조팽",
+  "phase": "7-live-conference",
+  "steps": [
+    {
+      "step": 0,
+      "name": "docs-adr-019",
+      "status": "completed",
+      "started_at": "2026-06-15T11:25:18+0900",
+      "summary": "ADR-019(ADR-002 대체)·RULES R7/R8·API/ARCHITECTURE/STATE/ENV/.env.example를 LiveKit 다자간 화상으로 갱신. 코드 변경 없음.",
+      "completed_at": "2026-06-15T11:29:51+0900"
+    },
+    {
+      "step": 1,
+      "name": "livekit-token",
+      "status": "completed",
+      "started_at": "2026-06-15T11:29:51+0900",
+      "summary": "lib/livekit.ts(토큰·룸, 키는 호출 시점·toJwt await·발표자만 screen_share grant)·lib/live-messages.ts(데이터 채널 프로토콜, 방어적 디코드) 추가, live 라우트 4종을 LiveKit으로 개조(/start·/join 토큰+url·503/409, /end deleteRoom). cloudflare/whip 미삭제. 299 tests·build·lint green.",
+      "completed_at": "2026-06-15T11:39:58+0900"
+    },
+    {
+      "step": 2,
+      "name": "live-room-video",
+      "status": "completed",
+      "started_at": "2026-06-15T11:39:58+0900",
+      "summary": "live-room.tsx를 LiveKit 다자간 화상으로 재작성(@livekit/components-react·livekit-client 설치): /start·/join 토큰으로 LiveKitRoom 접속, RoomStage 참가자 타일(카메라=VideoTrack/미카메라=아바타)·화면공유 메인 stage+filmstrip, 발화 색+텍스트(R29), 상태 3종(연결중/빈/에러)·종료 확인(R27). live는 useLive() 단일 소스 유지(R5), HLS/BroadcastPanel 미import. 301 tests·build·lint green.",
+      "completed_at": "2026-06-15T11:54:42+0900"
+    },
+    {
+      "step": 3,
+      "name": "live-controls-chat",
+      "status": "completed",
+      "started_at": "2026-06-15T11:54:42+0900",
+      "summary": "LiveKit 룸에 Meet/Zoom 유틸 추가: MeetHeader(startedAt 송출 타이머 fmtElapsed·LIVE 색+텍스트 R29), MeetControls(useLocalParticipant로 mic/cam/screen 토글·화면공유는 발표자만 R7·반응/손들기/채팅 토글·권한거부 graceful R30), ChatPanel/PeoplePanel/ReactionsLayer(anim-floatup)·RoomStage 추출(손들기 표시)·MeetRoom(데이터 채널 송수신: publishData(encode)·decode null 무시·작성자 identity R3, 자료 탭은 /presentations 링크 R21). live-room.tsx는 MeetHeader+MeetRoom으로 배선. 329 tests·build·lint green.",
+      "completed_at": "2026-06-15T12:15:53+0900"
+    },
+    {
+      "step": 4,
+      "name": "live-cleanup-e2e",
+      "status": "completed",
+      "started_at": "2026-06-15T12:15:54+0900",
+      "summary": "죽은 Cloudflare 단방향 방송 코드 9개 삭제(lib/cloudflare·whip, components/live/broadcast-panel·hls-player, app/api/webhooks/cloudflare + 각 테스트), components/live/index.ts의 HlsPlayer export·package.json의 hls.js 제거(lockfile 동기), lib/live.ts 주석 LiveKit화. live 경로(app/lib/components)에 Cloudflare/HLS/WHIP 코드 잔여 참조 0 — 남은 cloudflareLiveInputId는 미사용 레거시 DB 컬럼(스키마 무변경·db push 없음, ADR-019). tests/e2e/meeting.spec.ts를 LiveKit 룸 흐름으로 갱신: 빈 상태+[라이브 시작] CTA·사이드바 /meeting 링크 셸 정합·키 미설정 시 503 친절 안내(R30) 노출+전역 live 미점화 검증(비파괴: 키 없으면 /start가 세션 생성 전 503). build·314 tests·lint·playwright(16 pass/1 skip) green. 실 다자간 검증은 LiveKit Cloud 키(LIVEKIT_URL/LIVEKIT_API_KEY/LIVEKIT_API_SECRET) 주입 후 수동.",
+      "completed_at": "2026-06-15T12:26:50+0900"
+    }
+  ],
+  "created_at": "2026-06-15T11:25:18+0900",
+  "completed_at": "2026-06-15T12:26:51+0900"
+}
