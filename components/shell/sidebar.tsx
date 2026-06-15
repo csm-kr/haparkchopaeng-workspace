@@ -7,14 +7,17 @@ import { Avatar } from "@/components/ui";
 import { useLive, useTheme } from "@/components/providers";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav";
-import type { ShellMember } from "./types";
+import { TeamSwitcher } from "./team-switcher";
+import type { ShellMember, ShellTeam } from "./types";
 
 // 영속 사이드바 — 인터랙티브 섬(현재 경로·collapsed·live·theme)이다(ADR-015).
-// 데이터(멤버·현재 사용자)는 서버에서 props로 받는다.
+// 데이터(멤버·현재 사용자·팀)는 서버에서 props로 받는다.
 
 export interface SidebarProps {
   members: ShellMember[];
   currentUser: ShellMember;
+  teams?: ShellTeam[];
+  activeTeamSlug?: string | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -41,6 +44,8 @@ function LivePill() {
 export function Sidebar({
   members,
   currentUser,
+  teams = [],
+  activeTeamSlug = null,
   collapsed,
   onToggleCollapse,
 }: SidebarProps) {
@@ -88,6 +93,9 @@ export function Sidebar({
           {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
         </button>
       </div>
+
+      {/* 현재 팀 + 팀 전환(ADR-018) — 접힘 상태에선 숨긴다(레이블 폭 부족) */}
+      {!collapsed && <TeamSwitcher teams={teams} activeSlug={activeTeamSlug} />}
 
       {/* 내비 목록 */}
       <nav

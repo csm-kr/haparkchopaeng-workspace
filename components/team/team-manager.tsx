@@ -1,34 +1,30 @@
 "use client";
 
 import * as React from "react";
-import { Check, Copy, Link2, MoreHorizontal, UserPlus } from "lucide-react";
+import { Check, Copy, Link2, MoreHorizontal } from "lucide-react";
 import { Avatar, Badge, Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import type {
-  PendingInviteView,
-  RemoveActionResult,
-  RoleActionResult,
-  TeamMemberView,
-} from "./types";
-import type { Role } from "@/types";
+import type { PendingInviteView, TeamMemberView } from "./types";
+import type { BadgeVariant } from "@/components/ui";
+import type { InviteRole, TeamRole } from "@/types";
 
-// 팀 관리 — 인터랙티브 섬(ADR-015). 초대 블록 + 멤버 목록 + 대기 초대.
-// CRITICAL: 관리 액션(초대·역할 변경·내보내기)은 서버에서 관리자 전용으로 강제된다(👑, R19).
-//   여기 UI 게이팅(isAdmin)은 보조일 뿐 신뢰 경계가 아니다. 비관리자에겐 숨기고 안내한다.
-// CRITICAL: 내보내기는 확인 다이얼로그(R27). 초대 취소는 즉시 + 되돌리기(R27).
-// CRITICAL: 공개 가입 경로를 만들지 않는다 — 합류는 초대 토큰으로만(R18/ADR-007).
-// 초대 생성/취소/재전송은 step4의 route handler(/api/invites…)를 그대로 호출한다(R32 섬 fetch 허용).
+// 팀 관리 — 인터랙티브 섬(ADR-015). 멤버 목록 + 토큰 초대 발급/회수 + 역할 변경/내보내기.
+// CRITICAL: 관리 액션(초대 발급·회수·역할 변경·내보내기)은 서버 route handler가 최종 강제(R19). UI 게이팅은 보조.
+// CRITICAL: 합류는 초대 토큰으로만 — 공개 가입(자동 팀 배정) 경로를 만들지 않는다(R18/ADR-018).
+// CRITICAL: 역할 표기는 영어 그대로(owner/admin/member). 한국어(팀장/관리자/팀원)로 번역하지 않는다(사용자 지시).
+// CRITICAL: owner는 초대로 부여 불가·강등/추방 불가(팀당 owner ≥ 1).
 
-const ROLES: Role[] = ["관리자", "멤버", "게스트"];
-
-const ROLE_VARIANT: Record<Role, "admin" | "member" | "guest"> = {
-  관리자: "admin",
-  멤버: "member",
-  게스트: "guest",
+// owner = 액센트(가장 강조), admin = 액센트 틴트, member = 중립. 토큰만(R20)·텍스트 병행(R29).
+const ROLE_VARIANT: Record<TeamRole, BadgeVariant> = {
+  owner: "owner",
+  admin: "admin",
+  member: "member",
 };
 
-/** 역할 배지 — 색 + 텍스트 병행(R29). */
-function RoleBadge({ role }: { role: Role }) {
+/** 초대로 부여 가능한 역할(owner 제외, ADR-018). 역할 변경 메뉴에도 같은 집합을 쓴다. */
+const ASSIGNABLE_ROLES: InviteRole[] = ["admin", "member"];
+
+function RoleBadge({ role }: { role: TeamRole }) {
   return <Badge variant={ROLE_VARIANT[role]}>{role}</Badge>;
 }
 
@@ -37,10 +33,7 @@ interface ApiShape<T> {
   error?: { code: string; message: string };
 }
 
-async function callJson<T>(
-  input: string,
-  init?: RequestInit,
-): Promise<T> {
+async function callJson<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
@@ -52,47 +45,69 @@ async function callJson<T>(
   return json.data;
 }
 
+/** POST /api/invites 응답의 raw invite(Date는 JSON 직렬화로 문자열). */
+interface RawInvite {
+  id: string;
+  role: string;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  createdAt: string;
+}
+
+function toInviteRole(value: string): InviteRole {
+  return value === "admin" ? "admin" : "member";
+}
+
 export interface TeamManagerProps {
+  teamSlug: string;
   members: TeamMemberView[];
   invites: PendingInviteView[];
   currentUserId: string;
-  isAdmin: boolean;
-  onChangeRole: (input: {
-    memberId: string;
-    role: Role;
-  }) => Promise<RoleActionResult>;
-  onRemoveMember: (input: { memberId: string }) => Promise<RemoveActionResult>;
+  /** 보는 사람의 팀 멤버십 역할 — 관리 UI 게이팅(보조). 서버가 최종 강제(R19). */
+  currentUserRole: TeamRole;
 }
 
 export function TeamManager({
+  teamSlug,
   members: initialMembers,
   invites: initialInvites,
   currentUserId,
-  isAdmin,
-  onChangeRole,
-  onRemoveMember,
+  currentUserRole,
 }: TeamManagerProps) {
-  // 마운트 후에는 로컬 상태가 진실 — 낙관적 갱신을 여기서 관리한다.
   const [members, setMembers] = React.useState(initialMembers);
   const [invites, setInvites] = React.useState(initialInvites);
 
-  // 초대 폼
-  const [email, setEmail] = React.useState("");
-  const [inviteRole, setInviteRole] = React.useState<Role>("멤버");
-  const [formError, setFormError] = React.useState<string | null>(null);
-  const [sending, setSending] = React.useState(false);
+  const isOwner = currentUserRole === "owner";
+  const isAdmin = currentUserRole === "admin";
+  const canManage = isOwner || isAdmin;
 
-  // 생성/재전송 후 보여줄 초대 링크
+  // 초대 발급 폼
+  const [inviteRole, setInviteRole] = React.useState<InviteRole>("member");
+  const [maxUses, setMaxUses] = React.useState("1");
+  const [generating, setGenerating] = React.useState(false);
+  const [inviteError, setInviteError] = React.useState<string | null>(null);
+
+  // 생성/회수 후 보여줄 초대 링크
   const [shareLink, setShareLink] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
 
-  // 멤버 ⋯ 메뉴 / 내보내기 확인 / 되돌리기
+  // 멤버 ⋯ 메뉴 / 내보내기 확인
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
-  const [removeTarget, setRemoveTarget] =
-    React.useState<TeamMemberView | null>(null);
+  const [removeTarget, setRemoveTarget] = React.useState<TeamMemberView | null>(null);
   const [removing, setRemoving] = React.useState(false);
   const [actionError, setActionError] = React.useState<string | null>(null);
-  const [undo, setUndo] = React.useState<PendingInviteView | null>(null);
+
+  // 보호 규칙(서버가 최종 강제 — 여기선 게이팅만).
+  const canChangeRole = (t: TeamMemberView) => isOwner && t.role !== "owner";
+  const canRemove = (t: TeamMemberView) => {
+    if (t.role === "owner") return false; // owner는 추방 불가(팀당 owner ≥ 1)
+    if (isOwner) return true;
+    if (isAdmin) return t.role === "member";
+    return false;
+  };
+  const hasMenu = (t: TeamMemberView, isSelf: boolean) =>
+    !isSelf && (canChangeRole(t) || canRemove(t));
 
   async function copy(link: string) {
     setShareLink(link);
@@ -105,104 +120,66 @@ export function TeamManager({
     }
   }
 
-  async function sendInvite() {
-    const value = email.trim();
-    // 검증은 인라인 — 토스트가 아니라 입력 옆 안내(R30).
-    if (!value || !value.includes("@")) {
-      setFormError("이메일 주소를 확인해주세요.");
-      return;
-    }
-    setSending(true);
-    setFormError(null);
-    setActionError(null);
+  async function createInviteLink() {
+    setInviteError(null);
+    setGenerating(true);
+    const uses = Math.max(1, Math.floor(Number(maxUses)) || 1);
     try {
-      const { invite, link } = await callJson<{
-        invite: PendingInviteView;
-        link: string;
-      }>("/api/invites", {
-        method: "POST",
-        body: JSON.stringify({ email: value, role: inviteRole }),
-      });
+      const { invite, link } = await callJson<{ invite: RawInvite; link: string }>(
+        "/api/invites",
+        {
+          method: "POST",
+          body: JSON.stringify({ teamSlug, role: inviteRole, maxUses: uses }),
+        },
+      );
+      await copy(link);
+      // 새 초대를 활성 목록 맨 위에 낙관적으로 추가.
       setInvites((prev) => [
-        { id: invite.id, email: invite.email, role: inviteRole, createdAt: invite.createdAt },
+        {
+          id: invite.id,
+          role: toInviteRole(invite.role),
+          maxUses: invite.maxUses,
+          usedCount: invite.usedCount,
+          expiresAt: invite.expiresAt,
+          createdAt: invite.createdAt,
+        },
         ...prev,
       ]);
-      setEmail("");
-      await copy(link);
     } catch (e) {
-      setFormError(
-        e instanceof Error ? e.message : "초대를 보내지 못했어요.",
+      setInviteError(
+        e instanceof Error ? e.message : "초대 링크를 만들지 못했어요. 잠깐 후 다시 시도해주세요.",
       );
     } finally {
-      setSending(false);
+      setGenerating(false);
     }
   }
 
-  async function resend(invite: PendingInviteView) {
+  async function revokeInvite(invite: PendingInviteView) {
     setActionError(null);
-    try {
-      const { link } = await callJson<{ link: string }>(
-        `/api/invites/${invite.id}/resend`,
-        { method: "POST" },
-      );
-      await copy(link);
-    } catch {
-      setActionError("초대 링크를 다시 만들지 못했어요. 잠깐 후 다시 시도해주세요.");
-    }
-  }
-
-  async function cancelInvite(invite: PendingInviteView) {
-    setActionError(null);
-    // 낙관적 제거 + 되돌리기(R27) — 즉시 사라지되 한 번 되돌릴 수 있다.
+    // 낙관적 제거 — 실패 시 롤백(R27).
     setInvites((prev) => prev.filter((i) => i.id !== invite.id));
-    setUndo(invite);
     try {
       await callJson(`/api/invites/${invite.id}`, { method: "DELETE" });
     } catch {
-      setInvites((prev) => [invite, ...prev]); // 실패 시 롤백
-      setUndo(null);
-      setActionError("초대를 취소하지 못했어요. 잠깐 후 다시 시도해주세요.");
+      setInvites((prev) => [invite, ...prev]);
+      setActionError("초대를 회수하지 못했어요. 잠깐 후 다시 시도해주세요.");
     }
   }
 
-  async function undoCancel() {
-    if (!undo) return;
-    const target = undo;
-    setUndo(null);
-    try {
-      // 되돌리기 = 같은 이메일·역할로 다시 초대(새 토큰). 취소는 비가역이라 재발급한다.
-      const { invite } = await callJson<{
-        invite: PendingInviteView;
-      }>("/api/invites", {
-        method: "POST",
-        body: JSON.stringify({ email: target.email, role: target.role }),
-      });
-      setInvites((prev) => [
-        { id: invite.id, email: invite.email, role: target.role, createdAt: invite.createdAt },
-        ...prev,
-      ]);
-    } catch {
-      setActionError("초대를 되돌리지 못했어요. 다시 초대해주세요.");
-    }
-  }
-
-  async function changeRole(member: TeamMemberView, role: Role) {
+  async function changeRole(member: TeamMemberView, role: InviteRole) {
     setMenuFor(null);
     setActionError(null);
     if (role === member.role) return;
     const prev = members;
-    // 낙관적 갱신.
-    setMembers((curr) =>
-      curr.map((m) => (m.id === member.id ? { ...m, role } : m)),
-    );
-    const result = await onChangeRole({ memberId: member.id, role });
-    if (!result.ok) {
+    setMembers((curr) => curr.map((m) => (m.id === member.id ? { ...m, role } : m)));
+    try {
+      await callJson(`/api/teams/${teamSlug}/members/${member.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      });
+    } catch (e) {
       setMembers(prev); // 롤백
-      setActionError(result.message);
-    } else {
-      setMembers((curr) =>
-        curr.map((m) => (m.id === member.id ? result.member : m)),
-      );
+      setActionError(e instanceof Error ? e.message : "역할을 바꾸지 못했어요.");
     }
   }
 
@@ -211,15 +188,15 @@ export function TeamManager({
     setRemoving(true);
     setActionError(null);
     const target = removeTarget;
-    const result = await onRemoveMember({ memberId: target.id });
-    setRemoving(false);
-    if (!result.ok) {
-      setActionError(result.message);
+    try {
+      await callJson(`/api/teams/${teamSlug}/members/${target.id}`, { method: "DELETE" });
+      setMembers((curr) => curr.filter((m) => m.id !== target.id));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "멤버를 내보내지 못했어요.");
+    } finally {
+      setRemoving(false);
       setRemoveTarget(null);
-      return;
     }
-    setMembers((curr) => curr.filter((m) => m.id !== target.id));
-    setRemoveTarget(null);
   }
 
   return (
@@ -242,81 +219,83 @@ export function TeamManager({
         </p>
       )}
 
-      {/* 초대 블록 — 관리자만(👑). 비관리자에겐 안내만 보인다(R19). */}
-      {isAdmin ? (
+      {/* 초대 링크 만들기 — owner·admin만. owner 역할은 부여 불가(ADR-018). */}
+      {canManage ? (
         <Card className="flex flex-col gap-3 p-4">
-          <h2 className="text-[20px] font-semibold text-fg">멤버 초대</h2>
-          <div className="flex flex-wrap items-start gap-2">
-            <div className="flex min-w-[16rem] flex-1 flex-col gap-1">
+          <h2 className="text-[16px] font-semibold text-fg">초대 링크 만들기</h2>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-[12px] text-fg-subtle">
+              역할
+              <select
+                aria-label="초대 역할"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as InviteRole)}
+                className="rounded-sm border border-border-strong bg-bg-elevated px-2.5 py-[7px] text-[13px] text-fg focus:border-accent focus:ring-[3px] focus:ring-accent-soft focus:outline-none"
+              >
+                {ASSIGNABLE_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-24 flex-col gap-1 text-[12px] text-fg-subtle">
+              사용 횟수
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                aria-label="초대할 이메일"
-                placeholder="이메일 주소"
+                aria-label="사용 횟수"
+                type="number"
+                min={1}
+                max={100}
+                value={maxUses}
+                onChange={(e) => setMaxUses(e.target.value)}
               />
-              {formError && (
-                <p role="alert" className="text-[12px] text-busy">
-                  {formError}
-                </p>
-              )}
-            </div>
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as Role)}
-              aria-label="초대 역할"
-              className="rounded-sm border border-border-strong bg-bg-elevated px-2 py-[9px] text-[13px] text-fg outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <Button onClick={sendInvite} disabled={sending}>
-              <UserPlus size={14} aria-hidden="true" />
-              {sending ? "보내는 중…" : "초대 보내기"}
+            </label>
+            <Button onClick={createInviteLink} disabled={generating}>
+              {generating ? "만드는 중…" : "초대 링크 만들기"}
             </Button>
           </div>
-
-          {/* 🔗 초대 링크 복사 — 생성/재전송 후 노출 */}
-          {shareLink && (
-            <div className="flex items-center gap-2 rounded-md bg-bg-subtle px-3 py-2">
-              <Link2 size={14} className="shrink-0 text-fg-subtle" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted">
-                {shareLink}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => copy(shareLink)}
-                aria-label="초대 링크 복사"
-              >
-                {copied ? (
-                  <>
-                    <Check size={13} aria-hidden="true" /> 복사됨
-                  </>
-                ) : (
-                  <>
-                    <Copy size={13} aria-hidden="true" /> 링크 복사
-                  </>
-                )}
-              </Button>
-            </div>
+          {inviteError && (
+            <p role="alert" className="text-[12px] text-busy">
+              {inviteError}
+            </p>
           )}
         </Card>
       ) : (
         <Card className="px-4 py-3 text-[13px] text-fg-subtle">
-          멤버 초대·역할 변경은 관리자만 할 수 있어요.
+          멤버 초대·역할 변경은 owner·admin만 할 수 있어요.
         </Card>
+      )}
+
+      {/* 🔗 생성된 초대 링크 */}
+      {shareLink && (
+        <div className="flex items-center gap-2 rounded-md bg-bg-subtle px-3 py-2">
+          <Link2 size={14} className="shrink-0 text-fg-subtle" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-muted">
+            {shareLink}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => copy(shareLink)}
+            aria-label="초대 링크 복사"
+          >
+            {copied ? (
+              <>
+                <Check size={13} aria-hidden="true" /> 복사됨
+              </>
+            ) : (
+              <>
+                <Copy size={13} aria-hidden="true" /> 링크 복사
+              </>
+            )}
+          </Button>
+        </div>
       )}
 
       {/* 멤버 목록 */}
       <Card className="flex flex-col">
         <div className="border-b border-border-token px-4 py-3">
-          <h2 className="text-[20px] font-semibold text-fg">
-            멤버 {members.length}명
-          </h2>
+          <h2 className="text-[20px] font-semibold text-fg">멤버 {members.length}명</h2>
         </div>
         <ul className="divide-y divide-border-token">
           {members.map((m) => {
@@ -333,23 +312,18 @@ export function TeamManager({
                       </span>
                     )}
                   </span>
-                  <span className="truncate text-[12px] text-fg-subtle">
-                    {m.email}
-                  </span>
+                  <span className="truncate text-[12px] text-fg-subtle">{m.email}</span>
                 </div>
                 <RoleBadge role={m.role} />
 
-                {/* ⋯ 메뉴 — 관리자만, 본인 제외(자기 권한 박탈/잠금 방지). */}
-                {isAdmin && !isSelf && (
+                {hasMenu(m, isSelf) && (
                   <span className="relative">
                     <button
                       type="button"
                       aria-label={`${m.name} 관리 메뉴`}
                       aria-haspopup="menu"
                       aria-expanded={menuFor === m.id}
-                      onClick={() =>
-                        setMenuFor((id) => (id === m.id ? null : m.id))
-                      }
+                      onClick={() => setMenuFor((id) => (id === m.id ? null : m.id))}
                       className="inline-flex size-8 items-center justify-center rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg"
                     >
                       <MoreHorizontal size={16} aria-hidden="true" />
@@ -359,38 +333,46 @@ export function TeamManager({
                         role="menu"
                         className="absolute right-0 z-10 mt-1 flex w-44 flex-col rounded-md border border-border-token bg-bg-elevated p-1 shadow-[var(--shadow-lg)]"
                       >
-                        <span className="px-2 py-1 text-[11px] font-medium text-fg-subtle">
-                          역할 변경
-                        </span>
-                        {ROLES.map((r) => (
+                        {canChangeRole(m) && (
+                          <>
+                            <span className="px-2 py-1 text-[11px] font-medium text-fg-subtle">
+                              역할 변경
+                            </span>
+                            {ASSIGNABLE_ROLES.map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => changeRole(m, r)}
+                                className={cn(
+                                  "flex items-center justify-between rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-bg-hover",
+                                  r === m.role ? "text-fg" : "text-fg-muted",
+                                )}
+                              >
+                                {r}
+                                {r === m.role && (
+                                  <Check size={13} className="text-accent" aria-hidden="true" />
+                                )}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                        {canChangeRole(m) && canRemove(m) && (
+                          <span className="my-1 border-t border-border-token" />
+                        )}
+                        {canRemove(m) && (
                           <button
-                            key={r}
                             type="button"
                             role="menuitem"
-                            onClick={() => changeRole(m, r)}
-                            className={cn(
-                              "flex items-center justify-between rounded-sm px-2 py-1.5 text-left text-[13px] hover:bg-bg-hover",
-                              r === m.role ? "text-fg" : "text-fg-muted",
-                            )}
+                            onClick={() => {
+                              setMenuFor(null);
+                              setRemoveTarget(m);
+                            }}
+                            className="rounded-sm px-2 py-1.5 text-left text-[13px] text-busy hover:bg-bg-hover"
                           >
-                            {r}
-                            {r === m.role && (
-                              <Check size={13} className="text-accent" aria-hidden="true" />
-                            )}
+                            내보내기
                           </button>
-                        ))}
-                        <span className="my-1 border-t border-border-token" />
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setMenuFor(null);
-                            setRemoveTarget(m);
-                          }}
-                          className="rounded-sm px-2 py-1.5 text-left text-[13px] text-busy hover:bg-bg-hover"
-                        >
-                          내보내기
-                        </button>
+                        )}
                       </div>
                     )}
                   </span>
@@ -401,55 +383,28 @@ export function TeamManager({
         </ul>
       </Card>
 
-      {/* 대기 중인 초대 — 점선 행. 관리자만 보인다. */}
-      {isAdmin && (invites.length > 0 || undo) && (
+      {/* 활성 초대 — 점선 행. owner·admin만. 역할·사용 횟수 표기(이메일 없음 — ADR-018). */}
+      {canManage && invites.length > 0 && (
         <section aria-label="대기 중인 초대" className="flex flex-col gap-2">
           <h2 className="text-[16px] font-semibold text-fg">대기 중인 초대</h2>
-
-          {undo && (
-            <div className="flex items-center justify-between gap-2 rounded-md bg-bg-subtle px-3 py-2 text-[13px] text-fg-muted">
-              <span>
-                <span className="font-medium text-fg">{undo.email}</span> 초대를
-                취소했어요.
-              </span>
-              <Button variant="ghost" size="sm" onClick={undoCancel}>
-                되돌리기
-              </Button>
-            </div>
-          )}
-
-          {invites.length === 0 ? (
-            <p className="text-[13px] text-fg-subtle">
-              대기 중인 초대가 없어요.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {invites.map((inv) => (
-                <li
-                  key={inv.id}
-                  className="flex items-center gap-3 rounded-md border border-dashed border-border-strong px-4 py-3"
-                >
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[13px] font-medium text-fg">
-                      {inv.email}
-                    </span>
-                    <span className="text-[11px] text-fg-subtle">초대됨</span>
-                  </div>
-                  <RoleBadge role={inv.role} />
-                  <Button variant="ghost" size="sm" onClick={() => resend(inv)}>
-                    재전송
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => cancelInvite(inv)}
-                  >
-                    취소
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="flex flex-col gap-2">
+            {invites.map((inv) => (
+              <li
+                key={inv.id}
+                className="flex items-center gap-3 rounded-md border border-dashed border-border-strong px-4 py-3"
+              >
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-[13px] font-medium text-fg">{inv.role}</span>
+                  <span className="text-[11px] text-fg-subtle">
+                    {inv.usedCount}/{inv.maxUses} 사용됨
+                  </span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => revokeInvite(inv)}>
+                  회수
+                </Button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -471,23 +426,13 @@ export function TeamManager({
               {removeTarget.name}님을 내보낼까요?
             </p>
             <p className="text-[13px] text-fg-muted">
-              내보낸 멤버는 더 이상 워크스페이스에 접근할 수 없어요. 다시
-              초대하면 합류할 수 있어요.
+              내보낸 멤버는 더 이상 이 팀에 접근할 수 없어요. 다시 초대하면 합류할 수 있어요.
             </p>
             <div className="mt-1 flex items-center justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setRemoveTarget(null)}
-              >
+              <Button variant="secondary" size="sm" onClick={() => setRemoveTarget(null)}>
                 취소
               </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={confirmRemove}
-                disabled={removing}
-              >
+              <Button variant="danger" size="sm" onClick={confirmRemove} disabled={removing}>
                 {removing ? "내보내는 중…" : "내보내기"}
               </Button>
             </div>

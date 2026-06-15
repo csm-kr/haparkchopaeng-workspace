@@ -5,13 +5,14 @@ import type {
   AnalysisStatus,
   AssetType,
   Availability,
-  InviteStatus,
+  InviteRole,
   JobStatus,
   JobType,
   Lens,
   NoteLens,
   Presence,
   Role,
+  TeamRole,
   WeekStatus,
 } from "./enums";
 
@@ -32,14 +33,53 @@ export interface Member {
   createdAt: string;
 }
 
+/** 초대 토큰 (ADR-018) — 이메일 없음. role은 owner 불가(admin | member). */
 export interface Invite {
   id: string;
-  email: string;
-  role: Role;
-  status: InviteStatus;
+  teamId: string;
+  /** 랜덤 토큰(추측 불가). 표시용 프리뷰에는 재노출하지 않는다. */
+  token: string;
+  role: InviteRole;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  revokedAt?: string | null;
+  usedAt?: string | null;
   /** Member.id */
-  invitedBy: string;
+  createdBy: string;
   createdAt: string;
+}
+
+// --- 멀티팀 (ADR-018) ---
+
+export interface Team {
+  id: string;
+  /** 앱 검증: ^[a-z][a-z0-9-]{1,23}$ */
+  slug: string;
+  /** 앱 검증: 2–30자 */
+  name: string;
+  /** Member.id */
+  createdBy: string;
+  createdAt: string;
+}
+
+/** 팀 멤버십 — 복합 키 (teamId, memberId). 권한은 팀별 role로 분리 */
+export interface Membership {
+  teamId: string;
+  /** Member.id */
+  memberId: string;
+  role: TeamRole;
+  joinedAt: string;
+}
+
+/** 초대 토큰 합류 감사 로그 — owner는 부여 불가라 acceptedRole은 admin | member */
+export interface TeamInviteAcceptance {
+  id: string;
+  inviteId: string;
+  teamId: string;
+  memberId: string;
+  acceptedRole: TeamRole;
+  acceptedAt: string;
 }
 
 // --- 논문 / 분석 ---

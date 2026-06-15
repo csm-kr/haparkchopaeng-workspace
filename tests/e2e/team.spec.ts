@@ -4,12 +4,14 @@ import { expect, test } from "@playwright/test";
 // 실제로 실행하지 않는다(실제 이메일 발송·멤버 변경 발생). 폼·메뉴·확인 다이얼로그는 열고 검증까지만.
 // 로그인: de8167@gmail.com = 단일 관리자(ADR-017 dev 로그인). step0이 webServer를 dev로 고쳐 둠.
 
-// 핵심 경로: dev 로그인(관리자=조성민) → /team → 단일 관리자 본인 + 초대 블록 렌더.
-// (멤버는 관리자가 초대해 늘린다 — 초기엔 본인 1명.)
-test("관리자로 팀 관리에 들어가면 본인 멤버와 초대 블록이 보인다", async ({
+// 핵심 경로: dev 로그인(owner=조성민) → /team → 본인 멤버(owner 배지) + 토큰 초대 발급 UI 렌더.
+// (멤버는 owner·admin이 초대 링크로 늘린다 — 초기엔 본인 1명.)
+// NOTE: 멀티팀(ADR-018, step 4) — 이메일 초대 폼은 제거됐고 역할은 영어 표기(owner/admin/member).
+//       토큰 초대 링크 생성은 파괴적(Invite row) → 노출까지만 단언하고 실제 생성은 누르지 않는다.
+test("owner로 팀 관리에 들어가면 본인 멤버와 초대 링크 만들기 UI가 보인다", async ({
   page,
 }) => {
-  // 1) dev 로그인 — 단일 관리자(조성민) 이메일로 세션 쿠키 확보.
+  // 1) dev 로그인 — owner(조성민) 이메일로 세션 쿠키 확보.
   const login = await page.request.post("/api/auth/login", {
     data: { email: "de8167@gmail.com" },
   });
@@ -22,26 +24,26 @@ test("관리자로 팀 관리에 들어가면 본인 멤버와 초대 블록이 
   await expect(page.getByText("de8167@gmail.com")).toBeVisible();
   await expect(page.getByText("나").first()).toBeVisible();
 
-  // 4) 관리자에게는 초대 블록이 보인다(👑): 이메일 입력 + 역할 선택 + [초대 보내기].
-  await expect(page.getByLabel("초대할 이메일")).toBeVisible();
-  const roleSelect = page.getByLabel("초대 역할");
-  await expect(roleSelect).toBeVisible();
-  // 역할은 관리자/멤버/게스트 셋뿐(ADR-007 역할 모델).
-  await expect(roleSelect.locator("option")).toHaveText([
-    "관리자",
-    "멤버",
-    "게스트",
-  ]);
-  await expect(page.getByRole("button", { name: "초대 보내기" })).toBeVisible();
-
-  // 5) 권한 안내(선택, task #4): 관리자 시점에선 비관리자용 안내 카드가 뜨지 않고
-  //    실제 초대 블록이 정상 노출된다(R19 게이팅 — 비관리자에게만 안내).
+  // 4) 팀 관리 헤더 + 초대 전용 안내.
+  await expect(page.getByRole("heading", { name: "팀 관리" })).toBeVisible();
   await expect(
-    page.getByText("멤버 초대·역할 변경은 관리자만 할 수 있어요."),
-  ).toHaveCount(0);
+    page.getByText("초대 전용 비공개 그룹이에요. 합류는 초대 링크로만 가능해요."),
+  ).toBeVisible();
 
-  // 참고: [🔗 링크 복사]는 초대를 실제로 생성(파괴적)한 뒤에만 노출된다(shareLink 상태).
-  //       비파괴 e2e에선 초대를 보내지 않으므로 링크 복사 버튼은 단언하지 않는다.
+  // 5) step4 토큰 초대 UI(owner) — 역할 선택·사용 횟수·만들기 버튼이 노출된다(누르지 않음, 파괴적).
+  await expect(page.getByLabel("초대 역할")).toBeVisible();
+  await expect(page.getByLabel("사용 횟수")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "초대 링크 만들기" }),
+  ).toBeVisible();
+
+  // 6) 이메일 초대 입력은 제거됐다(토큰 초대로 전환, ADR-018).
+  await expect(page.getByLabel("초대할 이메일")).toHaveCount(0);
+
+  // 7) 권한 안내(R19): owner 시점에선 비관리자용 안내 카드가 뜨지 않는다.
+  await expect(
+    page.getByText("멤버 초대·역할 변경은 owner·admin만 할 수 있어요."),
+  ).toHaveCount(0);
 });
 
 // F6: 멤버 ⋯ 메뉴(역할 변경/내보내기) + 내보내기 확인 다이얼로그를 "노출까지만" 검증한다.

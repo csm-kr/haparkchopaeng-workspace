@@ -8,3 +8,9 @@ export interface ShellMember {
   role: string;
   status?: string | null;
 }
+
+// 셸 팀 전환용 — 사용자가 속한 팀 요약(서버에서 props로 내려온다, ADR-018).
+export interface ShellTeam {
+  slug: string;
+  name: string;
+}

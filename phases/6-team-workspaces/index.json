@@ -1,0 +1,48 @@
+{
+  "project": "하박조팽",
+  "phase": "6-team-workspaces",
+  "steps": [
+    {
+      "step": 0,
+      "name": "team-data-model",
+      "status": "completed",
+      "started_at": "2026-06-15T07:42:58+0900",
+      "completed_at": "2026-06-15T08:04:00+0900",
+      "summary": "멀티팀(ADR-018) 데이터 모델 additive 추가: schema.prisma에 Team·Membership(복합PK [teamId,memberId], @@index([memberId]))·TeamInviteAcceptance, types에 TeamRole + DTO, seed.ts에 하박조팽→Team 1개+owner(=관리자 jo) 이관(멱등·팀 0개일 때만). 운영 Supabase에 prisma db push로 3테이블 생성 + 비파괴 이관 실행 완료(team habakjopaeng, owner=jo). seed.test 6/6 통과. 기존 Invite/Workspace/엔티티는 미변경(Invite 토큰화는 step 2)."
+    },
+    {
+      "step": 1,
+      "name": "team-create",
+      "status": "completed",
+      "started_at": "2026-06-15T08:05:33+0900",
+      "completed_at": "2026-06-15T08:11:17+0900",
+      "summary": "팀 생성 도메인(앱레벨 권한, RLS 미사용): lib/teams.ts에 maxTeams()(env 호출시점·기본2)·createTeam(이름2–30·slug 정규화/충돌-2,-3 회피·전역 상한 TEAM_LIMIT(403)·명시 slug 중복 SLUG_TAKEN(409)·트랜잭션 내 count 재확인+생성자 owner 멤버십)·getMembership/isTeamMember/isTeamAdmin/isTeamOwner(위계 owner>admin>member)·resolveEntryTeam(최근 joinedAt slug|null). app/(app)/teams/new/actions.ts에 createTeamAction(creatorId=세션·판별 유니온 반환). teams.test.ts 14개 신규(전체 233 통과)·build green. 기존 lib/team.ts 미변경."
+    },
+    {
+      "step": 2,
+      "name": "invite-tokens",
+      "status": "completed",
+      "started_at": "2026-06-15T08:11:17+0900",
+      "completed_at": "2026-06-15T08:28:48+0900",
+      "summary": "초대를 이메일 매칭→랜덤 토큰 합류로 전환(ADR-018). schema: Invite 재설계(email/status/invitedBy 폐기 → teamId·token@unique·role(admin|member)·maxUses·usedCount·expiresAt·revokedAt·usedAt·createdBy + Team.invites 관계·@@index([teamId])). lib/invite.ts 전면 교체(서명 JWT 제거): generateInviteToken(randomBytes18.base64url)·inviteLink(/invite/{token})·createInvite(+7일)·getInviteForAcceptance(status 파생 not_found|revoked|expired|used_up|ready, 토큰 미노출)·acceptInvite($transaction+SELECT…FOR UPDATE 직렬화, 멱등/만료/회수/used_up, Membership+TeamInviteAcceptance+usedCount++). lib/invite-gate.ts: findOrCreateMember 추가(거부 없음), gateInvitedEmail은 멤버매칭만으로 단순화(step3에서 제거). API: POST/GET /api/invites(teamSlug·owner·admin만 isTeamAdmin, role admin|member)·DELETE [id](회수)·resend(활성시 링크). accept route 삭제. 소비처 컴파일 수정: PendingInviteView(이메일 제거·InviteRole·maxUses/usedCount)·lib/team.ts(invites:[])·team-manager(이메일 입력 제거, 토큰 초대 UI는 step4). 테스트 246 통과·build green. NOTE: 운영 Supabase prisma db push는 step 지시대로 미실행 — Invite 스키마 변경은 push 대기."
+    },
+    {
+      "step": 3,
+      "name": "entry-flow",
+      "status": "completed",
+      "started_at": "2026-06-15T08:28:48+0900",
+      "completed_at": "2026-06-15T08:51:43+0900",
+      "summary": "진입 흐름 배선(ADR-018): callback 게이트 제거(gateInvitedEmail 삭제 → findOrCreateMember+createSession, 비초대 거부 안 함)·초대 복귀 next 처리. lib/redirect.ts 신규(sanitizeNext: same-origin /path만 허용·//·/\\·제어문자 거부 / needsTeamOnboarding: 팀없음 가드 결정, /teams/new·/invite 예외). /api/auth/google가 정제된 next를 콜백 redirectTo에 전달. middleware.ts 신규(x-pathname 헤더 노출 — RSC 레이아웃 경로 가드용). (app)/layout이 listMemberships로 팀없음 가드(→/teams/new)+teams/activeTeamSlug prop. lib/teams.ts listMemberships 추가. app/invite/[token] 신규((app) 밖·팀가드 없음, 미로그인→/?next= 복귀, 수락 UI는 step4). 셸 TeamSwitcher 신규(현재 팀+전환 링크, 최소·전환 진짜 스코프는 팀스코핑 단계). page.tsx/auth-screen이 next 스레딩(dev·Google 둘다). 세션은 기존 lib/auth 유지. 유닛 +16(redirect 10·teams listMemberships 2·team-switcher 4, invite-gate gateInvitedEmail 테스트 제거)·전체 260 통과·build/lint green·e2e entry.spec 3개 신규 통과 + 기존 green(team.spec 구버전 단언을 step2 제거된 이메일초대 UI에 맞게 갱신 — 토큰초대 단언은 step4)."
+    },
+    {
+      "step": 4,
+      "name": "team-ui",
+      "status": "completed",
+      "started_at": "2026-06-15T08:51:43+0900",
+      "completed_at": "2026-06-15T09:12:30+0900",
+      "summary": "멀티팀 UI 완성(ADR-018): (1) app/(app)/teams/new — 팀 없음 착지(CreateTeamForm 섬→createTeamAction, TEAM_LIMIT/SLUG_TAKEN 인라인 R30, 성공→/dashboard) + 초대 링크 안내. (2) app/invite/[token] 재작성(RSC, getInviteForAcceptance status별 카드 not_found/revoked/expired/used_up 사유·ready 팀명+역할; 미로그인→/api/auth/google?next 로그인하고 합류, 로그인→AcceptInviteButton 섬→acceptInviteAction(requireAuth memberId 주입 R3, 성공→/dashboard)). (3) team-manager 재작성: 이메일 입력 제거→토큰 초대 발급(역할 admin|member·maxUses→POST /api/invites→링크 복사)+활성 초대 목록/회수(DELETE)+멤버 관리(역할 영어 owner/admin/member 배지, 역할변경/내보내기 fetch). currentUserRole 게이팅(owner·admin), owner 행 보호. (4) app/api/teams/[slug]/members/[memberId] PATCH(owner만·대상 owner 불가·admin|member만)/DELETE(본인탈퇴 비-owner·owner→비-owner·admin→member, owner 추방 차단=owner≥1). Badge owner 변형 추가(토큰만 R20). lib/teams listTeamMembers·lib/invite listActiveInvites 추가. 레거시 lib/team.ts·team/actions.ts(단일워크스페이스 Member.role) 제거. 유닛 +20(members-route 11·team 컴포넌트 9 갱신·accept-action 3·list-team-members 2·list-active-invites 1, 전체 280 통과)·build/lint green·e2e 19 통과(1 skip; entry/team spec를 토큰초대·status카드로 갱신). 실제 합류는 공유 운영 DB 비파괴 원칙상 유닛(acceptInvite race 포함)으로 커버. 운영 Supabase 스키마는 이미 동기화됨(e2e listActiveInvites/Membership 조회 성공)."
+    }
+  ],
+  "created_at": "2026-06-15T07:42:58+0900",
+  "completed_at": "2026-06-15T09:12:30+0900"
+}

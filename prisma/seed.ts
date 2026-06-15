@@ -35,6 +35,9 @@ async function main() {
   await prisma.memberLedger.deleteMany();
   await prisma.fineConfig.deleteMany();
   await prisma.job.deleteMany();
+  await prisma.membership.deleteMany();
+  await prisma.teamInviteAcceptance.deleteMany();
+  await prisma.team.deleteMany();
   await prisma.invite.deleteMany();
   await prisma.member.deleteMany();
   await prisma.workspace.deleteMany();
@@ -51,6 +54,32 @@ async function main() {
       color: ADMIN.color, initial: ADMIN.initial, presence: ADMIN.presence, status: ADMIN.status, availability: "active",
     },
   });
+
+  // --- 멀티팀 이관 (ADR-018) ---
+  // 기존 단일 워크스페이스("하박조팽")를 Team 1개 + Membership으로 이관한다.
+  // 팀이 하나도 없을 때만 생성한다 — 전역 팀 상한(MAX_TEAMS 기본 2) 위배 방지 + 멱등.
+  if ((await prisma.team.count()) === 0) {
+    const members = await prisma.member.findMany();
+    if (members.length > 0) {
+      // owner = 기존 관리자(여럿이면 createdAt 최소), 관리자가 없으면 첫 멤버. 나머지 전원은 member.
+      const byCreatedAt = (a: { createdAt: Date }, b: { createdAt: Date }) =>
+        a.createdAt.getTime() - b.createdAt.getTime();
+      const admins = members.filter((m) => m.role === "관리자").sort(byCreatedAt);
+      const owner = admins[0] ?? [...members].sort(byCreatedAt)[0];
+      const workspace = await prisma.workspace.findFirst();
+
+      const team = await prisma.team.create({
+        data: { slug: "habakjopaeng", name: workspace?.name ?? "하박조팽", createdBy: owner.id },
+      });
+      await prisma.membership.createMany({
+        data: members.map((m) => ({
+          teamId: team.id,
+          memberId: m.id,
+          role: m.id === owner.id ? "owner" : "member",
+        })),
+      });
+    }
+  }
 }
 
 main()
