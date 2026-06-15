@@ -29,7 +29,8 @@
     },
     {
       "dir": "6-team-workspaces",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-06-15T09:12:30+0900"
     }
   ]
 }
