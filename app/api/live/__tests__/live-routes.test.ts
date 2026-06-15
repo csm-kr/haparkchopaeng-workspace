@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// 라이브 route handler 단위 테스트 — auth/prisma/cloudflare/live를 모킹한다(AC).
-// 검증: /start 409·presenterId 세션 주입·streamKey 노출 / /join streamKey 미노출 /
-//       /leave 본인만·세션 active 유지 / /end active=false·발표자·관리자만(타인 403)
+// 라이브 route handler 단위 테스트 — auth/prisma/livekit/live/realtime을 모킹한다(AC).
+// 검증(LiveKit · ADR-019):
+//   /start 미설정 503·409·presenterId 세션 주입(R3)·token+url 반환
+//   /join 미설정 503·비active 404·token+url(canPublishScreen:false, R7)
+//   /leave 본인만·세션 active 유지(R6)
+//   /end 발표자/관리자만(타인 403)·active=false·deleteRoom·broadcastLive("live.ended", R33)
 
 const { requireAuthMock } = vi.hoisted(() => ({ requireAuthMock: vi.fn() }));
 vi.mock("@/lib/auth", () => ({
@@ -28,23 +31,25 @@ const { getActiveSessionMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/live", () => ({ getActiveSession: getActiveSessionMock }));
 
-const {
-  createLiveInputMock,
-  deleteLiveInputMock,
-  getLiveInputPlaybackMock,
-  isLiveConfiguredMock,
-} = vi.hoisted(() => ({
-  createLiveInputMock: vi.fn(),
-  deleteLiveInputMock: vi.fn(),
-  getLiveInputPlaybackMock: vi.fn(),
-  isLiveConfiguredMock: vi.fn(),
-}));
-vi.mock("@/lib/cloudflare", () => ({
-  createLiveInput: createLiveInputMock,
-  deleteLiveInput: deleteLiveInputMock,
-  getLiveInputPlayback: getLiveInputPlaybackMock,
-  verifyWebhookSignature: vi.fn(),
+const { issueAccessTokenMock, deleteRoomMock, isLiveConfiguredMock, livekitUrlMock } =
+  vi.hoisted(() => ({
+    issueAccessTokenMock: vi.fn(),
+    deleteRoomMock: vi.fn(),
+    isLiveConfiguredMock: vi.fn(),
+    livekitUrlMock: vi.fn(),
+  }));
+vi.mock("@/lib/livekit", () => ({
+  issueAccessToken: issueAccessTokenMock,
+  deleteRoom: deleteRoomMock,
   isLiveConfigured: isLiveConfiguredMock,
+  livekitUrl: livekitUrlMock,
+  roomName: (id: string) => `live-${id}`,
+}));
+
+const { broadcastLiveMock } = vi.hoisted(() => ({ broadcastLiveMock: vi.fn() }));
+vi.mock("@/lib/realtime", () => ({
+  broadcastLive: broadcastLiveMock,
+  LIVE_CHANNEL: "live",
 }));
 
 // 모킹 후 import — 라우트가 모킹된 의존성을 받도록.
@@ -58,18 +63,23 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isLiveConfiguredMock.mockReturnValue(true); // 기본: 송출 설정됨
+  isLiveConfiguredMock.mockReturnValue(true); // 기본: LiveKit 설정됨
+  livekitUrlMock.mockReturnValue("wss://test.livekit.cloud");
+  issueAccessTokenMock.mockResolvedValue("JWT_TOKEN");
+  broadcastLiveMock.mockResolvedValue(undefined);
+  deleteRoomMock.mockResolvedValue(undefined);
 });
 
 describe("POST /api/live/start", () => {
-  it("송출(Cloudflare) 미설정이면 503 — 친절 안내(R30)", async () => {
+  it("LiveKit 미설정이면 503 — 친절 안내(R30)", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     isLiveConfiguredMock.mockReturnValue(false);
 
     const res = await startPOST();
     expect(res.status).toBe(503);
     expect(getActiveSessionMock).not.toHaveBeenCalled();
-    expect(createLiveInputMock).not.toHaveBeenCalled();
+    expect(issueAccessTokenMock).not.toHaveBeenCalled();
+    expect(prismaMock.liveSession.create).not.toHaveBeenCalled();
   });
 
   it("이미 active 세션이 있으면 409", async () => {
@@ -83,20 +93,12 @@ describe("POST /api/live/start", () => {
 
     const res = await startPOST();
     expect(res.status).toBe(409);
-    expect(createLiveInputMock).not.toHaveBeenCalled();
     expect(prismaMock.liveSession.create).not.toHaveBeenCalled();
   });
 
-  it("없으면 생성하고 presenterId를 세션에서 주입한다(R3) + streamKey 노출", async () => {
+  it("없으면 생성하고 presenterId를 세션에서 주입(R3) + 발표자 token+url 반환", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     getActiveSessionMock.mockResolvedValue(null);
-    createLiveInputMock.mockResolvedValue({
-      liveInputId: "li1",
-      rtmps: { url: "rtmps://x", streamKey: "SECRET_KEY" },
-      srt: { url: "srt://x", streamId: "sid", passphrase: "PASS" },
-      webRTC: { url: "https://whip/publish" },
-      playback: { hls: "https://hls" },
-    });
     prismaMock.liveSession.create.mockResolvedValue({
       id: "s2",
       presenterId: "jo",
@@ -106,46 +108,83 @@ describe("POST /api/live/start", () => {
     const res = await startPOST();
     expect(res.status).toBe(201);
 
-    // presenterId·cloudflareLiveInputId는 세션/Cloudflare에서 — 클라 입력 아님.
+    // presenterId는 세션에서 — 클라 입력 아님. 미사용 레거시 cloudflareLiveInputId는 설정 안 함.
     expect(prismaMock.liveSession.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          active: true,
-          presenterId: "jo",
-          cloudflareLiveInputId: "li1",
-        }),
+        data: expect.objectContaining({ active: true, presenterId: "jo" }),
+      }),
+    );
+    const createArg = prismaMock.liveSession.create.mock.calls[0][0];
+    expect(createArg.data.cloudflareLiveInputId).toBeUndefined();
+
+    // 발표자 토큰: 세션 id의 룸 + identity=세션값 + 화면공유 grant.
+    expect(issueAccessTokenMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "s2",
+        identity: "jo",
+        canPublishScreen: true,
       }),
     );
 
-    // 발표자에게만 송출 자격증명을 돌려준다(SECURITY/R36).
     const body = await res.json();
-    expect(body.data.rtmps.streamKey).toBe("SECRET_KEY");
-    expect(body.data.srt.passphrase).toBe("PASS");
-    expect(body.data.webRTC.url).toBe("https://whip/publish");
-    expect(body.data.playback.hls).toBe("https://hls");
+    expect(body.data.token).toBe("JWT_TOKEN");
+    expect(body.data.url).toBe("wss://test.livekit.cloud");
+    expect(body.data.session.presenterId).toBe("jo");
+    expect(body.data.session.id).toBe("s2");
+
+    // 전이를 모든 구독 클라에 푸시(R33).
+    expect(broadcastLiveMock).toHaveBeenCalledWith(
+      "live.started",
+      expect.objectContaining({ sessionId: "s2" }),
+    );
   });
 });
 
 describe("POST /api/live/:id/join", () => {
-  it("재생용 HLS만 — 송출 자격증명 미포함(R36)", async () => {
+  it("LiveKit 미설정이면 503", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "paeng", role: "멤버" });
+    isLiveConfiguredMock.mockReturnValue(false);
+
+    const res = await joinPOST(req(), ctx("s1"));
+    expect(res.status).toBe(503);
+    expect(issueAccessTokenMock).not.toHaveBeenCalled();
+  });
+
+  it("비active 세션이면 404", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "paeng", role: "멤버" });
+    prismaMock.liveSession.findUnique.mockResolvedValue({
+      id: "s1",
+      active: false,
+    });
+
+    const res = await joinPOST(req(), ctx("s1"));
+    expect(res.status).toBe(404);
+    expect(issueAccessTokenMock).not.toHaveBeenCalled();
+  });
+
+  it("성공 시 참가자 token+url — 화면공유 grant 없음(R7) + identity 세션 주입", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "paeng", role: "멤버" });
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1",
       active: true,
-      cloudflareLiveInputId: "li1",
     });
     prismaMock.participant.upsert.mockResolvedValue({});
-    getLiveInputPlaybackMock.mockResolvedValue({ hls: "https://hls" });
 
     const res = await joinPOST(req(), ctx("s1"));
     expect(res.status).toBe(200);
 
+    // 참가자 토큰: identity=세션값, 화면공유 grant 없음.
+    expect(issueAccessTokenMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "s1",
+        identity: "paeng",
+        canPublishScreen: false,
+      }),
+    );
+
     const body = await res.json();
-    expect(body.data.playback.hls).toBe("https://hls");
-    const serialized = JSON.stringify(body);
-    expect(serialized).not.toContain("streamKey");
-    expect(serialized).not.toContain("passphrase");
-    expect(serialized).not.toContain("webRTC");
+    expect(body.data.token).toBe("JWT_TOKEN");
+    expect(body.data.url).toBe("wss://test.livekit.cloud");
 
     // memberId는 세션에서, 재참가 허용(leftAt=null).
     expect(prismaMock.participant.upsert).toHaveBeenCalledWith(
@@ -182,23 +221,26 @@ describe("POST /api/live/:id/leave", () => {
 });
 
 describe("POST /api/live/:id/end", () => {
-  it("발표자가 종료하면 active=false (leave≠end)", async () => {
+  it("발표자가 종료하면 active=false + deleteRoom + broadcastLive(leave≠end)", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1",
       presenterId: "jo",
-      cloudflareLiveInputId: "li1",
     });
     prismaMock.liveSession.update.mockResolvedValue({});
 
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(200);
-    expect(deleteLiveInputMock).toHaveBeenCalledWith("li1");
+    expect(deleteRoomMock).toHaveBeenCalledWith("s1");
     expect(prismaMock.liveSession.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "s1" },
         data: expect.objectContaining({ active: false }),
       }),
+    );
+    expect(broadcastLiveMock).toHaveBeenCalledWith(
+      "live.ended",
+      expect.objectContaining({ sessionId: "s1" }),
     );
   });
 
@@ -207,7 +249,6 @@ describe("POST /api/live/:id/end", () => {
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1",
       presenterId: "jo",
-      cloudflareLiveInputId: "li1",
     });
     prismaMock.liveSession.update.mockResolvedValue({});
 
@@ -220,12 +261,11 @@ describe("POST /api/live/:id/end", () => {
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1",
       presenterId: "jo",
-      cloudflareLiveInputId: "li1",
     });
 
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(403);
-    expect(deleteLiveInputMock).not.toHaveBeenCalled();
+    expect(deleteRoomMock).not.toHaveBeenCalled();
     expect(prismaMock.liveSession.update).not.toHaveBeenCalled();
   });
 });

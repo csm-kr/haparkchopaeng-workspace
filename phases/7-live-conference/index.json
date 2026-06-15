@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "livekit-token",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-15T11:29:51+0900",
+      "summary": "lib/livekit.ts(토큰·룸, 키는 호출 시점·toJwt await·발표자만 screen_share grant)·lib/live-messages.ts(데이터 채널 프로토콜, 방어적 디코드) 추가, live 라우트 4종을 LiveKit으로 개조(/start·/join 토큰+url·503/409, /end deleteRoom). cloudflare/whip 미삭제. 299 tests·build·lint green.",
+      "completed_at": "2026-06-15T11:45:00+0900"
     },
     {
       "step": 2,

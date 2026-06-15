@@ -1,11 +1,12 @@
 import { requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { getLiveInputPlayback } from "@/lib/cloudflare";
+import { isLiveConfigured, issueAccessToken, livekitUrl } from "@/lib/livekit";
+import type { LiveJoinResponse } from "@/types";
 
-// POST /api/live/:id/join — 시청자 참가 등록 + 재생 정보. 🔒
-// CRITICAL: 응답은 재생용 HLS만 — 송출 자격증명(streamKey/passphrase) 절대 미포함(R36/SECURITY).
-// CRITICAL: participant memberId는 세션에서 취한다(R3). 재참가 허용(leftAt=null).
+// POST /api/live/:id/join — 시청자 참가 등록 + LiveKit 토큰. 🔒
+// CRITICAL: 참가자 토큰엔 화면공유 grant 없음 — 화면공유는 발표자만(R7).
+// CRITICAL: 토큰 identity는 세션에서 취한다(R3). 재참가 허용(leftAt=null, 감사용).
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -14,9 +15,17 @@ export async function POST(
     const session = await requireAuth();
     const { id } = await params;
 
+    if (!isLiveConfigured()) {
+      return fail(
+        503,
+        "LIVE_UNCONFIGURED",
+        "세미나 라이브가 아직 연결되지 않았어요. 관리자가 LiveKit 설정을 마치면 켜져요.",
+      );
+    }
+
     const live = await prisma.liveSession.findUnique({
       where: { id },
-      select: { id: true, active: true, cloudflareLiveInputId: true },
+      select: { id: true, active: true },
     });
     if (!live || !live.active) {
       return fail(404, "NOT_FOUND", "진행 중인 라이브가 없어요.");
@@ -30,12 +39,14 @@ export async function POST(
       update: { leftAt: null }, // 재참가
     });
 
-    // 시청자에게는 재생용 HLS만. 송출 자격증명은 발표자 /start에만 있었다(R36).
-    const playback = live.cloudflareLiveInputId
-      ? await getLiveInputPlayback(live.cloudflareLiveInputId)
-      : { hls: "" };
+    // 참가자 토큰: 화면공유 grant 없음(R7). identity는 세션에서(R3).
+    const token = await issueAccessToken({
+      sessionId: id,
+      identity: session.memberId,
+      canPublishScreen: false,
+    });
 
-    return ok({ playback });
+    return ok<LiveJoinResponse>({ token, url: livekitUrl() });
   } catch (e) {
     return toErrorResponse(e);
   }

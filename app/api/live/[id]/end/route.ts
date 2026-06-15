@@ -1,7 +1,7 @@
 import { requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { deleteLiveInput } from "@/lib/cloudflare";
+import { deleteRoom } from "@/lib/livekit";
 import { broadcastLive } from "@/lib/realtime";
 
 // POST /api/live/:id/end — 세션 전체 종료. ✍️ 발표자 본인 또는 관리자(👑)만.
@@ -17,7 +17,7 @@ export async function POST(
 
     const live = await prisma.liveSession.findUnique({
       where: { id },
-      select: { id: true, presenterId: true, cloudflareLiveInputId: true },
+      select: { id: true, presenterId: true },
     });
     if (!live) return fail(404, "NOT_FOUND", "진행 중인 라이브가 없어요.");
 
@@ -27,9 +27,8 @@ export async function POST(
       return fail(403, "FORBIDDEN", "라이브는 발표자나 관리자만 종료할 수 있어요.");
     }
 
-    if (live.cloudflareLiveInputId) {
-      await deleteLiveInput(live.cloudflareLiveInputId);
-    }
+    // LiveKit 룸 정리(best-effort, 실패 무시 — 세션은 곧 DB에서 비활성).
+    await deleteRoom(id);
     await prisma.liveSession.update({
       where: { id },
       data: { active: false, endedAt: new Date() },
