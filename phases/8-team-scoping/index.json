@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "active-team-context",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-15T12:58:41+0900",
+      "summary": "lib/active-team.ts(서버 전용): getActiveTeamSlug(쿠키 active_team이 내 멤버십이면 그걸·아니면 resolveEntryTeam 폴백·0팀 null)·getActiveTeam({id,slug,role} 해소)·setActiveTeam(멤버십 검증 후에만 HttpOnly·SameSite=Lax 쿠키, 미멤버십 403). 쿠키는 isMyTeamSlug(team 존재+isTeamMember) 검증 후에만 신뢰(R3/R19). POST /api/teams/active route(zod {slug}·requireAuth·setActiveTeam·revalidatePath('/','layout'); 미멤버십 403·slug 없으면 400). layout이 teams[0] 대신 getActiveTeamSlug 사용. TeamSwitcher를 client로 전환(다른 팀 버튼→fetch POST→router.refresh). API.md teamId→slug 정정(쿠키는 slug 키). shell.test에 useRouter 목 추가. build·test(333)·lint green. 도메인 쿼리 스코핑은 step 3/4.",
+      "completed_at": "2026-06-15T13:08:00+0900"
     },
     {
       "step": 3,

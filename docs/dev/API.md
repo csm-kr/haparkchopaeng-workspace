@@ -32,9 +32,9 @@
 | POST | `/api/invites/accept` | 토큰으로 합류 | — (토큰 검증) |
 | PATCH | `/api/members/:id/role` | 역할 변경 | 👑 |
 | DELETE | `/api/members/:id` | 내보내기 | 👑 |
-| POST | `/api/teams/active` | 활성 팀 전환 `{teamId}` → 쿠키 설정 + revalidate | 🔒 |
+| POST | `/api/teams/active` | 활성 팀 전환 `{slug}` → 쿠키 설정 + revalidate | 🔒 |
 
-- **CRITICAL: 활성 팀 전환은 검증된 멤버십만(ADR-020, R37).** `POST /api/teams/active`(또는 동등한 Server Action)는 `teamId`가 **내 멤버십**일 때만 쿠키를 설정한다 — 아니면 `403`. 미설정/무효 쿠키는 가장 최근 합류 팀(`resolveEntryTeam`)으로 폴백. 전환 후 화면을 revalidate한다.
+- **CRITICAL: 활성 팀 전환은 검증된 멤버십만(ADR-020, R37).** `POST /api/teams/active`(또는 동등한 Server Action)는 `slug`가 **내 멤버십**일 때만 쿠키(`active_team`)를 설정한다 — 아니면 `403`. 미설정/무효 쿠키는 가장 최근 합류 팀(`resolveEntryTeam`)으로 폴백. 전환 후 화면을 revalidate한다.
 
 ### 논문 · 분석
 | 메서드 | 경로 | 설명 | 권한 |

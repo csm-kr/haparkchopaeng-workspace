@@ -4,9 +4,10 @@ import { LiveProvider, ThemeProvider } from "@/components/providers";
 import { Sidebar } from "../sidebar";
 import type { ShellMember } from "../types";
 
-// usePathname을 고정한다(라우터 없이 렌더).
+// usePathname을 고정한다. TeamSwitcher가 useRouter를 쓰므로 함께 목킹한다(렌더만, 동작 없음).
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 const CURRENT: ShellMember = {

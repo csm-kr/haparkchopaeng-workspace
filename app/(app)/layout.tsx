@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveSession } from "@/lib/live";
 import { listMemberships } from "@/lib/teams";
+import { getActiveTeamSlug } from "@/lib/active-team";
 import { needsTeamOnboarding } from "@/lib/redirect";
 import { AppProviders } from "@/components/providers";
 import { AppShell, type ShellMember } from "@/components/shell";
@@ -51,6 +52,9 @@ export default async function AppLayout({
     redirect("/teams/new");
   }
 
+  // 활성 팀 해소(ADR-020/R37) — 쿠키가 내 멤버십이면 그걸, 아니면 최근 합류로 폴백.
+  const activeTeamSlug = await getActiveTeamSlug(session.memberId);
+
   // 현재 live 여부를 서버에서 구해 첫 렌더부터 일관되게(ADR-001). 이후 전이는 Realtime.
   const active = await getActiveSession();
 
@@ -60,7 +64,7 @@ export default async function AppLayout({
         members={members.map(toShellMember)}
         currentUser={toShellMember(current)}
         teams={teams.map((t) => ({ slug: t.slug, name: t.name }))}
-        activeTeamSlug={teams[0]?.slug ?? null}
+        activeTeamSlug={activeTeamSlug}
       >
         {children}
       </AppShell>
