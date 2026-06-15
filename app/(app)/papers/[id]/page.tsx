@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { AnalysisView, DeletePaperButton } from "@/components/analyzer";
 import { getSession } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { getPaperDetail } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addNote, deleteNote } from "./actions";
@@ -24,10 +26,16 @@ function metaLine(parts: Array<string | number | null | undefined>): string {
 export default async function PaperDetailPage({ params }: PageProps) {
   const { id } = await params;
 
+  // CRITICAL: 활성 팀으로 스코핑(R37/R19) — 다른 팀 논문이면 detail=null → "없음" UI(404 등가).
+  const session = await getSession();
+  if (!session) redirect("/");
+  const team = await getActiveTeam(session.memberId);
+  if (!team) redirect("/teams/new");
+
   let detail: Awaited<ReturnType<typeof getPaperDetail>> = null;
   let failed = false;
   try {
-    detail = await getPaperDetail(id);
+    detail = await getPaperDetail(id, team.id);
   } catch {
     failed = true;
   }
@@ -80,8 +88,7 @@ export default async function PaperDetailPage({ params }: PageProps) {
 
   const { paper } = detail;
 
-  // 작성자 표기에 쓸 현재 사용자(노트 낙관적 추가 시 표시). 인증은 (app)/layout이 보장.
-  const session = await getSession();
+  // 작성자 표기에 쓸 현재 사용자(노트 낙관적 추가 시 표시). 인증은 위에서 보장(session).
   const me = session
     ? await prisma.member.findUnique({
         where: { id: session.memberId },

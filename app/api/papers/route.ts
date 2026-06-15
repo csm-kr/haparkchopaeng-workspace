@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { fail, HttpError, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { arxivPdfUrl, parseArxivId } from "@/lib/arxiv";
@@ -65,6 +66,10 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const session = await requireAuth();
 
+    // 활성 팀(검증된 멤버십)에서 teamId를 취한다 — 클라 입력 미신뢰(R3/R37). 없으면 403.
+    const team = await getActiveTeam(session.memberId);
+    if (!team) return fail(403, "FORBIDDEN", "활성 팀이 없어요.");
+
     // 주간 업로드 한도(인당) — Gemini 비용 통제. 초과면 429(어느 경로든 생성 전에 차단).
     if (await isPaperQuotaExceeded(session.memberId)) {
       return fail(
@@ -108,6 +113,7 @@ export async function POST(req: Request): Promise<Response> {
           arxiv: id,
           pageCount,
           pdfUrl: path,
+          teamId: team.id, // R3/R37: 활성 팀에서 주입
           uploadedBy: session.memberId,
           analysisStatus: "pending",
           tags: [],
@@ -153,6 +159,7 @@ export async function POST(req: Request): Promise<Response> {
         authors: "",
         pageCount,
         pdfUrl: parsed.data.objectPath,
+        teamId: team.id, // R3/R37: 활성 팀에서 주입
         uploadedBy: session.memberId,
         analysisStatus: "pending",
         tags: [],

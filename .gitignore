@@ -26,3 +26,6 @@ phases/**/step*-output.json
 
 # Claude Code 로컬 워크트리(중첩 git repo) — 추적 금지
 .claude/worktrees/
+
+# 운영 마이그레이션 로컬 백업(운영 데이터 — 커밋 금지)
+.migration-backup/

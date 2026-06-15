@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth, requireRole } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { HttpError } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { getFines, getScheduleMembers, resolveStartIdx } from "@/lib/schedule";
@@ -37,15 +38,18 @@ export async function draftMonthAction(
   year: number,
   month: number,
 ): Promise<ScheduleWeekView[]> {
-  await requireAuth();
+  const session = await requireAuth();
   const parsed = YearMonth.safeParse({ year, month });
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "잘못된 달이에요.");
   }
+  // 활성 팀으로 스코핑(R37/ADR-020) — 순번은 같은 팀의 직전 저장월에서 이어받는다.
+  const team = await getActiveTeam(session.memberId);
+  if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
   // 로테이션 = 실제 멤버(가입순). 시작 순번은 직전 저장월에서 이어받는다(연속 전진).
   // 멤버 수를 넘는 자투리 주는 draftWeeks가 방학으로 둔다.
   const rotation = (await getScheduleMembers()).map((m) => m.id);
-  const startIdx = await resolveStartIdx(parsed.data.year, parsed.data.month);
+  const startIdx = await resolveStartIdx(parsed.data.year, parsed.data.month, team.id);
   return draftWeeks(parsed.data.year, parsed.data.month, startIdx, rotation);
 }
 
@@ -129,8 +133,9 @@ export async function saveMonth(input: {
   version: number;
   weeks: WeekInput[];
 }): Promise<SaveMonthResult> {
+  let session;
   try {
-    await requireRole("관리자", "멤버");
+    session = await requireRole("관리자", "멤버");
   } catch {
     return { ok: false, code: "FORBIDDEN", message: "스케줄을 저장할 권한이 없어요." };
   }
@@ -141,17 +146,25 @@ export async function saveMonth(input: {
   }
   const { year, month, version, weeks } = parsed.data;
 
-  // 순번 연속 전진: 이 달 시작 인덱스 = 직전 저장월의 rotationPointerAfter,
+  // 활성 팀으로 스코핑(R37/ADR-020) — 저장은 (teamId, year, month) 키, teamId는 활성 팀 주입(R3).
+  const team = await getActiveTeam(session.memberId);
+  if (!team) {
+    return { ok: false, code: "FORBIDDEN", message: "활성 팀이 없어요." };
+  }
+
+  // 순번 연속 전진: 이 달 시작 인덱스 = 같은 팀 직전 저장월의 rotationPointerAfter,
   // 이 달 발표 배정 수(방학 제외)만큼 전진. 멤버 수는 가변이라 실제 멤버 수로 나눈다(R16).
-  const startIdx = await resolveStartIdx(year, month);
+  const startIdx = await resolveStartIdx(year, month, team.id);
   const len = (await getScheduleMembers()).length;
   const presented = weeks.filter((w) => w.presenterId !== null).length;
   const pointer = nextPointer(startIdx, presented, len);
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
-      const existing = await tx.scheduleMonth.findUnique({
-        where: { year_month: { year, month } },
+      // 복합 unique [teamId, year, month](ADR-020) — 활성 팀으로 스코핑한다.
+      // 다른 팀의 같은 달과 섞이지 않고, 낙관적 락도 팀 스코프 안에서 작동한다(R35).
+      const existing = await tx.scheduleMonth.findFirst({
+        where: { teamId: team.id, year, month },
       });
 
       if (existing) {
@@ -171,6 +184,7 @@ export async function saveMonth(input: {
       // row가 없던 빈 달 — 사용자가 저장을 눌렀을 때만 생성한다(자동 생성 아님, R15).
       return tx.scheduleMonth.create({
         data: {
+          teamId: team.id, // R3/R37: 활성 팀에서 주입
           year,
           month,
           day: "토요일",
@@ -209,20 +223,26 @@ export async function updateFines(input: {
   finePresenter: number;
   fineAbsent: number;
 }): Promise<FinesView> {
-  await requireRole("관리자");
+  const session = await requireRole("관리자");
   const parsed = UpdateFinesSchema.safeParse(input);
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "금액을 확인해주세요.");
   }
   const { year, finePresenter, fineAbsent } = parsed.data;
 
-  await prisma.fineConfig.update({
-    where: { year },
+  // 활성 팀으로 스코핑한다(R37/ADR-020) — 쓰기·읽기 모두 활성 팀 것만.
+  const team = await getActiveTeam(session.memberId);
+  if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
+
+  // FineConfig PK가 [teamId, year]로 바뀜(ADR-020) — update는 unique를 요구하므로 updateMany로.
+  // where에 teamId를 넣어 활성 팀의 설정만 수정한다(교차 팀 변이 차단, R19).
+  await prisma.fineConfig.updateMany({
+    where: { teamId: team.id, year },
     data: { finePresenter, fineAbsent },
   });
   revalidatePath("/schedule");
 
-  const fines = await getFines(year);
+  const fines = await getFines(year, team.id);
   if (!fines) throw new HttpError(404, "NOT_FOUND", "벌금 설정이 없어요.");
   return fines;
 }

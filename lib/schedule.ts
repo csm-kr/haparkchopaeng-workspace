@@ -22,9 +22,12 @@ function toAvailability(value: string): Availability {
 export async function getMonth(
   year: number,
   month: number,
+  teamId: string,
 ): Promise<ScheduleMonthView | null> {
-  const m = await prisma.scheduleMonth.findUnique({
-    where: { year_month: { year, month } },
+  // CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 복합 unique [teamId, year, month] 중 teamId까지 필터.
+  // 다른 팀의 같은 달이 섞이지 않는다.
+  const m = await prisma.scheduleMonth.findFirst({
+    where: { teamId, year, month },
     include: { weeks: { orderBy: { week: "asc" } } },
   });
   if (!m) return null;
@@ -77,9 +80,14 @@ export async function getScheduleMembers(): Promise<MemberOption[]> {
  * 연도별 벌금 설정 + 멤버 장부 원자료. 누적/미납은 저장하지 않고 화면에서 파생(DB.md).
  * 해당 연도 설정이 없으면 null.
  */
-export async function getFines(year: number): Promise<FinesView | null> {
-  const config = await prisma.fineConfig.findUnique({
-    where: { year },
+export async function getFines(
+  year: number,
+  teamId: string,
+): Promise<FinesView | null> {
+  // CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — PK [teamId, year] 중 teamId까지 필터.
+  // 다른 팀의 같은 연도 벌금 설정이 섞이지 않는다.
+  const config = await prisma.fineConfig.findFirst({
+    where: { teamId, year },
     include: { ledgers: true },
   });
   if (!config) return null;
@@ -117,15 +125,18 @@ export async function getFines(year: number): Promise<FinesView | null> {
 }
 
 /**
- * 새 달 초안·저장의 시작 순번 — 직전 저장된 달의 rotationPointerAfter(없으면 0).
+ * 새 달 초안·저장의 시작 순번 — 같은 팀의 직전 저장된 달의 rotationPointerAfter(없으면 0).
  * 클라이언트가 포인터를 보내지 않는다 — 서버에서 취한다(R16).
+ * CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 다른 팀의 저장월이 순번에 끼어들지 않는다.
  */
 export async function resolveStartIdx(
   year: number,
   month: number,
+  teamId: string,
 ): Promise<number> {
   const prev = await prisma.scheduleMonth.findFirst({
     where: {
+      teamId,
       saved: true,
       OR: [{ year: { lt: year } }, { year, month: { lt: month } }],
     },

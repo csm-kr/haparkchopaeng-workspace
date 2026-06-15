@@ -158,3 +158,22 @@
 - 단방향 HLS의 "녹화 자동" 이점을 잃는다 — 녹화는 LiveKit Egress로 가능하나 **이번 범위 밖**(미결 → ISSUES). 기존 `recordingUrl`·Cloudflare 웹훅 경로는 폐기한다.
 - `LiveSession.cloudflareLiveInputId` 컬럼은 미사용으로 남긴다(무해한 레거시, 후속 마이그레이션에서 제거) — 이번 phase는 스키마 변경·`prisma db push` 없음.
 - 라이브는 **여전히 단일 전역 세션**이며 팀 스코핑하지 않는다(ADR-018 범위 유지 — 팀 분리는 다음 phase).
+
+### ADR-020: 엔티티 팀 스코핑 (ADR-018 보류분 실행 · ADR-019 개정)
+
+> **이 ADR은 ADR-018이 "별도 단계로 미룬다"고 명시한 엔티티 팀 스코핑을 실행하고, ADR-019의 "전역 동시 1개 라이브 세션"을 "팀당 동시 1개"로 개정한다.** RLS 미사용·앱레벨 권한(ADR-016)·초대 토큰 합류(ADR-018)는 그대로 유지한다.
+
+**결정**: 도메인 엔티티를 팀별로 스코핑한다. 각 팀은 자기 데이터(홈·논문·발표자료·스케줄·벌금·라이브)만 본다.
+- `Paper`·`Presentation`·`ScheduleMonth`·`FineConfig`·`MemberLedger`·`LiveSession`에 `teamId`. 하위 엔티티(`Analysis`·`Figure`·`SectionNote`·`Comment`·`ScheduleWeek`)는 부모를 통해 스코핑한다(자체 teamId 불필요).
+- **활성 팀(active team)**: 사용자는 여러 팀에 속할 수 있고, "활성 팀"을 **쿠키**로 보관한다(검증: 반드시 내 멤버십이어야). 기본값은 가장 최근 합류 팀(`resolveEntryTeam`). `TeamSwitcher`가 활성 팀을 실제로 전환하고 화면을 revalidate한다.
+- **쓰기**: `teamId`는 **활성 팀에서 서버가 주입**한다(클라가 보낸 teamId 미신뢰, R3). 다른 팀 엔티티 접근은 `403`(R19).
+- **라이브**: 팀당 동시 active 1개(ADR-019 "전역 1개" 개정). `getActiveSession(teamId)`, `LiveSession.teamId`, LiveKit 룸 이름에 팀 포함.
+- **고유 제약 변경**: `ScheduleMonth` `@@unique([teamId, year, month])`, `FineConfig` `@@id([teamId, year])`, `MemberLedger` `@@unique([teamId, year, memberId])` — 팀별 독립.
+
+**이유**: ADR-018은 인증/팀 레이어만 했고 엔티티는 단일 워크스페이스로 남겨, 2번째 팀이 1번째 팀 데이터를 공유했다(의도된 과도기). 이 ADR이 그 과도기를 끝낸다.
+
+**트레이드오프**:
+- 운영 DB 마이그레이션 필요(teamId 컬럼 + 제약/PK 변경 + 기존 행 백필). **공유 운영 DB라 `prisma db push`(실 반영)는 코드와 분리된 *검토된 수동 단계*로 실행**한다 — harness step은 스키마·백필·테스트 코드까지만 만들고, 실제 push/백필 실행은 사람이 검토 후 한다(ADR-018 step에서 push를 미룬 선례).
+- 기존 데이터는 전부 부트스트랩된 "하박조팽" 팀(seed 이관 팀, 가장 먼저 생성된 팀)으로 백필(멱등).
+- **교차 팀 격리**가 새 핵심 불변식 — 권한 누락 시 데이터 유출이므로 TDD로 강제한다.
+- `R17`(논문 목록 필터 "전체" 하나)은 영향 없음 — 팀 내에서 "전체"는 그대로.

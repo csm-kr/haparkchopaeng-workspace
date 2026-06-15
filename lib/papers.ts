@@ -25,11 +25,13 @@ function toAnalysisStatus(value: string): AnalysisStatus {
   return value === "ready" || value === "failed" ? value : "pending";
 }
 
-export async function getPapers(): Promise<PaperListItem[]> {
+export async function getPapers(teamId: string): Promise<PaperListItem[]> {
   // 논문 + 업로더(Member)를 함께 읽는다. Paper.uploadedBy는 Member.id이지만
   // 스키마에 관계가 없어 멤버를 한 번에 조회해 맵으로 합친다.
+  // CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 다른 팀 논문이 섞이지 않는다. 멤버는 전역(스코핑 대상 아님).
   const [papers, members] = await Promise.all([
     prisma.paper.findMany({
+      where: { teamId },
       orderBy: { uploadedAt: "desc" },
       select: {
         id: true,
@@ -92,10 +94,12 @@ export interface PaperDetailView {
 
 export async function getPaperDetail(
   id: string,
+  teamId: string,
 ): Promise<PaperDetailView | null> {
   // 읽기는 RSC에서 Prisma 직접(ADR-015/R32). 분석·figure·노트를 함께 읽는다.
-  const paper = await prisma.paper.findUnique({
-    where: { id },
+  // CRITICAL: 활성 팀 일치 확인(R37/R19) — 다른 팀 논문이면 null(존재 숨김 → 404). findUnique→findFirst.
+  const paper = await prisma.paper.findFirst({
+    where: { id, teamId },
     include: {
       analyses: true,
       figures: { orderBy: { sourcePage: "asc" } },

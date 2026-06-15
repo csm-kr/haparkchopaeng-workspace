@@ -1,12 +1,15 @@
+import { redirect } from "next/navigation";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { FinesPanel, RotationPanel, ScheduleBoard } from "@/components/schedule";
 import { getSession } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { getFines, getMonth, getScheduleMembers } from "@/lib/schedule";
 import { draftMonthAction, reorderRotation, saveMonth, updateFines } from "./actions";
 
 // 스케줄 — RSC. 읽기는 서버에서 Prisma 직접(ADR-015/R32). 쓰기는 actions.ts(Server Action).
 // CRITICAL: 빈 달은 자동 생성하지 않는다 — GET이 row를 만들지 않는다(R15/ADR-006).
+// CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 달/벌금은 활성 팀 것만. 멤버는 전역.
 // 월은 ?y=&m= 쿼리로 결정(기본은 현재월). 토큰만 사용(R20).
 
 interface PageProps {
@@ -26,13 +29,16 @@ export default async function SchedulePage({ searchParams }: PageProps) {
   const month = Math.min(12, Math.max(1, rawMonth));
 
   const session = await getSession();
-  const isAdmin = session?.role === "관리자";
+  if (!session) redirect("/");
+  const team = await getActiveTeam(session.memberId);
+  if (!team) redirect("/teams/new");
+  const isAdmin = session.role === "관리자";
 
   let body: React.ReactNode;
   try {
     const [monthData, fines, members] = await Promise.all([
-      getMonth(year, month),
-      getFines(year),
+      getMonth(year, month, team.id),
+      getFines(year, team.id),
       getScheduleMembers(),
     ]);
 

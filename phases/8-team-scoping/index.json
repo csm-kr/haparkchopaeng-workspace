@@ -1,0 +1,56 @@
+{
+  "project": "하박조팽",
+  "phase": "8-team-scoping",
+  "steps": [
+    {
+      "step": 0,
+      "name": "docs-adr-020",
+      "status": "completed",
+      "started_at": "2026-06-15T12:38:18+0900",
+      "summary": "ADR-020(엔티티 팀 스코핑·ADR-019 전역→팀당 개정)·R37 추가, DB.md 6개 모델에 teamId+제약 변경, API.md 활성 팀 암묵 스코핑+POST /api/teams/active, STATE.md activeTeam 행 — 문서 전용, build·grep AC 통과",
+      "completed_at": "2026-06-15T12:43:54+0900"
+    },
+    {
+      "step": 1,
+      "name": "team-scoped-schema",
+      "status": "completed",
+      "started_at": "2026-06-15T12:43:54+0900",
+      "summary": "6개 모델(Paper·Presentation·ScheduleMonth·FineConfig·MemberLedger·LiveSession)에 teamId String @default(\"\") + @@index([teamId]) 추가, 복합 제약 팀 포함으로 변경(ScheduleMonth @@unique([teamId,year,month])·FineConfig @@id([teamId,year])·MemberLedger relation+unique). lib/backfill-teams.ts(부트스트랩 팀=최초 createdAt, \"\"행만 채움, 멱등, 0팀 no-op) + prisma/__tests__/backfill-teams.test.ts(4 케이스, 목). default \"\"는 step의 'default 후 백필' sentinel — 기존 create 사이트 무수정 컴파일. 제약 rename으로 깨진 스케줄 4함수는 findUnique/update→findFirst/updateMany로 동작 보존 컴파일-shim(실제 teamId 스코핑은 step 3/4). generate·build·test(318)·lint green. 운영 prisma db push·백필 실행은 step 5 수동 절차(ADR-020) — prod 미적용.",
+      "completed_at": "2026-06-15T12:58:40+0900"
+    },
+    {
+      "step": 2,
+      "name": "active-team-context",
+      "status": "completed",
+      "started_at": "2026-06-15T12:58:41+0900",
+      "summary": "lib/active-team.ts(서버 전용): getActiveTeamSlug(쿠키 active_team이 내 멤버십이면 그걸·아니면 resolveEntryTeam 폴백·0팀 null)·getActiveTeam({id,slug,role} 해소)·setActiveTeam(멤버십 검증 후에만 HttpOnly·SameSite=Lax 쿠키, 미멤버십 403). 쿠키는 isMyTeamSlug(team 존재+isTeamMember) 검증 후에만 신뢰(R3/R19). POST /api/teams/active route(zod {slug}·requireAuth·setActiveTeam·revalidatePath('/','layout'); 미멤버십 403·slug 없으면 400). layout이 teams[0] 대신 getActiveTeamSlug 사용. TeamSwitcher를 client로 전환(다른 팀 버튼→fetch POST→router.refresh). API.md teamId→slug 정정(쿠키는 slug 키). shell.test에 useRouter 목 추가. build·test(333)·lint green. 도메인 쿼리 스코핑은 step 3/4.",
+      "completed_at": "2026-06-15T13:09:03+0900"
+    },
+    {
+      "step": 3,
+      "name": "scoped-reads",
+      "status": "completed",
+      "started_at": "2026-06-15T13:09:04+0900",
+      "summary": "도메인 읽기 7개 함수에 teamId 필터 추가(R37/ADR-020): getPapers·getPresentations·getDashboardData(where:{teamId}), getMonth·getFines(where:{teamId,...}), 단건 getPaperDetail·getPresentationDetail은 findUnique→findFirst({id,teamId})로 교차 팀이면 null(404 등가, R19). GET 라우트 2개도 활성 팀 스코핑: /api/papers/[id]/pdf(findFirst{id,teamId}), /api/figures/[id]/image(findFirst{id,paper:{teamId}}) — 다른 팀 id면 404. RSC 페이지 6개(dashboard·library·presentations·papers/[id]·presentations/[id]·schedule)가 getActiveTeam 해소 후 team.id 전달(팀 없으면 /teams/new 리다이렉트). updateFines는 getFines read-back용 활성 팀 해소(쓰기 updateMany 스코핑은 step 4). 멤버는 전역(스코핑 대상 아님), resolveStartIdx·live·DELETE·reanalyze는 step 4. TDD: 신규 테스트 5파일(papers·presentations·dashboard·schedule-reads·papers-pdf)+figures-image 갱신, 교차 팀 격리·빈 팀·단건 404 검증. test 352·build·lint·tsc green. 운영 DB 미접촉(전부 목).",
+      "completed_at": "2026-06-15T13:24:33+0900"
+    },
+    {
+      "step": 4,
+      "name": "scoped-writes-live",
+      "status": "completed",
+      "started_at": "2026-06-15T13:24:34+0900",
+      "summary": "도메인 쓰기를 활성 팀으로 스코핑(R3/R37)·라이브 팀당 1개(ADR-020). 생성 라우트(POST papers·presentations·live/start)는 getActiveTeam으로 teamId 주입(클라 teamId 무시) + 활성 팀 없으면 403. 변이/삭제(DELETE papers·presentations·reanalyze)는 findUnique→findFirst({id,teamId})로 교차 팀 404(존재 비노출, R19). Server Action: notes(addNote/deleteNote)·comments(addComment)·reactions(toggleReaction)는 부모 Paper/Presentation/Comment의 teamId로 검사(교차 팀 404). schedule saveMonth는 (teamId,year,month) findFirst+create teamId 주입(낙관적 락 R35는 팀 스코프 안)·draftMonthAction·resolveStartIdx(teamId 인자 추가)로 순번 연속도 팀별·updateFines updateMany where teamId. 라이브: getActiveSession()→getActiveSession(teamId)(where active+teamId), start 충돌검사·create 팀 스코프(팀당 1개·팀B 독립 시작), join/leave/end는 세션 teamId가 내 활성 팀일 때만(교차 팀 404, 권한체크 전). /end만 전역 종료·/leave 본인(R6)·화면공유 발표자만(R7) 불변 유지. layout·meeting RSC가 getActiveTeam 해소 후 getActiveSession(team.id). TeamSwitcher는 step2 revalidatePath('/','layout')로 이미 전환 마무리(무변경). TDD: 신규 6 + 갱신 4 테스트(라이브 교차팀·생성 teamId 주입·삭제/재분석/노트/댓글/반응/스케줄/벌금 교차팀). build·test(383)·lint green. 운영 DB 미접촉(전부 목) — db push·백필은 step 5 수동.",
+      "completed_at": "2026-06-15T13:44:43+0900"
+    },
+    {
+      "step": 5,
+      "name": "team-scoping-e2e",
+      "status": "completed",
+      "started_at": "2026-06-15T13:44:44+0900",
+      "summary": "team-scoping E2E(tests/e2e/team-scoping.spec.ts: 활성팀 셸 노출·팀전환 재렌더(단일팀 graceful skip)·교차/부재 논문 단건 404등가+PDF 라우트 404·활성팀 라이브 빈상태) + DEPLOY.md '팀 스코핑 마이그레이션(ADR-020)' 절차 작성. 운영 DB 마이그레이션 수동 실행 완료(사람 인가 후): prisma db push(teamId 6모델+제약 — 빈 테이블이라 무손실) + backfillTeamScoping(기존 Paper·Presentation·LiveSession→하박조팽, 잔여 ''=0 검증, 전체 JSON 백업 .migration-backup/). 재검증: build·383 unit·lint green, playwright 21 passed/3 skip/1 flaky(팀전환 revalidate 타이밍, 재시도 통과). 운영 배포(push)는 미실시 — 배포 직후 backfill 1회 재실행 권장(구코드 teamId='' orphan 방지).",
+      "completed_at": "2026-06-15T14:28:00+0900"
+    }
+  ],
+  "created_at": "2026-06-15T12:38:18+0900",
+  "completed_at": "2026-06-15T14:28:00+0900"
+}

@@ -14,6 +14,7 @@
 | 상태 | 타입 | 좌우하는 표면 |
 |---|---|---|
 | `live` | boolean | **사이드바 LIVE 배지 · 홈 배너 · meeting 룸 vs 빈 상태** (ADR-001) |
+| `activeTeam` | slug (쿠키 영속) | **대시보드·라이브러리·발표자료·스케줄·벌금·라이브 스코프를 좌우** — 활성 팀 전환 시 모든 도메인 표면 갱신 (ADR-020, R37). 검증된 멤버십만, 기본값 = 가장 최근 합류 팀(`resolveEntryTeam`) |
 | `screen` + `screenProps` | string + obj | 현재 화면/파라미터(라우터) |
 | `theme` | light/dark | `[data-theme]` 토큰 오버라이드 |
 | `collapsed` | boolean | 사이드바 접힘 |

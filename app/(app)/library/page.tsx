@@ -1,23 +1,28 @@
+import { redirect } from "next/navigation";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { PaperList } from "@/components/library";
 import { UploadButton } from "@/components/upload";
 import { getPapers } from "@/lib/papers";
 import { getSession } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { quotaStatus } from "@/lib/rate-limit";
 
 // 논문 목록 — RSC. 읽기는 서버에서 Prisma 직접 조회(ADR-015/R32).
 // 로딩 상태는 같은 폴더의 loading.tsx(스켈레톤)가 담당한다(R26).
 // 빈 상태는 PaperList가 내부에서 처리한다(R26).
+// CRITICAL: 활성 팀으로 스코핑(R37/ADR-020). 팀 없음은 layout이 처리 — 방어적으로 리다이렉트.
 
 export default async function LibraryPage() {
   const session = await getSession();
-  const quota = session
-    ? await quotaStatus(session.memberId).catch(() => undefined)
-    : undefined;
+  if (!session) redirect("/");
+  const team = await getActiveTeam(session.memberId);
+  if (!team) redirect("/teams/new");
+
+  const quota = await quotaStatus(session.memberId).catch(() => undefined);
   let content: React.ReactNode;
   try {
-    const papers = await getPapers();
+    const papers = await getPapers(team.id);
     content = <PaperList papers={papers} />;
   } catch {
     // 조회 실패: 화면을 통째로 날리지 않고 인라인 에러 카드 + 다시 시도(R26/R30).

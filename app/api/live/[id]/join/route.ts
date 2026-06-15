@@ -1,10 +1,12 @@
 import { requireAuth } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { isLiveConfigured, issueAccessToken, livekitUrl } from "@/lib/livekit";
 import type { LiveJoinResponse } from "@/types";
 
 // POST /api/live/:id/join — 시청자 참가 등록 + LiveKit 토큰. 🔒
+// CRITICAL: 세션이 내 활성 팀(=멤버십) 것일 때만 — 교차 팀 라이브는 차단(R19/ADR-020).
 // CRITICAL: 참가자 토큰엔 화면공유 grant 없음 — 화면공유는 발표자만(R7).
 // CRITICAL: 토큰 identity는 세션에서 취한다(R3). 재참가 허용(leftAt=null, 감사용).
 export async function POST(
@@ -23,11 +25,14 @@ export async function POST(
       );
     }
 
+    const team = await getActiveTeam(session.memberId);
+
     const live = await prisma.liveSession.findUnique({
       where: { id },
-      select: { id: true, active: true },
+      select: { id: true, active: true, teamId: true },
     });
-    if (!live || !live.active) {
+    // 비active·없음·교차 팀이면 404(다른 팀 세션 존재를 드러내지 않는다, R19).
+    if (!live || !live.active || !team || live.teamId !== team.id) {
       return fail(404, "NOT_FOUND", "진행 중인 라이브가 없어요.");
     }
 

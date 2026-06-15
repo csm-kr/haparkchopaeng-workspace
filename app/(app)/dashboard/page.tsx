@@ -1,16 +1,25 @@
+import { redirect } from "next/navigation";
 import { Topbar, LiveBanner } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { QuickCards, RecentActivity } from "@/components/dashboard";
 import { getDashboardData } from "@/lib/dashboard";
+import { getSession } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 
 // 홈(대시보드) — RSC. 읽기는 서버에서 Prisma 직접 조회(ADR-015/R32).
 // LIVE 배너는 인터랙티브 섬(useLive)이고, 데이터 카드/목록은 RSC다.
 // 로딩 상태는 같은 폴더의 loading.tsx(스켈레톤)가 담당한다(R26).
+// CRITICAL: 활성 팀으로 스코핑(R37/ADR-020). 팀 없음은 layout이 처리 — 방어적으로 리다이렉트.
 
 export default async function DashboardPage() {
+  const session = await getSession();
+  if (!session) redirect("/");
+  const team = await getActiveTeam(session.memberId);
+  if (!team) redirect("/teams/new");
+
   let content: React.ReactNode;
   try {
-    const data = await getDashboardData();
+    const data = await getDashboardData(team.id);
     content = (
       <div className="flex flex-col gap-6 p-6">
         <QuickCards
