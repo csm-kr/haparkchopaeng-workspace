@@ -1,13 +1,40 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AnalysisView, type NoteView } from "../analysis-view";
+import { PaperNotifyProvider } from "@/components/providers/paper-notify-provider";
 import type { ReproPayload, ResearchPayload } from "@/types";
 
-// next/navigation을 고정 — 재분석 후 router.refresh 호출만 확인한다.
+// next/navigation을 고정 — 재분석/자동갱신 시 router.refresh 호출을 확인한다.
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
+
+// 논문 알림 채널 모킹 — 분석 완료 push 시 열린 상세가 자동 갱신되는지 검증한다.
+type PMsg = { payload?: { paperId: string; title: string } };
+const paperHandlers: Record<string, (m: PMsg) => void> = {};
+const { createBrowserSupabaseMock } = vi.hoisted(() => ({
+  createBrowserSupabaseMock: vi.fn(),
+}));
+vi.mock("@/lib/supabase/browser", () => ({
+  createBrowserSupabase: createBrowserSupabaseMock,
+}));
+function fakePaperSupabase() {
+  const channel = {
+    on(_t: string, opts: { event: string }, cb: (m: PMsg) => void) {
+      paperHandlers[opts.event] = cb;
+      return channel;
+    },
+    subscribe() {
+      return channel;
+    },
+  };
+  return { channel: () => channel, removeChannel: vi.fn() };
+}
+
+beforeEach(() => {
+  for (const k of Object.keys(paperHandlers)) delete paperHandlers[k];
+});
 
 // AnalysisView — 두 관점 토글·figure 공통 렌더·섹션 노트(검증/작성자/lens=any).
 // 읽기 데이터는 props로, 노트 쓰기는 주입한 mock 액션으로 검증한다(ADR-015).
@@ -208,10 +235,64 @@ describe("AnalysisView 섹션 노트", () => {
 });
 
 describe("AnalysisView 분석 상태", () => {
-  it("pending이면 섹션 대신 '읽고 있어요' 상태를 보인다", () => {
+  it("pending이면 섹션 대신 '분석 중입니다' 상태를 보인다", () => {
     renderView({ analysisStatus: "pending", research: null, repro: null });
-    expect(screen.getByText("논문을 읽고 있어요…")).toBeInTheDocument();
+    expect(screen.getByText("분석 중입니다…")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Contribution" })).toBeNull();
+  });
+
+  it("pending 중 내 논문 분석 완료를 받으면 자동 새로고침한다(비동기 갱신)", () => {
+    createBrowserSupabaseMock.mockReturnValue(fakePaperSupabase());
+    refresh.mockClear();
+    render(
+      <PaperNotifyProvider teamId="t1">
+        <AnalysisView
+          paperId="p1"
+          analysisStatus="pending"
+          research={null}
+          repro={null}
+          figures={[]}
+          notes={[]}
+          currentUser={currentUser}
+          addNote={vi.fn()}
+          deleteNote={vi.fn()}
+        />
+      </PaperNotifyProvider>,
+    );
+
+    act(() =>
+      paperHandlers["paper.analyzed"]({
+        payload: { paperId: "p1", title: "T" },
+      }),
+    );
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("다른 논문 완료 이벤트엔 새로고침하지 않는다", () => {
+    createBrowserSupabaseMock.mockReturnValue(fakePaperSupabase());
+    refresh.mockClear();
+    render(
+      <PaperNotifyProvider teamId="t1">
+        <AnalysisView
+          paperId="p1"
+          analysisStatus="pending"
+          research={null}
+          repro={null}
+          figures={[]}
+          notes={[]}
+          currentUser={currentUser}
+          addNote={vi.fn()}
+          deleteNote={vi.fn()}
+        />
+      </PaperNotifyProvider>,
+    );
+
+    act(() =>
+      paperHandlers["paper.analyzed"]({
+        payload: { paperId: "other", title: "T" },
+      }),
+    );
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("failed면 다시 분석 안내를 보인다", () => {

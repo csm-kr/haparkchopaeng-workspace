@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ImageOff, Plus, X } from "lucide-react";
-import { Avatar, Badge, Button, Card, Input, Skeleton } from "@/components/ui";
+import { AlertTriangle, ImageOff, Loader2, Plus, X } from "lucide-react";
+import { Avatar, Badge, Button, Card, Input } from "@/components/ui";
+import { usePaperNotify } from "@/components/providers/paper-notify-provider";
 import { cn } from "@/lib/utils";
 import type { AnalysisStatus, Lens, NoteLens, ReproPayload, ResearchPayload } from "@/types";
 import { researchSections, reproSections, type SectionDef } from "./sections";
@@ -401,6 +402,16 @@ function AnalysisStatusBlock({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // 분석 완료 push를 받으면 자동 새로고침(RSC 재실행 → 결과로 전환, 수동 새로고침 불필요).
+  const { onAnalyzed } = usePaperNotify();
+  React.useEffect(
+    () =>
+      onAnalyzed((e) => {
+        if (e.paperId === paperId) router.refresh();
+      }),
+    [onAnalyzed, paperId, router],
+  );
+
   async function reanalyze() {
     setBusy(true);
     setError(null);
@@ -420,11 +431,19 @@ function AnalysisStatusBlock({
 
   if (status === "pending") {
     return (
-      <Card className="flex flex-col gap-3 p-6">
-        <p className="text-[14px] font-medium text-fg">논문을 읽고 있어요…</p>
-        <Skeleton className="h-4 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
+      <Card
+        role="status"
+        className="flex flex-col items-center gap-3 px-6 py-10 text-center"
+      >
+        <Loader2
+          size={22}
+          aria-hidden="true"
+          className="animate-spin text-accent motion-reduce:animate-none"
+        />
+        <p className="text-[14px] font-medium text-fg">분석 중입니다…</p>
+        <p className="max-w-sm text-[13px] text-fg-muted">
+          끝나면 자동으로 결과가 나타나요. 기다리지 않고 다른 일을 봐도 돼요.
+        </p>
       </Card>
     );
   }

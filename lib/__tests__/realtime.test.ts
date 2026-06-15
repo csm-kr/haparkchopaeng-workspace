@@ -10,7 +10,8 @@ vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdmin: createSupabaseAdminMock,
 }));
 
-const { broadcastLive, LIVE_CHANNEL } = await import("@/lib/realtime");
+const { broadcastLive, broadcastPaperAnalyzed, papersChannel, LIVE_CHANNEL } =
+  await import("@/lib/realtime");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,5 +57,43 @@ describe("broadcastLive", () => {
     });
 
     await expect(broadcastLive("live.started")).resolves.toBeUndefined();
+  });
+});
+
+describe("papersChannel", () => {
+  it("팀별 채널 이름을 만든다", () => {
+    expect(papersChannel("t1")).toBe("papers:t1");
+  });
+});
+
+describe("broadcastPaperAnalyzed", () => {
+  it("정상: 팀 채널에 paper.analyzed{paperId,title}을 보낸다", async () => {
+    const sendMock = vi.fn().mockResolvedValue("ok");
+    const channelMock = vi.fn().mockReturnValue({ send: sendMock });
+    createSupabaseAdminMock.mockReturnValue({
+      channel: channelMock,
+      removeChannel: vi.fn(),
+    });
+
+    await expect(
+      broadcastPaperAnalyzed({ paperId: "p1", teamId: "t1", title: "어떤 논문" }),
+    ).resolves.toBeUndefined();
+
+    expect(channelMock).toHaveBeenCalledWith("papers:t1");
+    expect(sendMock).toHaveBeenCalledWith({
+      type: "broadcast",
+      event: "paper.analyzed",
+      payload: { paperId: "p1", title: "어떤 논문" },
+    });
+  });
+
+  it("graceful: Supabase 미설정 시 throw하지 않는다", async () => {
+    createSupabaseAdminMock.mockImplementation(() => {
+      throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
+    });
+
+    await expect(
+      broadcastPaperAnalyzed({ paperId: "p1", teamId: "t1", title: "x" }),
+    ).resolves.toBeUndefined();
   });
 });
