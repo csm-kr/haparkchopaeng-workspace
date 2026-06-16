@@ -116,6 +116,7 @@ export async function POST(req: Request): Promise<Response> {
           teamId: team.id, // R3/R37: 활성 팀에서 주입
           uploadedBy: session.memberId,
           analysisStatus: "pending",
+          analysisStartedAt: new Date(), // 진행률 바 경과 기준
           tags: [],
         },
       });
@@ -162,6 +163,7 @@ export async function POST(req: Request): Promise<Response> {
         teamId: team.id, // R3/R37: 활성 팀에서 주입
         uploadedBy: session.memberId,
         analysisStatus: "pending",
+        analysisStartedAt: new Date(), // 진행률 바 경과 기준
         tags: [],
       },
     });

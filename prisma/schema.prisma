@@ -104,6 +104,9 @@ model Paper {
   uploadedAt     DateTime      @default(now())
   tags           Json // string[]
   analysisStatus String        @default("pending") // pending | ready | failed (업로드≠분석, UX 분리)
+  // 분석 진행률 바용 — pending 진입 시각과 완료 소요(ms)를 쌓아 팀 평균으로 "예상 시간"을 낸다(R26).
+  analysisStartedAt  DateTime? // pending 진입 시각(업로드·재분석). 경과 계산 기준.
+  analysisDurationMs Int? // ready 전이 시 (완료−시작) ms — 팀 평균의 표본.
   analyses       Analysis[]
   figures        Figure[]
   notes          SectionNote[]

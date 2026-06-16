@@ -55,6 +55,9 @@ export interface AddNoteInput {
 export interface AnalysisViewProps {
   paperId: string;
   analysisStatus: AnalysisStatus;
+  /** 진행률 바용 — pending 시작 시각(ISO)과 팀 평균 예상(ms). 없으면 스피너 폴백. */
+  analysisStartedAt?: string | null;
+  expectedMs?: number;
   research: ResearchPayload | null;
   repro: ReproPayload | null;
   figures: FigureView[];
@@ -72,6 +75,8 @@ const LENS_HINT: Record<Lens, string> = {
 export function AnalysisView({
   paperId,
   analysisStatus,
+  analysisStartedAt,
+  expectedMs,
   research,
   repro,
   figures,
@@ -93,7 +98,14 @@ export function AnalysisView({
   // 분석이 아직 준비되지 않았으면 섹션 대신 상태 블록을 보인다(SCREENS §화면별 상태).
   // 원문 PDF 다운로드는 분석 상태와 무관하게 헤더(page)에서 동작한다(R28).
   if (analysisStatus !== "ready") {
-    return <AnalysisStatusBlock status={analysisStatus} paperId={paperId} />;
+    return (
+      <AnalysisStatusBlock
+        status={analysisStatus}
+        paperId={paperId}
+        analysisStartedAt={analysisStartedAt}
+        expectedMs={expectedMs}
+      />
+    );
   }
 
   function startAdd(sectionId: string) {
@@ -394,9 +406,13 @@ export function AnalysisView({
 function AnalysisStatusBlock({
   status,
   paperId,
+  analysisStartedAt,
+  expectedMs,
 }: {
   status: AnalysisStatus;
   paperId: string;
+  analysisStartedAt?: string | null;
+  expectedMs?: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
@@ -430,6 +446,15 @@ function AnalysisStatusBlock({
   }
 
   if (status === "pending") {
+    // 시작 시각·예상 시간이 있으면 진행률 바, 없으면(옛 논문 등) 무한 스피너로 폴백.
+    if (analysisStartedAt && expectedMs) {
+      return (
+        <AnalysisProgressBar
+          startedAt={analysisStartedAt}
+          expectedMs={expectedMs}
+        />
+      );
+    }
     return (
       <Card
         role="status"
@@ -468,6 +493,69 @@ function AnalysisStatusBlock({
           {error}
         </p>
       )}
+    </Card>
+  );
+}
+
+const PROGRESS_CAP = 92;
+
+/**
+ * 진행률(%) = 경과/예상. 예상을 넘겨도 상한(92%)에서 멈춘다 — 100%는 실제 완료(자동 갱신)가 처리한다.
+ * 시작 시각이 깨졌거나 예상이 0 이하면 0.
+ */
+export function progressPct(
+  startedAt: string,
+  expectedMs: number,
+  now: number = Date.now(),
+): number {
+  const start = Date.parse(startedAt);
+  if (Number.isNaN(start) || expectedMs <= 0) return 0;
+  const pct = Math.round(((now - start) / expectedMs) * 100);
+  return Math.max(0, Math.min(PROGRESS_CAP, pct));
+}
+
+/**
+ * 분석 진행률 바 — 팀 평균 예상 대비 경과로 채운다(1초 틱). 완료되면 상위(RSC)가 자동 갱신해
+ * 결과로 바뀌므로 여기서 100%를 그리지 않는다. 색은 토큰만(R20), 모션은 reduced-motion 존중(R29).
+ */
+function AnalysisProgressBar({
+  startedAt,
+  expectedMs,
+}: {
+  startedAt: string;
+  expectedMs: number;
+}) {
+  const [pct, setPct] = React.useState(() => progressPct(startedAt, expectedMs));
+  React.useEffect(() => {
+    const t = setInterval(
+      () => setPct(progressPct(startedAt, expectedMs)),
+      1000,
+    );
+    return () => clearInterval(t);
+  }, [startedAt, expectedMs]);
+
+  return (
+    <Card role="status" className="flex flex-col gap-3 px-6 py-8">
+      <div className="flex items-center justify-between">
+        <p className="text-[14px] font-medium text-fg">분석 중입니다…</p>
+        <span className="text-[12px] text-fg-subtle tabular-nums">{pct}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-bg-subtle">
+        <div
+          role="progressbar"
+          aria-label="분석 진행률"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out motion-reduce:transition-none"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[12px] text-fg-subtle">
+        {pct >= PROGRESS_CAP
+          ? "거의 다 됐어요 — 끝나면 자동으로 나타나요."
+          : "끝나면 자동으로 결과가 나타나요. 다른 일을 봐도 돼요."}
+      </p>
     </Card>
   );
 }

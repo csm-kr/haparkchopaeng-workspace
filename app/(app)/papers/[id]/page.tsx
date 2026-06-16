@@ -6,7 +6,7 @@ import { Card } from "@/components/ui";
 import { AnalysisView, DeletePaperButton } from "@/components/analyzer";
 import { getSession } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
-import { getPaperDetail } from "@/lib/papers";
+import { getExpectedAnalysisMs, getPaperDetail } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addNote, deleteNote } from "./actions";
 
@@ -88,6 +88,12 @@ export default async function PaperDetailPage({ params }: PageProps) {
 
   const { paper } = detail;
 
+  // 진행률 바의 예상 시간은 pending일 때만 필요 — 그때만 팀 평균을 조회한다(R37 팀 스코프).
+  const expectedMs =
+    paper.analysisStatus === "pending"
+      ? await getExpectedAnalysisMs(team.id)
+      : undefined;
+
   // 작성자 표기에 쓸 현재 사용자(노트 낙관적 추가 시 표시). 인증은 위에서 보장(session).
   const me = session
     ? await prisma.member.findUnique({
@@ -146,6 +152,8 @@ export default async function PaperDetailPage({ params }: PageProps) {
           <AnalysisView
             paperId={paper.id}
             analysisStatus={paper.analysisStatus}
+            analysisStartedAt={paper.analysisStartedAt}
+            expectedMs={expectedMs}
             research={detail.research}
             repro={detail.repro}
             figures={detail.figures}

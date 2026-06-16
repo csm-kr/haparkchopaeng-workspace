@@ -322,6 +322,14 @@ export const realDeps: AnalyzePaperDeps = {
   renderFigures,
 };
 
+/** 분석 시작 시각부터 now까지의 소요(ms). 시작이 없으면 null, 음수는 0(시계 역행 방어). */
+export function durationMsFrom(
+  startedAt: Date | null,
+  now: number = Date.now(),
+): number | null {
+  return startedAt ? Math.max(0, now - startedAt.getTime()) : null;
+}
+
 /** 분석 결과를 한 트랜잭션으로 영속화하고 analysisStatus=ready로 전이한다(멱등 upsert). */
 async function persistAnalysis(
   paperId: string,
@@ -331,6 +339,12 @@ async function persistAnalysis(
 ): Promise<void> {
   const researchJson = research as unknown as Prisma.InputJsonValue;
   const reproJson = repro as unknown as Prisma.InputJsonValue;
+  // 진행률 바 학습: pending 진입 시각부터의 소요를 ready 시 기록한다(R26). 시작 없으면 null.
+  const started = await prisma.paper.findUnique({
+    where: { id: paperId },
+    select: { analysisStartedAt: true },
+  });
+  const analysisDurationMs = durationMsFrom(started?.analysisStartedAt ?? null);
   await prisma.$transaction([
     prisma.analysis.upsert({
       where: { paperId_lens: { paperId, lens: "research" } },
@@ -355,7 +369,7 @@ async function persistAnalysis(
     }),
     prisma.paper.update({
       where: { id: paperId },
-      data: { analysisStatus: "ready" },
+      data: { analysisStatus: "ready", analysisDurationMs },
     }),
   ]);
 }
