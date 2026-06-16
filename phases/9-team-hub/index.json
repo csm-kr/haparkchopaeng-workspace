@@ -1,0 +1,10 @@
+{
+  "project": "하박조팽",
+  "phase": "9-team-hub",
+  "steps": [
+    { "step": 0, "name": "docs-team-hub", "status": "pending" },
+    { "step": 1, "name": "hub-screen", "status": "pending" },
+    { "step": 2, "name": "entry-cutover", "status": "pending" },
+    { "step": 3, "name": "team-hub-e2e", "status": "pending" }
+  ]
+}

@@ -41,6 +41,10 @@
       "dir": "8-team-scoping",
       "status": "completed",
       "completed_at": "2026-06-15T14:28:00+0900"
+    },
+    {
+      "dir": "9-team-hub",
+      "status": "pending"
     }
   ]
 }
