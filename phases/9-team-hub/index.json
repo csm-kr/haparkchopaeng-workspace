@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "hub-screen",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-16T12:34:38+0900",
+      "summary": "lib/teams.canCreateTeam()(전역 team.count<maxTeams) 추가 + app/teams/ 독립 로비((app) 셸 밖) 신규: page.tsx(RSC)·team-picker(POST /api/teams/active 재사용→/dashboard)·create-team-form(canCreate 상한 가시화·인라인 R30)·actions. 순수 additive — 허브는 /teams에서 도달만 가능, 진입 배선·/teams/new 삭제는 step 2.",
+      "completed_at": "2026-06-16T12:41:07+0900"
     },
     {
       "step": 2,
