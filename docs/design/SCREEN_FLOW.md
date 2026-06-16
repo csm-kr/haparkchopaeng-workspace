@@ -5,7 +5,8 @@
 ## 내비게이션 맵
 
 ```
-auth ──(로그인)──> [onboarding] ──> app 셸
+auth ──(로그인)──> teams (팀 허브) ──(팀 선택)──> app 셸
+       └─(초대 next 우선)──────────────────────┘ (허브 건너뜀)
                                       │
    ┌──────────────┬─────────────┬─────┴───────┬──────────┬──────────┐
  dashboard      library      presentations   schedule    team     meeting   profile
@@ -16,8 +17,28 @@ UploadModal     paper       presentation    (입장)→meeting │          │ 
    └──(분석완료)──> paper                                   └─ 자료 ──> presentation
 ```
 
+- 로그인 후 **항상 팀 허브 `/teams`에 착지**한다(팀이 1개여도) — 거기서 팀을 골라야 셸(`/dashboard`)로 들어간다(ADR-021). 단 **초대 복귀(`next`)는 우선**해 허브를 건너뛴다.
+- 팀 허브는 `(app)` 셸 **밖**의 독립 로비다 — 사이드바·`TeamSwitcher`가 없다. 활성 팀이 정해진 뒤에만 셸이 의미를 갖는다.
+- 활성 팀 쿠키는 유지되므로 `/dashboard` 같은 **직접 방문(북마크)은 그대로 동작**한다. 허브는 "로그인 직후 착지"에만 강제된다(매 네비게이션 벽이 아님).
 - 모든 전환은 `onNavigate(screen, params)`. params 예: `{paperId}`, `{presId}`.
 - 명령 팔레트 `Cmd/Ctrl+K`로 어디서나 검색/이동.
+
+## 진입 흐름 (팀 허브)
+
+```
+auth ─[로그인]→ ◇ 초대 복귀(next) 있음? ─예→ next(초대 합류 등)로 직행
+                       └─아니오→ teams (팀 허브)
+teams (팀 허브)
+   ├─ 내 팀 목록(이름·역할) ─[팀 선택]→ POST /api/teams/active(쿠키 설정) → /dashboard
+   ├─ [새 팀 만들기] ◇ 전역 상한(MAX_TEAMS) 도달? ─예→ 버튼 비활성 + 안내(R30)
+   │                                         └─아니오→ 팀 생성 → 활성 팀 → /dashboard
+   └─ 받은 초대 링크로 합류 안내
+   ◇ 팀 0개 → 만들기/초대 안내만(기존 /teams/new 역할 흡수)
+```
+
+- ※ 로그인 → 팀 허브 `/teams`(0팀이면 만들기/초대) → 팀 선택 → `/dashboard`. **`/teams/new`는 허브로 흡수**(폐지) — "팀 없음" 진입 가드 목적지도 `/teams/new` → `/teams`(ADR-021).
+- ※ 팀 선택은 활성 팀 쿠키 설정(`POST /api/teams/active`, 검증된 멤버십만 — R37)을 **그대로 재사용**한다.
+- ※ 생성 상한은 **전역**(서버 전체)·**admin이 env로만 설정**(per-user 아님) — 허브는 도달 시 만들기를 비활성+안내로 가시화할 뿐, 사용자가 상한을 바꿀 UI는 없다.
 
 ## 앱 레벨 상태가 좌우하는 표면
 

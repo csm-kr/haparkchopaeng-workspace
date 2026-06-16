@@ -2,9 +2,28 @@
   "project": "하박조팽",
   "phase": "9-team-hub",
   "steps": [
-    { "step": 0, "name": "docs-team-hub", "status": "pending" },
-    { "step": 1, "name": "hub-screen", "status": "pending" },
-    { "step": 2, "name": "entry-cutover", "status": "pending" },
-    { "step": 3, "name": "team-hub-e2e", "status": "pending" }
-  ]
+    {
+      "step": 0,
+      "name": "docs-team-hub",
+      "status": "completed",
+      "started_at": "2026-06-16T12:29:33+0900",
+      "summary": "ADR-021(진입 팀 허브, ADR-018 정밀화) 추가 + SCREEN_FLOW/USER_FLOW 진입 흐름을 로그인→팀 허브 /teams→팀 선택→/dashboard로 갱신 + SCREENS에 teams 허브 화면 명세 추가. /teams/new 폐지·허브 흡수, 전역·admin/env·per-user 아님 상한 정책 명문화(문서 전용)."
+    },
+    {
+      "step": 1,
+      "name": "hub-screen",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "entry-cutover",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "team-hub-e2e",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-06-16T12:29:33+0900"
 }
