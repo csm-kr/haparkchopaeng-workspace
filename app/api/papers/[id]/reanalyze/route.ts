@@ -25,7 +25,7 @@ export async function POST(
 
     await prisma.paper.update({
       where: { id },
-      data: { analysisStatus: "pending" },
+      data: { analysisStatus: "pending", analysisStartedAt: new Date() },
     });
 
     // 이벤트 전송 실패가 응답을 막지 않게 삼킨다(업로드≠분석, R28). 다시 호출로 재시도 가능.

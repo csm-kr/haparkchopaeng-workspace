@@ -241,6 +241,25 @@ describe("AnalysisView 분석 상태", () => {
     expect(screen.queryByRole("heading", { name: "Contribution" })).toBeNull();
   });
 
+  it("pending + 시작시각·예상시간이 있으면 진행률 바를 보인다(상한 92%)", () => {
+    renderView({
+      analysisStatus: "pending",
+      research: null,
+      repro: null,
+      analysisStartedAt: new Date(Date.now() - 10_000_000).toISOString(),
+      expectedMs: 60_000,
+    });
+    const bar = screen.getByRole("progressbar");
+    // 예상 시간을 한참 넘겼어도 100%로 안 차고 상한(92%)에서 멈춘다.
+    expect(bar).toHaveAttribute("aria-valuenow", "92");
+  });
+
+  it("시작시각·예상시간이 없으면 진행률 바 대신 스피너로 폴백한다", () => {
+    renderView({ analysisStatus: "pending", research: null, repro: null });
+    expect(screen.getByText("분석 중입니다…")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
   it("pending 중 내 논문 분석 완료를 받으면 자동 새로고침한다(비동기 갱신)", () => {
     createBrowserSupabaseMock.mockReturnValue(fakePaperSupabase());
     refresh.mockClear();

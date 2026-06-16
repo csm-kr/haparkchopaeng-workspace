@@ -18,6 +18,8 @@ interface PaperRow {
   pageCount: number | null;
   abstract: string | null;
   pdfUrl: string;
+  analysisStartedAt: Date | null;
+  analysisDurationMs: number | null;
   analyses: Array<{ lens: string; payload: unknown }>;
   figures: unknown[];
   notes: unknown[];
@@ -57,6 +59,21 @@ vi.mock("@/lib/prisma", () => ({
         async ({ where }: { where: { id: string } }) =>
           db.papers.find((p) => p.id === where.id) ?? null,
       ),
+      // 예상 시간(getExpectedAnalysisMs) — 팀 + 완료(duration not null) 평균/개수.
+      aggregate: vi.fn(
+        async ({ where }: { where?: { teamId?: string } } = {}) => {
+          const rows = db.papers.filter(
+            (p) =>
+              matchTeam(p.teamId, where?.teamId) &&
+              typeof p.analysisDurationMs === "number",
+          );
+          const sum = rows.reduce((s, p) => s + (p.analysisDurationMs ?? 0), 0);
+          return {
+            _avg: { analysisDurationMs: rows.length ? sum / rows.length : null },
+            _count: { analysisDurationMs: rows.length },
+          };
+        },
+      ),
     },
     member: {
       findMany: vi.fn(async () => db.members),
@@ -64,9 +81,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { getPapers, getPaperDetail } from "@/lib/papers";
+import { getPapers, getPaperDetail, getExpectedAnalysisMs } from "@/lib/papers";
 
-function paper(id: string, teamId: string): PaperRow {
+function paper(
+  id: string,
+  teamId: string,
+  analysisDurationMs: number | null = null,
+): PaperRow {
   return {
     id,
     teamId,
@@ -82,6 +103,8 @@ function paper(id: string, teamId: string): PaperRow {
     pageCount: 10,
     abstract: null,
     pdfUrl: `papers/${id}.pdf`,
+    analysisStartedAt: new Date("2026-06-01T00:01:00Z"),
+    analysisDurationMs,
     analyses: [],
     figures: [],
     notes: [],
@@ -110,10 +133,36 @@ describe("getPaperDetail(id, teamId) — 단건 교차 팀 차단", () => {
   it("활성 팀의 논문이면 상세를 돌려준다", async () => {
     const detail = await getPaperDetail("a1", "tA");
     expect(detail?.paper.id).toBe("a1");
+    // 진행률 바용 시작 시각이 ISO로 함께 내려온다.
+    expect(detail?.paper.analysisStartedAt).toBe(
+      new Date("2026-06-01T00:01:00Z").toISOString(),
+    );
   });
 
   it("다른 팀 논문 id면 null(존재 숨김 → 404)", async () => {
     const detail = await getPaperDetail("b1", "tA");
     expect(detail).toBeNull();
+  });
+});
+
+describe("getExpectedAnalysisMs(teamId) — 팀 평균 예상 시간", () => {
+  it("표본 3개 이상이면 팀 평균(ms 반올림)을 돌려준다", async () => {
+    db.papers = [
+      paper("a1", "tA", 60000),
+      paper("a2", "tA", 90000),
+      paper("a3", "tA", 30000),
+      paper("b1", "tB", 999999), // 다른 팀 — 평균에서 제외(R37)
+    ];
+    expect(await getExpectedAnalysisMs("tA")).toBe(60000); // (60+90+30)/3
+  });
+
+  it("표본이 3개 미만이면 기본값(90초)으로 폴백한다", async () => {
+    db.papers = [paper("a1", "tA", 60000), paper("a2", "tA", 120000)];
+    expect(await getExpectedAnalysisMs("tA")).toBe(90000);
+  });
+
+  it("완료 표본이 없으면 기본값", async () => {
+    db.papers = [paper("a1", "tA", null)];
+    expect(await getExpectedAnalysisMs("tA")).toBe(90000);
   });
 });

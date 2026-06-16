@@ -41,7 +41,12 @@ describe("POST /api/papers/:id/reanalyze", () => {
     const res = await POST(req(), ctx("p1"));
     expect(res.status).toBe(200);
     expect(prismaMock.paper.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { analysisStatus: "pending" } }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          analysisStatus: "pending",
+          analysisStartedAt: expect.any(Date),
+        }),
+      }),
     );
     expect(inngestSendMock).toHaveBeenCalled();
   });

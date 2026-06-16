@@ -102,6 +102,8 @@ describe("POST /api/papers — teamId 활성 팀 주입(R3/R37)", () => {
     const data = prismaMock.paper.create.mock.calls[0][0].data;
     expect(data.teamId).toBe("tA"); // 클라가 보낸 teamId 무시(R3)
     expect(data.uploadedBy).toBe("jo");
+    // 진행률 바용 시작 시각을 생성 시 기록한다.
+    expect(data.analysisStartedAt).toBeInstanceOf(Date);
   });
 
   it("파일 경로: teamId=활성 팀로 create", async () => {

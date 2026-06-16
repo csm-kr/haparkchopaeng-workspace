@@ -79,6 +79,8 @@ export interface PaperDetailMeta {
   pdfUrl: string;
   uploadedBy: string;
   analysisStatus: AnalysisStatus;
+  /** pending 진입 시각(ISO). 진행률 바의 경과 계산 기준. 없으면 null(옛 논문). */
+  analysisStartedAt: string | null;
 }
 
 export interface PaperDetailView {
@@ -131,6 +133,9 @@ export async function getPaperDetail(
       pdfUrl: paper.pdfUrl,
       uploadedBy: paper.uploadedBy,
       analysisStatus: toAnalysisStatus(paper.analysisStatus),
+      analysisStartedAt: paper.analysisStartedAt
+        ? paper.analysisStartedAt.toISOString()
+        : null,
     },
     research: research ? (research as unknown as ResearchPayload) : null,
     repro: repro ? (repro as unknown as ReproPayload) : null,
@@ -153,4 +158,20 @@ export async function getPaperDetail(
       author: byId.get(n.authorId) ?? null,
     })),
   };
+}
+
+// 진행률 바의 "예상 시간" — 팀의 완료 분석 평균(R37 팀 스코프). 표본이 적으면(콜드스타트) 기본값으로 폴백.
+const DEFAULT_EXPECTED_MS = 90_000;
+const MIN_SAMPLES = 3;
+
+/** 팀의 평균 분석 소요(ms). 완료 표본이 {@link MIN_SAMPLES} 미만이면 기본값(90초). */
+export async function getExpectedAnalysisMs(teamId: string): Promise<number> {
+  const agg = await prisma.paper.aggregate({
+    where: { teamId, analysisDurationMs: { not: null } },
+    _avg: { analysisDurationMs: true },
+    _count: { analysisDurationMs: true },
+  });
+  const count = agg._count.analysisDurationMs;
+  const avg = agg._avg.analysisDurationMs;
+  return count >= MIN_SAMPLES && avg ? Math.round(avg) : DEFAULT_EXPECTED_MS;
 }

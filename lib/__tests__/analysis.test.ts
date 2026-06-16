@@ -44,9 +44,8 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/figure-render", () => ({ renderFigures: vi.fn() }));
 
 // 모킹 후에 import — 모듈이 모킹된 의존성을 받도록.
-const { analyzePaper, extractAnalysis, extractFigures } = await import(
-  "@/lib/analysis"
-);
+const { analyzePaper, extractAnalysis, extractFigures, durationMsFrom } =
+  await import("@/lib/analysis");
 
 const research: ResearchPayload = {
   problem: { oneLine: "한 줄", setting: "세팅", assumptions: ["a"] },
@@ -230,6 +229,9 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
     prismaMock.job.create.mockResolvedValue({ id: "job1" });
     prismaMock.job.update.mockResolvedValue({});
     prismaMock.paper.update.mockResolvedValue({});
+    prismaMock.paper.findUnique.mockResolvedValue({
+      analysisStartedAt: new Date(Date.now() - 5000),
+    });
     prismaMock.$transaction.mockResolvedValue([]);
   });
 
@@ -256,10 +258,13 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
         expect.objectContaining({ paperId: "p1", title: "F1", sourcePage: 2, imageUrl: null }),
       ],
     });
-    // analysisStatus=ready 전이(트랜잭션 내).
+    // analysisStatus=ready 전이 + 소요시간 기록(트랜잭션 내).
     expect(prismaMock.paper.update).toHaveBeenCalledWith({
       where: { id: "p1" },
-      data: { analysisStatus: "ready" },
+      data: expect.objectContaining({
+        analysisStatus: "ready",
+        analysisDurationMs: expect.any(Number),
+      }),
     });
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     // Job 상태 미러: running→done.
@@ -311,5 +316,17 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
       where: { id: "job1" },
       data: expect.objectContaining({ status: "failed", lastError: expect.any(String) }),
     });
+  });
+});
+
+describe("durationMsFrom (분석 소요시간)", () => {
+  it("시작 시각부터 now까지 ms를 잰다", () => {
+    expect(durationMsFrom(new Date(1000), 6000)).toBe(5000);
+  });
+  it("시작 시각이 없으면 null", () => {
+    expect(durationMsFrom(null, 6000)).toBeNull();
+  });
+  it("음수는 0으로 클램프한다(시계 역행 방어)", () => {
+    expect(durationMsFrom(new Date(10000), 5000)).toBe(0);
   });
 });
