@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-06-16T12:41:47+0900",
       "summary": "진입 배선을 팀 허브(/teams)로 원자 전환: 로그인 기본 착지(auth/callback·app/page) next ?? \"/teams\"(초대 next·sanitizeNext 유지), 팀 없음 가드(layout)+RSC 6곳 redirect(\"/teams\"), ONBOARDING_EXEMPT에서 /teams/new 제거(/invite만 유지, /teams는 (app) 밖이라 미추가), middleware/team 주석 정정. app/(app)/teams/new/ 디렉토리 삭제 + redirect 유닛 테스트 갱신. build/test(423)/lint green. entry.spec.ts의 /teams/new 잔존 문구는 step 3 소관.",
-      "completed_at": "2026-06-16T12:47:30+0900"
+      "completed_at": "2026-06-16T12:47:33+0900"
     },
     {
       "step": 3,
