@@ -15,7 +15,7 @@ export default async function PresentationsPage() {
   const session = await getSession();
   if (!session) redirect("/");
   const team = await getActiveTeam(session.memberId);
-  if (!team) redirect("/teams/new");
+  if (!team) redirect("/teams");
 
   let content: React.ReactNode;
   try {

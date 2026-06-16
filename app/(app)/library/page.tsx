@@ -17,7 +17,7 @@ export default async function LibraryPage() {
   const session = await getSession();
   if (!session) redirect("/");
   const team = await getActiveTeam(session.memberId);
-  if (!team) redirect("/teams/new");
+  if (!team) redirect("/teams");
 
   const quota = await quotaStatus(session.memberId).catch(() => undefined);
   let content: React.ReactNode;

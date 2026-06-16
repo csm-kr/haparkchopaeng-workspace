@@ -7,7 +7,7 @@ import { CreateTeamForm } from "./create-team-form";
 // 진입 팀 허브(로비) — 로그인 후 착지 화면(ADR-021, SCREENS §teams).
 // (app) 셸 밖의 독립 로비 — 사이드바·TeamSwitcher 없음. 데이터 읽기는 서버에서(ADR-015).
 // 진입 경로는 둘뿐: 팀 선택(활성 팀 전환) · 팀 만들기/초대 수락(R18). 공개 가입 없음.
-// NOTE: 이 step은 additive — /teams 도달만 추가한다. "기본 착지" 배선·/teams/new 삭제는 step 2.
+// 로그인 후 기본 착지(ADR-021): auth/callback·app/page가 next ?? "/teams"로 여기로 보낸다.
 
 export default async function TeamHubPage() {
   const session = await getSession();
