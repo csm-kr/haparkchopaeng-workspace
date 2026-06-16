@@ -20,7 +20,7 @@ export async function POST(): Promise<Response> {
       return fail(
         503,
         "LIVE_UNCONFIGURED",
-        "세미나 라이브가 아직 연결되지 않았어요. 관리자가 LiveKit 설정을 마치면 켜져요.",
+        "모두의 세미나가 아직 연결되지 않았어요. 관리자가 LiveKit 설정을 마치면 켜져요.",
       );
     }
 

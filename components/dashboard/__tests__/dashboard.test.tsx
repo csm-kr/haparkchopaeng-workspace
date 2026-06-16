@@ -64,6 +64,6 @@ describe("LIVE 배너 (useLive 컨텍스트 의존)", () => {
         <LiveBanner />
       </LiveProvider>,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(/라이브/);
+    expect(screen.getByRole("status")).toHaveTextContent(/모두의 세미나/);
   });
 });

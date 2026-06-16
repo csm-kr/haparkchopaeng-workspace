@@ -5,7 +5,7 @@ import { Card, Skeleton } from "@/components/ui";
 export default function MeetingLoading() {
   return (
     <>
-      <Topbar crumbs={[{ label: "세미나 라이브" }]} />
+      <Topbar crumbs={[{ label: "모두의 세미나" }]} />
       <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col gap-4 p-6">
           <Skeleton className="aspect-video w-full rounded-lg" />

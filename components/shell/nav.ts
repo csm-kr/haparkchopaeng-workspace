@@ -22,7 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: "meeting",
     href: "/meeting",
-    label: "세미나 라이브",
+    label: "모두의 세미나",
     Icon: Video,
     live: true,
   },

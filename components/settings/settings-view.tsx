@@ -29,7 +29,7 @@ const THEMES: { value: Theme; label: string; icon: React.ReactNode }[] = [
 // 인앱 알림 토글 — 채널은 미결(I-5)이라 로컬에 저장만 한다(서버 발송 없음).
 const NOTIF_KEY = "hapark_notif";
 const NOTIF_OPTIONS = [
-  { id: "live", label: "라이브 시작 알림", desc: "세미나 라이브가 시작되면 인앱으로 알려요." },
+  { id: "live", label: "라이브 시작 알림", desc: "모두의 세미나가 시작되면 인앱으로 알려요." },
   { id: "mention", label: "@멘션 알림", desc: "댓글에서 나를 언급하면 인앱으로 알려요." },
 ] as const;
 type NotifId = (typeof NOTIF_OPTIONS)[number]["id"];
