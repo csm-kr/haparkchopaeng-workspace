@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 //   prisma.liveSession.create 도달 전 반환) 클릭해도 세션이 생기지 않는다 — 비파괴.
 // 실제 다자간 송출/재생은 LiveKit 키 런타임 전용이라 헤드리스 검증 대상이 아니다(수동).
 
-test("로그인 후 세미나 라이브는 빈 상태·[라이브 시작] CTA·사이드바 /meeting 링크를 보여준다", async ({
+test("로그인 후 모두의 세미나는 빈 상태·[라이브 시작] CTA·사이드바 /meeting 링크를 보여준다", async ({
   page,
 }) => {
   // 1) dev 로그인 — 시드 멤버 이메일로 세션 쿠키 확보.
@@ -25,10 +25,10 @@ test("로그인 후 세미나 라이브는 빈 상태·[라이브 시작] CTA·�
   await expect(start).toBeVisible();
   await expect(start).toBeEnabled();
 
-  // 4) 셸 정합 — 사이드바 [세미나 라이브] 링크가 /meeting을 가리킨다(SCREENS §영속 셸).
+  // 4) 셸 정합 — 사이드바 [모두의 세미나] 링크가 /meeting을 가리킨다(SCREENS §영속 셸).
   const meetingLink = page
     .getByRole("navigation", { name: "주요 메뉴" })
-    .getByRole("link", { name: /세미나 라이브/ });
+    .getByRole("link", { name: /모두의 세미나/ });
   await expect(meetingLink).toHaveAttribute("href", "/meeting");
 });
 
@@ -56,7 +56,7 @@ test("키 미설정 환경에서 [라이브 시작]은 친절한 미설정 안�
   await expect(page.getByText(/아직 진행 중인 세미나가 없어요/)).toBeVisible();
 });
 
-test("세미나 라이브에서 [스케쥴]로 이동하는 비파괴 분기는 전역 상태를 바꾸지 않는다", async ({
+test("모두의 세미나에서 [스케쥴]로 이동하는 비파괴 분기는 전역 상태를 바꾸지 않는다", async ({
   page,
 }) => {
   // 1) dev 로그인.

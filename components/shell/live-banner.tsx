@@ -21,7 +21,7 @@ export function LiveBanner() {
         aria-hidden="true"
         className="anim-livepulse size-2 rounded-full bg-accent-fg"
       />
-      지금 세미나 라이브가 진행 중이에요. 입장하기 →
+      지금 모두의 세미나가 진행 중이에요. 입장하기 →
     </Link>
   );
 }

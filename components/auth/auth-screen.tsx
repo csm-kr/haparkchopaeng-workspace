@@ -19,7 +19,7 @@ export interface QuickMember {
 }
 
 const FEATURES = [
-  { Icon: Video, title: "세미나 라이브", desc: "매주 토요일, 화상으로 모여 발표하고 함께 봐요" },
+  { Icon: Video, title: "모두의 세미나", desc: "매주 토요일, 화상으로 모여 발표하고 함께 봐요" },
   { Icon: Sparkles, title: "논문 분석 관리", desc: "PDF를 올리면 연구·재구현 관점으로 구조화 분석" },
   { Icon: Play, title: "자료 관리", desc: "발표 자료를 쌓고 댓글로 회고를 남겨요" },
   { Icon: Calendar, title: "스케쥴 관리", desc: "발표 순번·로테이션·참여 현황을 한눈에" },

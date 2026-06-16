@@ -191,7 +191,7 @@ describe("LiveRoom", () => {
           return res(503, {
             error: {
               code: "LIVE_UNCONFIGURED",
-              message: "세미나 라이브가 아직 연결되지 않았어요.",
+              message: "모두의 세미나가 아직 연결되지 않았어요.",
             },
           });
         return res(500, {});
@@ -202,7 +202,7 @@ describe("LiveRoom", () => {
     fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
 
     expect(
-      await screen.findByText(/세미나 라이브가 아직 연결되지 않았어요/),
+      await screen.findByText(/모두의 세미나가 아직 연결되지 않았어요/),
     ).toBeInTheDocument();
   });
 

@@ -46,7 +46,7 @@ describe("Sidebar 내비", () => {
       "발표 자료",
       "스케쥴",
       "팀 관리",
-      "세미나 라이브",
+      "모두의 세미나",
     ]);
   });
 
@@ -66,7 +66,7 @@ describe("LIVE 알약 (useLive 컨텍스트)", () => {
     expect(screen.queryByLabelText("진행 중인 라이브")).toBeNull();
   });
 
-  it("live=true면 세미나 라이브 항목에 LIVE 알약이 보인다", () => {
+  it("live=true면 모두의 세미나 항목에 LIVE 알약이 보인다", () => {
     renderSidebar({ live: true });
     const pill = screen.getByLabelText("진행 중인 라이브");
     expect(pill).toBeInTheDocument();
