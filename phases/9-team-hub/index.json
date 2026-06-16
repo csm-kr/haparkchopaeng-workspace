@@ -32,7 +32,7 @@
       "status": "completed",
       "started_at": "2026-06-16T12:47:34+0900",
       "summary": "진입 팀 허브 핵심 경로 E2E 추가(tests/e2e/team-hub.spec.ts): 로그인→/teams 허브→팀 선택(비파괴 쿠키)→/dashboard, 홈(/) 기본 착지=/teams, next>/teams 우선, 팀 만들기 상한 가시화(제출 금지 graceful). entry.spec.ts의 /teams/new 3곳을 /teams로 정정. build green·team-hub+entry 7 spec green(공유DB 비파괴). ※ 무관 사전 실패(step3 코드 아님): LiveKit 키 존재로 phase7 meeting.spec(키미설정 503 가정)이 실제 라이브 세션 생성→dashboard/meeting/team-scoping 빈상태 spec 오염 + dev 콜드컴파일 동시성 플레이크(workers=1엔 소멸). 테스트가 만든 잔존 세션(presenter=jo·참가자0)은 종료해 정리함.",
-      "completed_at": "2026-06-16T13:05:00+0900"
+      "completed_at": "2026-06-16T13:10:01+0900"
     }
   ],
   "created_at": "2026-06-16T12:29:33+0900"
