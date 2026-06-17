@@ -50,7 +50,7 @@
 ## 파일 스토리지
 
 - 원문 PDF·발표 에셋·figure 이미지는 **비공개 버킷**. 다운로드는 **단기 서명 URL**로만 제공(공개 버킷·영구 URL 금지).
-- arXiv fetch는 서버가 수행(클라이언트가 임의 URL을 서버에 대신 요청하게 하지 않음 — SSRF 주의: 허용 도메인 화이트리스트).
+- 논문 URL fetch는 서버가 수행(클라이언트가 임의 URL을 서버에 대신 요청하게 하지 않음 — SSRF 주의). 호스트 화이트리스트로 강제하며(`lib/paper-url.ts` `resolvePaperSource`), 현재 허용: `arxiv.org`, `openaccess.thecvf.com`(CVF), `openreview.net`, `aclanthology.org`, `proceedings.mlr.press`, `proceedings.neurips.cc`. https만 허용하고 호스트는 정확 일치(서브도메인 사칭·사설IP·평문 차단). 새 출처는 이 목록에 추가한다.
 
 ## 데이터 보호 / 프라이버시
 

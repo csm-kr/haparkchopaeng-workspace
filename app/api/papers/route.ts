@@ -4,18 +4,18 @@ import { requireAuth } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
 import { fail, HttpError, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
-import { arxivPdfUrl, parseArxivId } from "@/lib/arxiv";
+import { resolvePaperSource } from "@/lib/paper-url";
 import { removeObject, signedDownloadUrl, uploadPdf } from "@/lib/storage";
 import { isPaperQuotaExceeded, paperWeeklyLimit } from "@/lib/rate-limit";
 import { countPdfPages } from "@/lib/pdf";
 import { inngest } from "@/lib/inngest";
 
-// POST /api/papers — PDF 업로드(프리사인 경로) 또는 arXiv URL로 Paper 생성.
+// POST /api/papers — PDF 업로드(프리사인 경로) 또는 논문 URL(arXiv·학술 화이트리스트)로 Paper 생성.
 // CRITICAL: 업로드는 PDF 전용(R12/ADR-003) — 그 외 415.
 // CRITICAL: 업로드 성공 ≠ 분석 성공(R28). analysisStatus="pending"으로 두고, 분석은
 //   요청 경로에서 인라인 실행하지 않는다 — 다음 step의 잡이 처리한다(ADR-013→016).
 // CRITICAL: 업로더(uploadedBy)는 세션에서 취한다 — 클라 입력 미신뢰(R3).
-// CRITICAL: arXiv fetch는 arxiv.org 화이트리스트(SSRF) — parseArxivId가 호스트를 강제한다.
+// CRITICAL: URL fetch는 학술 호스트 화이트리스트(SSRF) — resolvePaperSource가 호스트를 강제한다.
 // 비용 가드: ① 주간 업로드 한도(인당, Gemini 비용 통제, lib/rate-limit) ② 30쪽 초과 PDF 거부.
 
 const MAX_PAGES = 30; // 30쪽 초과 PDF는 받지 않는다(분석 비용·토큰 상한).
@@ -24,7 +24,7 @@ const FileBody = z.object({
   objectPath: z.string().min(1),
   filename: z.string().min(1),
 });
-const ArxivBody = z.object({ arxivUrl: z.string().min(1) });
+const SourceBody = z.object({ sourceUrl: z.string().min(1) });
 
 function hasKey(body: unknown, key: string): boolean {
   return typeof body === "object" && body !== null && key in body;
@@ -81,19 +81,19 @@ export async function POST(req: Request): Promise<Response> {
 
     const body: unknown = await req.json().catch(() => null);
 
-    // --- arXiv 경로: 서버가 arxiv.org PDF를 가져와 스토리지에 저장 ---
-    if (hasKey(body, "arxivUrl")) {
-      const parsed = ArxivBody.safeParse(body);
+    // --- URL 경로: 서버가 arXiv/학술 화이트리스트 호스트에서 PDF를 가져와 스토리지에 저장 ---
+    if (hasKey(body, "sourceUrl")) {
+      const parsed = SourceBody.safeParse(body);
       if (!parsed.success) {
-        return fail(400, "BAD_REQUEST", "arXiv 주소를 확인해주세요.");
+        return fail(400, "BAD_REQUEST", "논문 주소를 확인해주세요.");
       }
-      const id = parseArxivId(parsed.data.arxivUrl);
-      if (!id) return fail(400, "BAD_REQUEST", "arXiv 주소를 확인해주세요.");
+      const source = resolvePaperSource(parsed.data.sourceUrl);
+      if (!source) return fail(400, "BAD_REQUEST", "논문 주소를 확인해주세요.");
 
-      // SSRF: parseArxivId가 arxiv.org만 통과시켰으므로 여기서 fetch는 arxiv.org에 한정된다.
-      const res = await fetch(arxivPdfUrl(id));
+      // SSRF: resolvePaperSource가 화이트리스트 호스트만 통과시켰으므로 여기서 fetch는 거기에 한정된다.
+      const res = await fetch(source.pdfUrl);
       if (!res.ok) {
-        return fail(502, "BAD_GATEWAY", "arXiv에서 PDF를 가져오지 못했어요.");
+        return fail(502, "BAD_GATEWAY", "논문 PDF를 가져오지 못했어요.");
       }
       const contentType = res.headers.get("content-type") ?? "";
       if (!contentType.includes("application/pdf")) {
@@ -108,9 +108,9 @@ export async function POST(req: Request): Promise<Response> {
       await uploadPdf(path, bytes);
       const paper = await prisma.paper.create({
         data: {
-          title: `arXiv:${id}`,
+          title: source.title, // arXiv면 "arXiv:<id>", 아니면 URL 파일명 유도
           authors: "",
-          arxiv: id,
+          arxiv: source.arxivId, // arXiv가 아니면 null
           pageCount,
           pdfUrl: path,
           teamId: team.id, // R3/R37: 활성 팀에서 주입

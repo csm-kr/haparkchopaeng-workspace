@@ -30,13 +30,13 @@ describe("UploadButton / UploadModal", () => {
     vi.restoreAllMocks();
   });
 
-  it("버튼을 누르면 PDF 드롭존과 arXiv 입력이 보인다", () => {
+  it("버튼을 누르면 PDF 드롭존과 논문 URL 입력이 보인다", () => {
     render(<UploadButton />);
     fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText("PDF 파일 선택")).toBeInTheDocument();
-    // arXiv URL 입력 필드(드래그앤드롭 또는 arXiv URL — ADR-003)
-    expect(screen.getByLabelText("arXiv 주소")).toBeInTheDocument();
+    // 논문 URL 입력 필드(드래그앤드롭 또는 arXiv·학술 PDF URL — ADR-003)
+    expect(screen.getByLabelText("논문 주소")).toBeInTheDocument();
   });
 
   it("PDF가 아닌 파일은 인라인 에러로 거부하고 업로드를 시도하지 않는다(R12/ADR-003)", () => {
@@ -87,24 +87,32 @@ describe("UploadButton / UploadModal", () => {
     );
   });
 
-  it("arXiv URL을 제출하면 서버(/api/papers)가 가져오고 상세로 이동한다", async () => {
+  it("논문 URL을 제출하면 서버(/api/papers)가 sourceUrl로 가져오고 상세로 이동한다", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: { id: "arxpaper", analysisStatus: "pending" } }),
+      json: async () => ({ data: { id: "urlpaper", analysisStatus: "pending" } }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<UploadButton />);
     fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
-    fireEvent.change(screen.getByLabelText("arXiv 주소"), {
-      target: { value: "https://arxiv.org/abs/2404.02258" },
+    fireEvent.change(screen.getByLabelText("논문 주소"), {
+      target: {
+        value:
+          "https://openaccess.thecvf.com/content/WACV2024/papers/Some_paper.pdf",
+      },
     });
     fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/papers/arxpaper"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/papers/urlpaper"));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/papers",
       expect.objectContaining({ method: "POST" }),
+    );
+    // 클라가 보내는 body는 sourceUrl(일반화된 필드)
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.sourceUrl).toBe(
+      "https://openaccess.thecvf.com/content/WACV2024/papers/Some_paper.pdf",
     );
   });
 
@@ -142,7 +150,7 @@ describe("UploadButton / UploadModal", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("arXiv 가져오기가 30쪽 초과(413)면 서버 메시지를 그대로 보여준다", async () => {
+  it("URL 가져오기가 30쪽 초과(413)면 서버 메시지를 그대로 보여준다", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 413,
@@ -157,7 +165,7 @@ describe("UploadButton / UploadModal", () => {
 
     render(<UploadButton />);
     fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
-    fireEvent.change(screen.getByLabelText("arXiv 주소"), {
+    fireEvent.change(screen.getByLabelText("논문 주소"), {
       target: { value: "https://arxiv.org/abs/2404.02258" },
     });
     fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
@@ -170,14 +178,14 @@ describe("UploadButton / UploadModal", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("빈 arXiv URL은 인라인 검증으로 막는다(R30)", () => {
+  it("빈 논문 URL은 인라인 검증으로 막는다(R30)", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     render(<UploadButton />);
     fireEvent.click(screen.getByRole("button", { name: "논문 올리기" }));
     fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
 
-    expect(screen.getByText("arXiv 주소를 입력해주세요.")).toBeInTheDocument();
+    expect(screen.getByText("논문 주소를 입력해주세요.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
