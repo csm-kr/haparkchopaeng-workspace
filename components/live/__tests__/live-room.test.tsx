@@ -131,10 +131,19 @@ function renderRoom(props: {
   );
 }
 
+// 발표자 이탈(pagehide) 시 /end 비콘 전송 검증용 — JSDOM엔 sendBeacon이 없어 목 주입.
+let sendBeacon: ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
   vi.clearAllMocks();
   lk.participants = [];
   lk.tracks = [];
+  sendBeacon = vi.fn(() => true);
+  Object.defineProperty(navigator, "sendBeacon", {
+    configurable: true,
+    writable: true,
+    value: sendBeacon,
+  });
 });
 afterEach(() => cleanup());
 
@@ -335,5 +344,88 @@ describe("LiveRoom", () => {
     expect(screen.getByLabelText("조성민 아바타")).toBeInTheDocument();
     // ha는 비디오라 아바타가 아니다.
     expect(screen.queryByLabelText("하수현 아바타")).toBeNull();
+  });
+
+  it("발표자: 페이지 이탈(pagehide) → /end로 종료 비콘 전송", async () => {
+    vi.stubGlobal(
+      "fetch",
+      route((url, method) => {
+        if (url === "/api/live/start" && method === "POST")
+          return res(201, {
+            data: {
+              session: {
+                id: "s1",
+                presenterId: "ha",
+                startedAt: "2026-06-15T01:00:00Z",
+              },
+              token: "TKN-presenter",
+              url: "wss://lk.example",
+            },
+          });
+        return res(500, {});
+      }),
+    );
+
+    renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });
+    fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    // 발표자가 탭/창 닫기·새로고침으로 풀 언로드 → /end 비콘 전송(세션 전역 종료).
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(sendBeacon).toHaveBeenCalledWith("/api/live/s1/end");
+  });
+
+  it("시청자: 페이지 이탈(pagehide) → 종료 비콘 미전송(발표자만 종료)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      route((url, method) => {
+        if (url === "/api/live/s1/join" && method === "POST")
+          return res(200, { data: { token: "TKN-viewer", url: "wss://lk.example" } });
+        return res(500, {});
+      }),
+    );
+
+    renderRoom({
+      currentMemberId: "jo",
+      initialLive: true,
+      initialSession: { id: "s1", presenterId: "ha", participantIds: [] },
+    });
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    // 시청자 이탈은 본인 퇴장(/leave)만 — 전역 종료(/end)는 발표자만(R6).
+    expect(sendBeacon).not.toHaveBeenCalled();
+  });
+
+  it("발표자: 단일 언로드에서 beforeunload+pagehide 둘 다 떠도 비콘은 1회만", async () => {
+    vi.stubGlobal(
+      "fetch",
+      route((url, method) => {
+        if (url === "/api/live/start" && method === "POST")
+          return res(201, {
+            data: {
+              session: {
+                id: "s1",
+                presenterId: "ha",
+                startedAt: "2026-06-15T01:00:00Z",
+              },
+              token: "TKN-presenter",
+              url: "wss://lk.example",
+            },
+          });
+        return res(500, {});
+      }),
+    );
+
+    renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });
+    fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    window.dispatchEvent(new Event("beforeunload"));
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
   });
 });

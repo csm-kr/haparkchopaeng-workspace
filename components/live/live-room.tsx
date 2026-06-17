@@ -71,6 +71,8 @@ export function LiveRoom({
   const [endError, setEndError] = React.useState(false);
   const [left, setLeft] = React.useState(false);
   const [confirmLeave, setConfirmLeave] = React.useState(false);
+  // 발표자 이탈 시 /end를 단일 언로드에서 1회만 보내기 위한 가드(pagehide+beforeunload 중복 방지).
+  const endSentRef = React.useRef(false);
 
   const isPresenter = !!session && session.presenterId === currentMemberId;
 
@@ -124,6 +126,26 @@ export function LiveRoom({
       cancelled = true;
     };
   }, [live, session, isPresenter, left, connection, joinError]);
+
+  // 발표자 이탈 시 자동 종료(ADR-001/R6): 풀 언로드(pagehide/beforeunload)에서 /end 비콘 전송.
+  // 탭/창 닫기·새로고침·외부 이동을 잡는다 — 크래시·네트워크 끊김·SPA 내부 이동은 미보장(best-effort).
+  // 본인이 발표자일 때만. sendBeacon은 같은 출처 쿠키를 포함해 /end의 requireAuth가 그대로 동작한다.
+  React.useEffect(() => {
+    if (!live || !session || !isPresenter) return;
+    const endOnUnload = () => {
+      if (endSentRef.current) return;
+      endSentRef.current = true;
+      const url = `/api/live/${session.id}/end`;
+      if (navigator.sendBeacon) navigator.sendBeacon(url);
+      else void fetch(url, { method: "POST", keepalive: true });
+    };
+    window.addEventListener("pagehide", endOnUnload);
+    window.addEventListener("beforeunload", endOnUnload);
+    return () => {
+      window.removeEventListener("pagehide", endOnUnload);
+      window.removeEventListener("beforeunload", endOnUnload);
+    };
+  }, [live, session, isPresenter]);
 
   async function handleStart() {
     setStarting(true);
