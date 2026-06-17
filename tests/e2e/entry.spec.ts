@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 //       ① 팀 가드가 팀 보유 멤버를 잘못 막지 않는다(앱 진입 허용).
 // 주: Google OAuth 실제 왕복은 키 필요 → dev 로그인 폴백으로 검증(playwright.config가 next dev 기동).
 //     실제 토큰 수락(합류)은 멤버십을 쓰는 파괴적 변경 → 유닛 테스트(acceptInvite/acceptInviteAction)가 커버.
-//     "팀 없음 → /teams/new" 라우팅 결정은 needsTeamOnboarding 유닛 테스트가 커버한다.
+//     "팀 없음 → /teams" 라우팅 결정은 needsTeamOnboarding 유닛 테스트가 커버한다.
 
 // ② step4: 초대 페이지는 더 이상 미로그인을 즉시 로그인으로 튕기지 않고, 토큰 상태 카드를 보여준다.
 //    알 수 없는 토큰은 not_found 사유 카드(R30) — 미로그인이어도 사유를 그대로 안내한다.
@@ -39,8 +39,10 @@ test("dev 로그인 시 next로 초대 화면에 복귀한다", async ({ page })
   ).toBeVisible();
 });
 
-// ① 팀을 가진 멤버는 팀 가드에 막히지 않고 앱(대시보드)에 진입한다(/teams/new로 튕기지 않음).
-test("팀 보유 멤버는 앱 진입 시 /teams/new로 리다이렉트되지 않는다", async ({
+// ① 팀을 가진 멤버는 팀 가드에 막히지 않고 앱(대시보드)에 진입한다(/teams로 튕기지 않음).
+//    허브는 "로그인 직후 착지"에만 강제된다(ADR-021) — 활성 팀 쿠키가 있으면 /dashboard 직접
+//    방문/북마크은 가드만 통과하면 머문다(step 2: 팀 보유 시 needsTeamOnboarding=false).
+test("팀 보유 멤버는 앱 진입 시 /teams로 리다이렉트되지 않는다", async ({
   page,
 }) => {
   const login = await page.request.post("/api/auth/login", {
@@ -49,5 +51,5 @@ test("팀 보유 멤버는 앱 진입 시 /teams/new로 리다이렉트되지 �
   expect(login.ok()).toBeTruthy();
 
   await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/dashboard$/); // 팀 만들기로 튕기지 않음
+  await expect(page).toHaveURL(/\/dashboard$/); // 팀 허브로 튕기지 않음
 });

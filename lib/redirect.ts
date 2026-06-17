@@ -16,12 +16,13 @@ export function sanitizeNext(next: string | null | undefined): string | null {
   return next;
 }
 
-/** 가드 예외 경로(팀 없는 사용자도 도달해야 하는 곳) — 보내면 무한 루프거나 합류 자체를 막는다. */
-const ONBOARDING_EXEMPT = ["/teams/new", "/invite"];
+/** 가드 예외 경로(팀 없는 사용자도 도달해야 하는 곳) — 보내면 합류 자체를 막는다. */
+const ONBOARDING_EXEMPT = ["/invite"];
 
 /**
- * "팀 없음" 진입 가드 결정(순수). 멤버십이 없고 예외 경로가 아니면 팀 만들기(/teams/new)로 보낸다(ADR-018).
- * 예외: /teams/new(자기 자신 → 루프 방지)·/invite(초대 합류). 인증 경로는 (app) 레이아웃 밖이라 여기 오지 않는다.
+ * "팀 없음" 진입 가드 결정(순수). 멤버십이 없고 예외 경로가 아니면 팀 허브(/teams)로 보낸다(ADR-021/018).
+ * 예외: /invite(초대 합류). 팀 허브(/teams)는 (app) 레이아웃 밖이라 이 가드를 타지 않으므로 예외 목록에 둘 필요가 없다.
+ * 인증 경로도 (app) 레이아웃 밖이라 여기 오지 않는다.
  */
 export function needsTeamOnboarding(pathname: string, hasMembership: boolean): boolean {
   if (hasMembership) return false;

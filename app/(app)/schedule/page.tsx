@@ -31,7 +31,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/");
   const team = await getActiveTeam(session.memberId);
-  if (!team) redirect("/teams/new");
+  if (!team) redirect("/teams");
   const isAdmin = session.role === "관리자";
 
   let body: React.ReactNode;

@@ -5,8 +5,9 @@ import { requireAuth } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
 import { createTeam } from "@/lib/teams";
 
-// 팀 생성 Server Action (쓰기 = Server Action, ADR-015/R32). UI는 step4 소관 — 여기선 액션까지만.
+// 팀 생성 Server Action (쓰기 = Server Action, ADR-015/R32). 팀 허브(ADR-021)가 소유한다.
 // CRITICAL: creatorId는 클라 입력이 아니라 세션에서 취한다(R3). 결과는 판별 유니온으로 돌려 UI가 인라인 처리(R30).
+// CRITICAL: 전역 상한(TEAM_LIMIT)은 createTeam이 서버에서 재강제한다 — UI의 canCreate는 가시화일 뿐.
 
 export type CreateTeamResult =
   | { ok: true; slug: string }

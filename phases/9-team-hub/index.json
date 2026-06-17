@@ -1,0 +1,40 @@
+{
+  "project": "하박조팽",
+  "phase": "9-team-hub",
+  "steps": [
+    {
+      "step": 0,
+      "name": "docs-team-hub",
+      "status": "completed",
+      "started_at": "2026-06-16T12:29:33+0900",
+      "summary": "ADR-021(진입 팀 허브, ADR-018 정밀화) 추가 + SCREEN_FLOW/USER_FLOW 진입 흐름을 로그인→팀 허브 /teams→팀 선택→/dashboard로 갱신 + SCREENS에 teams 허브 화면 명세 추가. /teams/new 폐지·허브 흡수, 전역·admin/env·per-user 아님 상한 정책 명문화(문서 전용).",
+      "completed_at": "2026-06-16T12:34:38+0900"
+    },
+    {
+      "step": 1,
+      "name": "hub-screen",
+      "status": "completed",
+      "started_at": "2026-06-16T12:34:38+0900",
+      "summary": "lib/teams.canCreateTeam()(전역 team.count<maxTeams) 추가 + app/teams/ 독립 로비((app) 셸 밖) 신규: page.tsx(RSC)·team-picker(POST /api/teams/active 재사용→/dashboard)·create-team-form(canCreate 상한 가시화·인라인 R30)·actions. 순수 additive — 허브는 /teams에서 도달만 가능, 진입 배선·/teams/new 삭제는 step 2.",
+      "completed_at": "2026-06-16T12:41:46+0900"
+    },
+    {
+      "step": 2,
+      "name": "entry-cutover",
+      "status": "completed",
+      "started_at": "2026-06-16T12:41:47+0900",
+      "summary": "진입 배선을 팀 허브(/teams)로 원자 전환: 로그인 기본 착지(auth/callback·app/page) next ?? \"/teams\"(초대 next·sanitizeNext 유지), 팀 없음 가드(layout)+RSC 6곳 redirect(\"/teams\"), ONBOARDING_EXEMPT에서 /teams/new 제거(/invite만 유지, /teams는 (app) 밖이라 미추가), middleware/team 주석 정정. app/(app)/teams/new/ 디렉토리 삭제 + redirect 유닛 테스트 갱신. build/test(423)/lint green. entry.spec.ts의 /teams/new 잔존 문구는 step 3 소관.",
+      "completed_at": "2026-06-16T12:47:33+0900"
+    },
+    {
+      "step": 3,
+      "name": "team-hub-e2e",
+      "status": "completed",
+      "started_at": "2026-06-16T12:47:34+0900",
+      "summary": "진입 팀 허브 핵심 경로 E2E 추가(tests/e2e/team-hub.spec.ts): 로그인→/teams 허브→팀 선택(비파괴 쿠키)→/dashboard, 홈(/) 기본 착지=/teams, next>/teams 우선, 팀 만들기 상한 가시화(제출 금지 graceful). entry.spec.ts의 /teams/new 3곳을 /teams로 정정. build green·team-hub+entry 7 spec green(공유DB 비파괴). ※ 무관 사전 실패(step3 코드 아님): LiveKit 키 존재로 phase7 meeting.spec(키미설정 503 가정)이 실제 라이브 세션 생성→dashboard/meeting/team-scoping 빈상태 spec 오염 + dev 콜드컴파일 동시성 플레이크(workers=1엔 소멸). 테스트가 만든 잔존 세션(presenter=jo·참가자0)은 종료해 정리함.",
+      "completed_at": "2026-06-16T13:10:01+0900"
+    }
+  ],
+  "created_at": "2026-06-16T12:29:33+0900",
+  "completed_at": "2026-06-16T13:10:01+0900"
+}

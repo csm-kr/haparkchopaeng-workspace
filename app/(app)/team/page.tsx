@@ -33,7 +33,7 @@ export default async function TeamPage() {
 
   let body: React.ReactNode;
   try {
-    // 진입 팀 해소(팀 없음은 (app)/layout이 /teams/new로 가드 — 여기선 방어적으로만).
+    // 진입 팀 해소(팀 없음은 (app)/layout이 /teams 허브로 가드 — 여기선 방어적으로만).
     const entry = currentUserId ? await resolveEntryTeam(currentUserId) : null;
     const team = entry ? await prisma.team.findUnique({ where: { slug: entry.slug } }) : null;
     if (!team) throw new Error("no active team");

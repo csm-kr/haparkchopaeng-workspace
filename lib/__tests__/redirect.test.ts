@@ -45,16 +45,12 @@ describe("sanitizeNext (오픈 리다이렉트 차단)", () => {
 describe("needsTeamOnboarding (팀 없음 진입 가드)", () => {
   it("멤버십이 있으면 가드하지 않는다", () => {
     expect(needsTeamOnboarding("/dashboard", true)).toBe(false);
-    expect(needsTeamOnboarding("/teams/new", true)).toBe(false);
+    expect(needsTeamOnboarding("/library", true)).toBe(false);
   });
 
-  it("멤버십이 없으면 일반 경로에서 팀 만들기로 보낸다", () => {
+  it("멤버십이 없으면 일반 경로에서 팀 허브로 보낸다", () => {
     expect(needsTeamOnboarding("/dashboard", false)).toBe(true);
     expect(needsTeamOnboarding("/library", false)).toBe(true);
-  });
-
-  it("팀 만들기 화면 자신은 예외(무한 루프 방지)", () => {
-    expect(needsTeamOnboarding("/teams/new", false)).toBe(false);
   });
 
   it("초대 경로는 예외(초대받은 팀 없는 사용자가 합류할 수 있어야 함)", () => {

@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 // 1) code → Supabase 세션 교환으로 신원(이메일) 획득
 // 2) 멀티팀(ADR-018): 로그인은 누구나 — 거부하지 않는다. findOrCreateMember로 멤버 해소.
 //    합류 게이트는 팀 합류(초대 토큰)에만 — 여기선 신원만 검증한다.
-// 3) lib/auth로 앱 권한 세션 발급 → 복귀(next) 또는 대시보드.
+// 3) lib/auth로 앱 권한 세션 발급 → 복귀(next) 또는 팀 허브(/teams).
 // CRITICAL: next는 same-origin /path만(오픈 리다이렉트 차단, SECURITY). 권한 세션은 lib/auth로 일원화.
 
 function redirectTo(path: string): Response {
@@ -38,6 +38,6 @@ export async function GET(req: Request): Promise<Response> {
   const member = await findOrCreateMember(email);
   await createSession(member.id);
 
-  // 초대 복귀: next가 있으면 거기로, 없으면 대시보드.
-  return redirectTo(next ?? "/dashboard");
+  // 초대 복귀: next가 있으면 거기로, 없으면 팀 허브(/teams)로 착지(ADR-021).
+  return redirectTo(next ?? "/teams");
 }

@@ -121,6 +121,7 @@ vi.mock("@/lib/prisma", () => {
 
 import { HttpError } from "@/lib/http";
 import {
+  canCreateTeam,
   createTeam,
   getMembership,
   isTeamAdmin,
@@ -168,6 +169,31 @@ describe("maxTeams()", () => {
   it("잘못된 값이면 기본 2로 폴백", () => {
     process.env.MAX_TEAMS = "abc";
     expect(maxTeams()).toBe(2);
+  });
+});
+
+describe("canCreateTeam()", () => {
+  it("전역 count가 상한 미만이면 true", async () => {
+    process.env.MAX_TEAMS = "2";
+    await createTeam({ name: "Team One", creatorId: "ha" });
+    expect(await canCreateTeam()).toBe(true);
+  });
+
+  it("전역 count가 상한과 같으면 false", async () => {
+    process.env.MAX_TEAMS = "2";
+    await createTeam({ name: "Team One", creatorId: "ha" });
+    await createTeam({ name: "Team Two", creatorId: "bak" });
+    expect(await canCreateTeam()).toBe(false);
+  });
+
+  it("전역 count가 상한을 초과하면 false", async () => {
+    process.env.MAX_TEAMS = "1";
+    await createTeam({ name: "Team One", creatorId: "ha" });
+    process.env.MAX_TEAMS = "2";
+    await createTeam({ name: "Team Two", creatorId: "bak" });
+    // 이제 count=2, 상한=1 → 초과
+    process.env.MAX_TEAMS = "1";
+    expect(await canCreateTeam()).toBe(false);
   });
 });
 

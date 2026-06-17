@@ -16,6 +16,11 @@ export function maxTeams(): number {
   return Number.isInteger(n) && n > 0 ? n : 2;
 }
 
+/** 전역 팀 생성 가능 여부 — 서버 전체 team.count()가 maxTeams() 미만이면 true. (per-user 아님, ADR-021) */
+export async function canCreateTeam(): Promise<boolean> {
+  return (await prisma.team.count()) < maxTeams();
+}
+
 /** 이름 → slug 후보. 영문 소문자/숫자만 남기고 그 외는 하이픈으로. 형식에 못 맞으면 "team" 폴백. */
 function slugify(name: string): string {
   let s = name

@@ -30,7 +30,7 @@ export default async function PaperDetailPage({ params }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/");
   const team = await getActiveTeam(session.memberId);
-  if (!team) redirect("/teams/new");
+  if (!team) redirect("/teams");
 
   let detail: Awaited<ReturnType<typeof getPaperDetail>> = null;
   let failed = false;

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeNext } from "@/lib/redirect";
 import { AuthScreen, type QuickMember } from "@/components/auth/auth-screen";
 
-// 진입점 — 로그인 화면(SCREENS §auth). 이미 로그인했으면 복귀(next) 또는 홈으로 보낸다.
+// 진입점 — 로그인 화면(SCREENS §auth). 이미 로그인했으면 복귀(next) 또는 팀 허브(/teams)로 보낸다.
 // 데이터 읽기는 서버에서(ADR-015). 빠른 로그인 목록은 시드 멤버(데모/로컬용).
 
 export default async function Home({
@@ -17,7 +17,7 @@ export default async function Home({
   const next = sanitizeNext(rawNext);
 
   const session = await getSession();
-  if (session) redirect(next ?? "/dashboard");
+  if (session) redirect(next ?? "/teams");
 
   // dev 이메일/빠른 로그인은 로컬 개발에서만 — 프로덕션은 Google OAuth만(ADR-017).
   const allowDevLogin = process.env.NODE_ENV !== "production";

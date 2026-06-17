@@ -12,7 +12,7 @@ import { AppShell, type ShellMember } from "@/components/shell";
 // 셸 안쪽 화면들의 RSC 레이아웃.
 // CRITICAL: 데이터 읽기는 서버에서(ADR-015) — 멤버·세션을 Prisma로 직접 조회한다.
 // 미인증이면 로그인(홈)으로 보낸다(권한 체크는 서버에서, R19).
-// 팀 없음이면 팀 만들기로 보낸다(ADR-018) — /teams/new는 예외(무한 루프 방지).
+// 팀 없음이면 팀 허브로 보낸다(ADR-021/018). /teams는 (app) 밖이라 이 가드를 타지 않는다.
 
 function toShellMember(m: {
   id: string;
@@ -45,12 +45,12 @@ export default async function AppLayout({
   });
   if (!current) redirect("/");
 
-  // 팀 없음 진입 가드(ADR-018). 멤버십이 없으면 팀 만들기로(단, /teams/new 자신은 예외 → 루프 방지).
+  // 팀 없음 진입 가드(ADR-021/018). 멤버십이 없으면 팀 허브(/teams)로 보낸다.
   // pathname은 미들웨어가 x-pathname 헤더로 노출한다(RSC 레이아웃은 경로를 직접 못 받는다).
   const teams = await listMemberships(session.memberId);
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (needsTeamOnboarding(pathname, teams.length > 0)) {
-    redirect("/teams/new");
+    redirect("/teams");
   }
 
   // 활성 팀 해소(ADR-020/R37) — 쿠키가 내 멤버십이면 그걸, 아니면 최근 합류로 폴백.

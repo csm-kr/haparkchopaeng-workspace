@@ -36,7 +36,7 @@ export default async function PresentationDetailPage({ params }: PageProps) {
   const session = await getSession();
   if (!session) redirect("/");
   const team = await getActiveTeam(session.memberId);
-  if (!team) redirect("/teams/new");
+  if (!team) redirect("/teams");
 
   let detail: Awaited<ReturnType<typeof getPresentationDetail>> = null;
   let members: MemberRef[] = [];
