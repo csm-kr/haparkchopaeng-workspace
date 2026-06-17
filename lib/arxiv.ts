@@ -1,5 +1,6 @@
-// arXiv URL/ID 파싱 + SSRF 화이트리스트 (순수 함수, 서버에서 사용).
-// CRITICAL: arXiv 외 임의 URL을 서버가 fetch하지 않는다 — 호스트는 arxiv.org만 허용(SECURITY §SSRF, I-10).
+// arXiv URL/ID 파싱 + arxiv.org 호스트 강제 (순수 함수, 서버에서 사용).
+// CRITICAL: 이 모듈은 arxiv.org만 통과시킨다(SSRF, SECURITY §SSRF, I-10).
+// arXiv 외 학술 호스트 화이트리스트는 lib/paper-url.ts의 resolvePaperSource가 담당(이 모듈을 재사용).
 
 const ARXIV_ID = /^\d{4}\.\d{4,5}(?:v\d+)?$/;
 const ALLOWED_HOSTS = new Set(["arxiv.org", "www.arxiv.org"]);

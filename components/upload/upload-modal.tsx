@@ -6,7 +6,7 @@ import { FileText, Plus, UploadCloud, X } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui";
 import type { QuotaStatus } from "@/lib/rate-limit";
 
-// 업로드 모달 — 인터랙티브 섬(ADR-015). PDF 드래그앤드롭 또는 arXiv URL(ADR-003).
+// 업로드 모달 — 인터랙티브 섬(ADR-015). PDF 드래그앤드롭 또는 논문 URL(arXiv·학술 화이트리스트, ADR-003).
 // CRITICAL: PDF 전용 — PPTX/MD·빈 노트/아이디어 메모 단축 없음(R12/ADR-003).
 // CRITICAL: 업로드는 프리사인 직접 업로드(클라→스토리지), POST /api/papers엔 객체 키만(R36).
 // CRITICAL: 업로드 성공 ≠ 분석 성공 — 분석은 서버가 pending으로 두고 잡이 처리(R28). 여기선 실행하지 않는다.
@@ -62,8 +62,8 @@ function UploadModal({
   const [step, setStep] = React.useState<Step>("idle");
   const [dragging, setDragging] = React.useState(false);
   const [fileError, setFileError] = React.useState<string | null>(null);
-  const [arxivUrl, setArxivUrl] = React.useState("");
-  const [arxivError, setArxivError] = React.useState<string | null>(null);
+  const [sourceUrl, setSourceUrl] = React.useState("");
+  const [sourceError, setSourceError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   function done(id: string) {
@@ -84,7 +84,7 @@ function UploadModal({
       return;
     }
     setFileError(null);
-    setArxivError(null);
+    setSourceError(null);
     setStep("uploading");
     try {
       // 1) 프리사인 URL 발급(서버는 서명만, R36)
@@ -119,31 +119,31 @@ function UploadModal({
     }
   }
 
-  async function importArxiv() {
+  async function importUrl() {
     if (quota?.remaining === 0) {
-      setArxivError("이번 주 분석 한도를 다 썼어요.");
+      setSourceError("이번 주 분석 한도를 다 썼어요.");
       return;
     }
-    const value = arxivUrl.trim();
+    const value = sourceUrl.trim();
     if (!value) {
-      setArxivError("arXiv 주소를 입력해주세요.");
+      setSourceError("논문 주소를 입력해주세요.");
       return;
     }
-    setArxivError(null);
+    setSourceError(null);
     setFileError(null);
     setStep("uploading");
     try {
-      // 서버가 arxiv.org에서 PDF를 가져온다(SSRF 화이트리스트는 서버에서 강제).
+      // 서버가 화이트리스트 호스트(arXiv·학술)에서 PDF를 가져온다(SSRF는 서버에서 강제).
       const paper = await callJson<{ id: string }>("/api/papers", {
         method: "POST",
-        body: JSON.stringify({ arxivUrl: value }),
+        body: JSON.stringify({ sourceUrl: value }),
       });
       done(paper.id);
     } catch (e) {
       setStep("idle");
       // 서버 메시지(한도 초과·30쪽 초과 등)를 그대로 노출한다(R30).
-      setArxivError(
-        e instanceof Error ? e.message : "arXiv 주소를 확인해주세요.",
+      setSourceError(
+        e instanceof Error ? e.message : "논문 주소를 확인해주세요.",
       );
     }
   }
@@ -239,28 +239,28 @@ function UploadModal({
           )}
         </div>
 
-        {/* arXiv URL 입력 */}
+        {/* 논문 URL 입력(arXiv·학술 화이트리스트 PDF) */}
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="arxiv-url" className="text-[13px] font-medium text-fg">
-            또는 arXiv 주소로 가져오기
+          <label htmlFor="source-url" className="text-[13px] font-medium text-fg">
+            또는 논문 URL로 가져오기
           </label>
           <div className="flex items-start gap-2">
             <div className="flex flex-1 flex-col gap-1">
               <Input
-                id="arxiv-url"
-                aria-label="arXiv 주소"
-                placeholder="https://arxiv.org/abs/2404.02258"
-                value={arxivUrl}
+                id="source-url"
+                aria-label="논문 주소"
+                placeholder="arXiv 또는 CVF·OpenReview 등 PDF 주소"
+                value={sourceUrl}
                 disabled={busy}
-                onChange={(e) => setArxivUrl(e.target.value)}
+                onChange={(e) => setSourceUrl(e.target.value)}
               />
-              {arxivError && (
+              {sourceError && (
                 <p role="alert" className="text-[12px] text-busy">
-                  {arxivError}
+                  {sourceError}
                 </p>
               )}
             </div>
-            <Button onClick={importArxiv} disabled={busy}>
+            <Button onClick={importUrl} disabled={busy}>
               가져오기
             </Button>
           </div>

@@ -14,13 +14,11 @@ const { prismaMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
-const { parseArxivIdMock, arxivPdfUrlMock } = vi.hoisted(() => ({
-  parseArxivIdMock: vi.fn(),
-  arxivPdfUrlMock: vi.fn(),
+const { resolvePaperSourceMock } = vi.hoisted(() => ({
+  resolvePaperSourceMock: vi.fn(),
 }));
-vi.mock("@/lib/arxiv", () => ({
-  parseArxivId: parseArxivIdMock,
-  arxivPdfUrl: arxivPdfUrlMock,
+vi.mock("@/lib/paper-url", () => ({
+  resolvePaperSource: resolvePaperSourceMock,
 }));
 
 const { uploadPdfMock, signedDownloadUrlMock, removeObjectMock } = vi.hoisted(
@@ -86,24 +84,58 @@ beforeEach(() => {
 describe("POST /api/papers — teamId 활성 팀 주입(R3/R37)", () => {
   it("활성 팀이 없으면 403 (생성 안 함)", async () => {
     getActiveTeamMock.mockResolvedValue(null);
-    const res = await POST(req({ arxivUrl: "https://arxiv.org/abs/2404.02258" }));
+    const res = await POST(req({ sourceUrl: "https://arxiv.org/abs/2404.02258" }));
     expect(res.status).toBe(403);
     expect(prismaMock.paper.create).not.toHaveBeenCalled();
   });
 
-  it("arXiv 경로: teamId=활성 팀, uploadedBy=세션", async () => {
-    parseArxivIdMock.mockReturnValue("2404.02258");
-    arxivPdfUrlMock.mockReturnValue("https://arxiv.org/pdf/2404.02258");
+  it("URL 경로(arXiv): teamId=활성 팀, uploadedBy=세션, arxiv=ID", async () => {
+    resolvePaperSourceMock.mockReturnValue({
+      pdfUrl: "https://arxiv.org/pdf/2404.02258.pdf",
+      arxivId: "2404.02258",
+      title: "arXiv:2404.02258",
+    });
 
     const res = await POST(
-      req({ arxivUrl: "https://arxiv.org/abs/2404.02258", teamId: "해커팀" }),
+      req({ sourceUrl: "https://arxiv.org/abs/2404.02258", teamId: "해커팀" }),
     );
     expect(res.status).toBe(201);
     const data = prismaMock.paper.create.mock.calls[0][0].data;
     expect(data.teamId).toBe("tA"); // 클라가 보낸 teamId 무시(R3)
     expect(data.uploadedBy).toBe("jo");
+    expect(data.arxiv).toBe("2404.02258");
+    expect(data.title).toBe("arXiv:2404.02258");
     // 진행률 바용 시작 시각을 생성 시 기록한다.
     expect(data.analysisStartedAt).toBeInstanceOf(Date);
+  });
+
+  it("URL 경로(비-arXiv 학술): arxiv=null, 제목은 해석기 제공값", async () => {
+    resolvePaperSourceMock.mockReturnValue({
+      pdfUrl:
+        "https://openaccess.thecvf.com/content/WACV2024/papers/Some_CVF_Paper.pdf",
+      arxivId: null,
+      title: "Some_CVF_Paper",
+    });
+
+    const res = await POST(
+      req({
+        sourceUrl:
+          "https://openaccess.thecvf.com/content/WACV2024/papers/Some_CVF_Paper.pdf",
+      }),
+    );
+    expect(res.status).toBe(201);
+    const data = prismaMock.paper.create.mock.calls[0][0].data;
+    expect(data.teamId).toBe("tA");
+    expect(data.uploadedBy).toBe("jo");
+    expect(data.arxiv ?? null).toBeNull();
+    expect(data.title).toBe("Some_CVF_Paper");
+  });
+
+  it("해석 불가(화이트리스트 밖) URL은 400 (생성 안 함)", async () => {
+    resolvePaperSourceMock.mockReturnValue(null);
+    const res = await POST(req({ sourceUrl: "https://evil.com/x.pdf" }));
+    expect(res.status).toBe(400);
+    expect(prismaMock.paper.create).not.toHaveBeenCalled();
   });
 
   it("파일 경로: teamId=활성 팀로 create", async () => {
