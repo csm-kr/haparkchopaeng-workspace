@@ -23,3 +23,18 @@ export interface FloatingReaction {
   /** 가로 위치(%) — 겹침 방지용 랜덤. */
   left: number;
 }
+
+/** 라이브에서 공유할 수 있는 발표자료(PDF 자산 보유). 표시용 최소 정보. */
+export interface SharablePresentation {
+  id: string;
+  title: string;
+}
+
+/** 현재 무대에 공유 중인 발표자료 상태(휘발 — 데이터 채널로 동기화). */
+export interface PresentState {
+  presentationId: string;
+  /** 현재 페이지(1-based). */
+  page: number;
+  /** 총 페이지 수(>=1). */
+  pageCount: number;
+}

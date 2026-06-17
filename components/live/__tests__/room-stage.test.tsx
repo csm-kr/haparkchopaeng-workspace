@@ -133,6 +133,71 @@ describe("RoomStage 화면공유", () => {
   });
 });
 
+describe("RoomStage 발표자료 공유", () => {
+  const present = { presentationId: "pres-1", page: 2, pageCount: 5 };
+
+  function renderPresent(opts?: {
+    currentMemberId?: string;
+    onChangePage?: () => void;
+  }) {
+    return render(
+      <RoomStage
+        members={members}
+        presenterId="jo"
+        currentMemberId={opts?.currentMemberId ?? "ha"}
+        hands={new Set()}
+        present={present}
+        onChangePage={opts?.onChangePage}
+      />,
+    );
+  }
+
+  it("발표 상태가 있으면 해당 페이지 이미지를 무대에 띄운다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const { container } = renderPresent();
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("/api/presentations/pres-1/pages/2");
+  });
+
+  it("발표자료 공유는 화면공유보다 우선한다(영상 대신 슬라이드)", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    lk.tracks = [share()]; // 화면공유 트랙이 있어도
+    const { container } = renderPresent();
+    // 슬라이드 이미지가 무대에 뜬다(발표자료 우선).
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/presentations/pres-1/pages/2",
+    );
+  });
+
+  it("발표자에겐 페이지 네비(이전/다음)가 있고 클릭 시 onChangePage 호출", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const onChangePage = vi.fn();
+    renderPresent({ currentMemberId: "jo", onChangePage });
+
+    fireEvent.click(screen.getByRole("button", { name: "다음 페이지" }));
+    expect(onChangePage).toHaveBeenCalledWith(3); // page 2 → 3
+
+    fireEvent.click(screen.getByRole("button", { name: "이전 페이지" }));
+    expect(onChangePage).toHaveBeenCalledWith(1); // page 2 → 1
+  });
+
+  it("시청자에겐 페이지 네비 버튼이 없고 위치만 표시한다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    renderPresent({ currentMemberId: "ha" }); // onChangePage 없음 = 시청자
+    expect(screen.queryByRole("button", { name: "다음 페이지" })).toBeNull();
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
+  });
+
+  it("발표 중에도 얼굴 스트립(−/+)이 함께 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    renderPresent();
+    expect(
+      screen.getByRole("button", { name: "얼굴 수 늘리기" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("RoomStage 전체화면", () => {
   // JSDOM은 Fullscreen API 미구현 — requestFullscreen이 호출되면 그 요소를
   // fullscreenElement로 두고 fullscreenchange를 디스패치해 실제 동작을 흉내낸다.

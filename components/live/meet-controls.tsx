@@ -8,6 +8,7 @@ import {
   Mic,
   MicOff,
   MonitorUp,
+  Presentation,
   Video,
   VideoOff,
 } from "lucide-react";
@@ -24,20 +25,32 @@ export const REACTIONS = ["👍", "🔥", "👏", "🤔", "🎉"] as const;
 export interface MeetControlsProps {
   /** 화면공유 grant 보유(발표자)면 화면공유 버튼 노출(R7). */
   canScreenShare: boolean;
+  /** 발표자면 발표자료 공유 버튼 노출(R7). */
+  canPresent: boolean;
+  /** 발표자료를 공유 중이면 버튼이 '공유 중지'로. */
+  presenting: boolean;
   handUp: boolean;
   panelOpen: boolean;
   onToggleHand: () => void;
   onReact: (emoji: string) => void;
   onTogglePanel: () => void;
+  /** 발표자료 공유 시작 — 자료 패널을 연다. */
+  onOpenPresent: () => void;
+  /** 발표자료 공유 중지. */
+  onStopPresent: () => void;
 }
 
 export function MeetControls({
   canScreenShare,
+  canPresent,
+  presenting,
   handUp,
   panelOpen,
   onToggleHand,
   onReact,
   onTogglePanel,
+  onOpenPresent,
+  onStopPresent,
 }: MeetControlsProps) {
   const {
     isMicrophoneEnabled,
@@ -118,6 +131,17 @@ export function MeetControls({
                 "화면 공유를 시작할 수 없어요. 권한을 확인해주세요.",
               )
             }
+          />
+        )}
+
+        {/* 발표자료 공유 — 업로드 PDF를 무대에 직접 띄운다(OS 화면공유 아님). 발표자만(R7). */}
+        {canPresent && (
+          <CtrlButton
+            label={presenting ? "공유 중지" : "발표자료"}
+            ariaLabel={presenting ? "발표자료 공유 중지" : "발표자료 공유"}
+            active={presenting}
+            icon={<Presentation size={18} aria-hidden="true" />}
+            onClick={presenting ? onStopPresent : onOpenPresent}
           />
         )}
 

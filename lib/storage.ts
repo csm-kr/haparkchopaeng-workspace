@@ -63,6 +63,16 @@ export async function uploadPdf(
   if (error) throw new Error(error.message);
 }
 
+/** 스토리지 객체를 Buffer로 내려받는다(서버 전용 — PDF 페이지 렌더 입력 등). 실패 시 throw. */
+export async function downloadObject(path: string): Promise<Buffer> {
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin.storage.from(bucketName()).download(path);
+  if (error || !data) {
+    throw new Error(error?.message ?? "객체를 내려받지 못했어요.");
+  }
+  return Buffer.from(await data.arrayBuffer());
+}
+
 /** 서버가 PNG 바이트를 스토리지에 올린다(figure 렌더 결과). 비공개 버킷·덮어쓰기 허용(재분석 시 갱신). */
 export async function uploadPng(path: string, body: Buffer): Promise<void> {
   await ensureBucket();

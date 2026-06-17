@@ -9,7 +9,17 @@ import {
   type TrackReference,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { Hand, Maximize, Mic, Minimize, Minus, Plus, Radio } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Hand,
+  Maximize,
+  Mic,
+  Minimize,
+  Minus,
+  Plus,
+  Radio,
+} from "lucide-react";
 import { Avatar, Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -17,12 +27,13 @@ import {
   type ActiveAnnotation,
   type DrawInput,
 } from "./annotation-overlay";
-import type { LiveMember } from "./types";
+import type { LiveMember, PresentState } from "./types";
 
 // 룸 stage — LiveKit 컨텍스트 안에서 참가자 타일을 렌더한다.
-// 화면공유가 있으면: 공유 화면(왼쪽 크게, '발표 중' 라벨) + 얼굴 세로 스트립(오른쪽, 개수 −/+ 조절).
+// 무대 우선순위: 발표자료 공유 > 화면공유 > 전원 그리드.
+//   공유(발표자료/화면)가 있으면: 공유 무대(왼쪽 크게, '발표 중' 라벨) + 얼굴 세로 스트립(오른쪽, 개수 −/+ 조절).
 //   보이는 얼굴 우선순위: 말하는 사람 → 발표자 → 나머지. 개수는 state라 공유 소스가 바뀌어도 유지된다.
-// 화면공유가 없으면: 전원 그리드.
+// 발표자료 공유 = 업로드 PDF를 페이지 이미지로 무대에 띄우고 페이지를 동기화(OS 화면공유 아님).
 // CRITICAL: 발화·역할·손들기·발표 표시는 색에만 의존하지 않는다 — 아이콘 + 텍스트 병행(R29). 토큰만(R20).
 
 export interface RoomStageProps {
@@ -31,10 +42,14 @@ export interface RoomStageProps {
   currentMemberId: string;
   /** 손든 참가자 identity 집합. */
   hands: Set<string>;
-  /** 화면공유 주석(펜/레이저) — 부모(MeetRoom)가 데이터 채널로 모은 것. */
+  /** 화면공유/발표자료 주석(펜/레이저) — 부모(MeetRoom)가 데이터 채널로 모은 것. */
   annotations?: ActiveAnnotation[];
   /** 발표자가 그릴 때 호출(없으면 그리기 비활성). */
   onDraw?: (input: DrawInput) => void;
+  /** 발표자료 공유 상태(있으면 화면공유보다 우선해 슬라이드 무대를 띄운다). */
+  present?: PresentState | null;
+  /** 발표자가 페이지를 넘길 때 호출(없으면 시청자 — 따라가기만). */
+  onChangePage?: (page: number) => void;
 }
 
 interface StripParticipant {
@@ -65,6 +80,8 @@ export function RoomStage({
   hands,
   annotations,
   onDraw,
+  present,
+  onChangePage,
 }: RoomStageProps) {
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
@@ -82,6 +99,10 @@ export function RoomStage({
 
   // 오른쪽 스트립에 보일 얼굴 수 — 공유 소스가 바뀌어도 유지(컴포넌트 state).
   const [visibleCount, setVisibleCount] = React.useState(2);
+
+  const isPresenterView = currentMemberId === presenterId;
+  const nameOf = (identity: string) =>
+    members.find((m) => m.id === identity)?.name ?? "발표자";
 
   const renderTile = (p: StripParticipant) => {
     const member = members.find((m) => m.id === p.identity);
@@ -106,30 +127,51 @@ export function RoomStage({
     );
   };
 
+  const stripTiles = orderParticipantsForStrip(participants, presenterId)
+    .slice(0, Math.min(visibleCount, participants.length))
+    .map(renderTile);
+
   return (
     <div className="flex flex-col gap-3">
       {/* 음성 재생(트랙 구독). 화면엔 보이지 않는다. */}
       <RoomAudioRenderer />
 
-      {screenShare ? (
-        <ScreenShareStage
-          screenShare={screenShare}
-          presenterName={
-            members.find(
-              (m) => m.id === (screenShare.participant?.identity ?? presenterId),
-            )?.name ?? "발표자"
-          }
-          isPresenter={currentMemberId === presenterId}
+      {present ? (
+        // 발표자료 공유 — 화면공유보다 우선. 슬라이드 이미지 + 페이지 네비.
+        <StageShell
+          presenterName={nameOf(presenterId)}
+          isPresenter={isPresenterView}
           annotations={annotations ?? []}
           onDraw={onDraw}
           count={visibleCount}
           max={participants.length}
           onCountChange={setVisibleCount}
+          main={<PresentImage present={present} />}
+          topCenter={
+            <PageNav
+              page={present.page}
+              pageCount={present.pageCount}
+              onChange={onChangePage}
+            />
+          }
         >
-          {orderParticipantsForStrip(participants, presenterId)
-            .slice(0, Math.min(visibleCount, participants.length))
-            .map(renderTile)}
-        </ScreenShareStage>
+          {stripTiles}
+        </StageShell>
+      ) : screenShare ? (
+        <StageShell
+          presenterName={nameOf(screenShare.participant?.identity ?? presenterId)}
+          isPresenter={isPresenterView}
+          annotations={annotations ?? []}
+          onDraw={onDraw}
+          count={visibleCount}
+          max={participants.length}
+          onCountChange={setVisibleCount}
+          main={
+            <VideoTrack trackRef={screenShare} className="size-full object-contain" />
+          }
+        >
+          {stripTiles}
+        </StageShell>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {participants.map(renderTile)}
@@ -140,13 +182,13 @@ export function RoomStage({
 }
 
 /**
- * 화면공유 stage — 공유 화면(크게) + 얼굴 스트립 + 주석. 전체화면 토글을 소유한다.
- * 전체화면에선 영상이 화면을 채우고 얼굴 스트립은 우측 오버레이로 떠 따라온다.
- * 좌표 정규화(annotation-overlay)는 박스 기준이라 전체화면에서도 모두에게 같은 위치.
+ * 공유 무대 셸 — 공유 콘텐츠(영상/슬라이드, 크게) + 얼굴 스트립 + 주석. 전체화면 토글을 소유한다.
+ * 화면공유·발표자료 공유가 공유(main)만 다르고 나머지(얼굴·주석·전체화면)는 동일하므로 공통화했다.
+ * 전체화면에선 main이 화면을 채우고 얼굴 스트립은 우측 오버레이로 떠 따라온다.
+ * 좌표 정규화(annotation-overlay)는 박스 기준이라 전체화면/슬라이드에서도 모두에게 같은 위치.
  * 그리기는 발표자만(onDraw 유무) — 시청자는 전체화면으로 크게 보기만(R7).
  */
-function ScreenShareStage({
-  screenShare,
+function StageShell({
   presenterName,
   isPresenter,
   annotations,
@@ -154,9 +196,10 @@ function ScreenShareStage({
   count,
   max,
   onCountChange,
+  main,
+  topCenter,
   children,
 }: {
-  screenShare: TrackReference;
   presenterName: string;
   isPresenter: boolean;
   annotations: ActiveAnnotation[];
@@ -164,6 +207,10 @@ function ScreenShareStage({
   count: number;
   max: number;
   onCountChange: (n: number) => void;
+  /** 무대 중앙 콘텐츠 — 화면공유 영상 또는 발표자료 페이지 이미지. */
+  main: React.ReactNode;
+  /** 무대 상단 중앙 오버레이(발표자료 페이지 네비 등). 없으면 미표시. */
+  topCenter?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -190,7 +237,7 @@ function ScreenShareStage({
       ref={containerRef}
       className={cn("flex gap-3", isFs && "relative h-screen w-screen bg-black")}
     >
-      {/* 공유 화면 + 발표 중 라벨 + 전체화면 토글 + 주석 */}
+      {/* 공유 콘텐츠 + 발표 중 라벨 + 페이지 네비 + 전체화면 토글 + 주석 */}
       <div
         className={cn(
           "relative overflow-hidden",
@@ -205,12 +252,10 @@ function ScreenShareStage({
             isFs ? "size-full bg-black" : "aspect-video bg-bg-subtle",
           )}
         >
-          <VideoTrack
-            trackRef={screenShare}
-            className="size-full object-contain"
-          />
+          {main}
         </div>
         <PresentingLabel name={presenterName} />
+        {topCenter}
         <FsButton isFs={isFs} onClick={toggleFs} />
         <AnnotationOverlay
           isPresenter={isPresenter}
@@ -228,6 +273,66 @@ function ScreenShareStage({
       >
         {children}
       </FaceStrip>
+    </div>
+  );
+}
+
+/** 발표자료 페이지 이미지 — 인증 자산 라우트라 next/image(서버 최적화)는 부적합, 일반 img(쿠키 전송). */
+function PresentImage({ present }: { present: PresentState }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/api/presentations/${present.presentationId}/pages/${present.page}`}
+      alt={`발표자료 ${present.page}페이지`}
+      className="size-full object-contain"
+    />
+  );
+}
+
+/**
+ * 발표자료 페이지 네비 — 무대 상단 중앙. 발표자(onChange 있음)는 이전/다음, 시청자는 위치 표시만.
+ * 색만이 아니라 아이콘+텍스트(R29).
+ */
+function PageNav({
+  page,
+  pageCount,
+  onChange,
+}: {
+  page: number;
+  pageCount: number;
+  onChange?: (page: number) => void;
+}) {
+  const label = `${page} / ${pageCount}`;
+  if (!onChange) {
+    return (
+      <span className="absolute top-2 left-1/2 z-20 -translate-x-1/2 rounded-md bg-bg-elevated/90 px-2.5 py-1 font-mono text-[12px] tabular-nums text-fg-muted shadow-[var(--shadow-sm)]">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <div className="pointer-events-auto absolute top-2 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-md bg-bg-elevated/90 px-1 py-0.5 shadow-[var(--shadow-sm)]">
+      <button
+        type="button"
+        aria-label="이전 페이지"
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+        className="grid size-7 place-items-center rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+      >
+        <ChevronLeft size={15} aria-hidden="true" />
+      </button>
+      <span className="min-w-12 text-center font-mono text-[12px] tabular-nums text-fg-muted">
+        {label}
+      </span>
+      <button
+        type="button"
+        aria-label="다음 페이지"
+        disabled={page >= pageCount}
+        onClick={() => onChange(page + 1)}
+        className="grid size-7 place-items-center rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+      >
+        <ChevronRight size={15} aria-hidden="true" />
+      </button>
     </div>
   );
 }

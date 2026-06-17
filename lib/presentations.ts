@@ -177,6 +177,38 @@ export async function getPresentationDetail(
   };
 }
 
+/**
+ * 라이브에서 공유할 수 있는 발표자료 목록 — PDF 자산을 가진 것만(무대에 페이지 렌더 가능).
+ * CRITICAL: 활성 팀으로 스코핑(R37). 가벼운 표시용이라 {id,title}만.
+ */
+export async function getShareablePresentations(
+  teamId: string,
+): Promise<{ id: string; title: string }[]> {
+  const rows = await prisma.presentation.findMany({
+    where: { teamId, assets: { some: { type: "pdf" } } },
+    orderBy: { date: "desc" },
+    select: { id: true, title: true },
+  });
+  return rows.map((p) => ({ id: p.id, title: p.title }));
+}
+
+/**
+ * 팀 소속 발표자료의 PDF 자산 객체 경로를 해소한다(페이지 렌더 라우트용). 없으면 null.
+ * CRITICAL: 활성 팀 일치 확인(R37/R19) — 다른 팀 자료면 null(404 등가). PDF가 여러 개면 첫 PDF.
+ */
+export async function getTeamPresentationPdfPath(
+  id: string,
+  teamId: string,
+): Promise<string | null> {
+  const pres = await prisma.presentation.findFirst({
+    where: { id, teamId },
+    select: { assets: { select: { type: true, url: true } } },
+  });
+  if (!pres) return null;
+  const pdf = pres.assets.find((a) => a.type === "pdf");
+  return pdf?.url ?? null;
+}
+
 /** 멘션 해소·반응 식별에 쓸 전체 멤버 목록(클라이언트 섬에 전달). */
 export async function getMemberRefs(): Promise<MemberRef[]> {
   const members = await prisma.member.findMany({

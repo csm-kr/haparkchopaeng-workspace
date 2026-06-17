@@ -40,8 +40,22 @@ function matchTeam(rowTeam: string, whereTeam: unknown): boolean {
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     presentation: {
-      findMany: vi.fn(async ({ where }: { where?: { teamId?: string } } = {}) =>
-        db.presentations.filter((p) => matchTeam(p.teamId, where?.teamId)),
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where?: { teamId?: string; assets?: { some?: { type?: string } } };
+        } = {}) => {
+          const someType = where?.assets?.some?.type;
+          return db.presentations.filter(
+            (p) =>
+              matchTeam(p.teamId, where?.teamId) &&
+              (someType === undefined ||
+                (p.assets as Array<{ type?: string }>).some(
+                  (a) => a.type === someType,
+                )),
+          );
+        },
       ),
       findFirst: vi.fn(
         async ({ where }: { where: { id: string; teamId?: string } }) =>
@@ -60,7 +74,12 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { getPresentations, getPresentationDetail } from "@/lib/presentations";
+import {
+  getPresentations,
+  getPresentationDetail,
+  getShareablePresentations,
+  getTeamPresentationPdfPath,
+} from "@/lib/presentations";
 
 function pres(id: string, teamId: string): PresRow {
   return {
@@ -110,5 +129,51 @@ describe("getPresentationDetail(id, teamId) — 단건 교차 팀 차단", () =>
   it("다른 팀 발표 자료 id면 null(존재 숨김 → 404)", async () => {
     const detail = await getPresentationDetail("b1", "tA");
     expect(detail).toBeNull();
+  });
+});
+
+describe("getShareablePresentations(teamId) — 라이브 공유 대상", () => {
+  it("활성 팀 + PDF 자산 보유 자료만 {id,title}로 반환한다", async () => {
+    db.presentations = [
+      { ...pres("p1", "tA"), title: "MoD 세미나", assets: [{ type: "pdf", url: "presentations/p1.pdf" }] },
+      { ...pres("p2", "tA"), title: "Q2 로드맵", assets: [{ type: "pdf", url: "presentations/p2.pdf" }] },
+      { ...pres("p3", "tA"), title: "노트만", assets: [{ type: "note", url: "presentations/p3.txt" }] },
+      { ...pres("b1", "tB"), title: "다른 팀", assets: [{ type: "pdf", url: "presentations/b1.pdf" }] },
+    ];
+    const out = await getShareablePresentations("tA");
+    // PDF 없는 p3 제외, 다른 팀 b1 제외.
+    expect(out).toEqual([
+      { id: "p1", title: "MoD 세미나" },
+      { id: "p2", title: "Q2 로드맵" },
+    ]);
+  });
+});
+
+describe("getTeamPresentationPdfPath(id, teamId)", () => {
+  it("팀 소속 + PDF 자산이 있으면 그 객체 경로를 반환한다", async () => {
+    db.presentations = [
+      {
+        ...pres("p1", "tA"),
+        assets: [
+          { type: "note", url: "presentations/p1.txt" },
+          { type: "pdf", url: "presentations/p1.pdf" },
+        ],
+      },
+    ];
+    expect(await getTeamPresentationPdfPath("p1", "tA")).toBe("presentations/p1.pdf");
+  });
+
+  it("다른 팀 자료면 null(교차 팀 차단)", async () => {
+    db.presentations = [
+      { ...pres("b1", "tB"), assets: [{ type: "pdf", url: "presentations/b1.pdf" }] },
+    ];
+    expect(await getTeamPresentationPdfPath("b1", "tA")).toBeNull();
+  });
+
+  it("PDF 자산이 없으면 null", async () => {
+    db.presentations = [
+      { ...pres("p1", "tA"), assets: [{ type: "note", url: "presentations/p1.txt" }] },
+    ];
+    expect(await getTeamPresentationPdfPath("p1", "tA")).toBeNull();
   });
 });
