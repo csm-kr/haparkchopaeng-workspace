@@ -4,6 +4,7 @@ import { LiveRoom } from "@/components/live";
 import { getSession } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
 import { getActiveSession } from "@/lib/live";
+import { getShareablePresentations } from "@/lib/presentations";
 import { listTeamMembers } from "@/lib/teams";
 
 // 세미나 라이브 — RSC. 현재 세션·멤버를 서버에서 직접 조회해 룸(인터랙티브 섬)에 주입(ADR-015).
@@ -18,9 +19,10 @@ export default async function MeetingPage() {
 
     // 활성 팀으로 스코핑(R37/ADR-020) — 룸은 팀 스코프. 팀이 없으면 라이브도 없다.
     const team = await getActiveTeam(session.memberId);
-    const [active, teamMembers] = await Promise.all([
+    const [active, teamMembers, shareablePresentations] = await Promise.all([
       team ? getActiveSession(team.id) : Promise.resolve(null),
       team ? listTeamMembers(team.id) : Promise.resolve([]),
+      team ? getShareablePresentations(team.id) : Promise.resolve([]),
     ]);
     // 라이브 룸 참가자 표시는 활성 팀 멤버만(ADR-020/R37) — 다른 팀 멤버 이름을 클라로 보내지 않는다.
     const members = teamMembers.map((m) => ({
@@ -46,6 +48,7 @@ export default async function MeetingPage() {
             : null
         }
         members={members}
+        shareablePresentations={shareablePresentations}
       />
     );
   } catch {

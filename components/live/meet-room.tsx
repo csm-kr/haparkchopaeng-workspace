@@ -7,7 +7,7 @@ import {
   useParticipants,
   useRoomContext,
 } from "@livekit/components-react";
-import { X } from "lucide-react";
+import { FileText, Radio, X } from "lucide-react";
 import {
   decodeLiveMessage,
   encodeLiveMessage,
@@ -19,13 +19,20 @@ import { PeoplePanel } from "./people-panel";
 import { ReactionsLayer } from "./reactions-layer";
 import { RoomStage } from "./room-stage";
 import type { ActiveAnnotation, DrawInput } from "./annotation-overlay";
-import type { ChatEntry, FloatingReaction, LiveMember } from "./types";
+import type {
+  ChatEntry,
+  FloatingReaction,
+  LiveMember,
+  PresentState,
+  SharablePresentation,
+} from "./types";
 
 // MeetRoom — LiveKit 룸 컨텍스트 안의 Google Meet 스타일 셸.
 // 채팅·반응·손들기는 별도 서버 없이 LiveKit 데이터 채널로만 주고받는다(휘발·미저장, ADR-019).
 // CRITICAL: 작성자는 LiveKit identity로 판별한다 — 페이로드 author 미신뢰(R3).
 // CRITICAL: decodeLiveMessage가 null이면(형식 위반) 무시한다(방어적).
-// CRITICAL: 화면공유는 발표자만(isPresenter → canScreenShare, R7).
+// CRITICAL: 화면공유·발표자료 공유는 발표자만(isPresenter → canScreenShare/canPresent, R7).
+// CRITICAL: 발표 상태(present)는 발표자 identity가 보낸 것만 신뢰한다(R3) — 시청자 위조 무시.
 
 const DATA_TOPIC = "live";
 
@@ -34,6 +41,8 @@ export interface MeetRoomProps {
   presenterId: string;
   currentMemberId: string;
   isPresenter: boolean;
+  /** 공유 가능한 발표자료(PDF 자산 보유) — 발표자가 무대에 띄울 수 있다(RSC 주입). */
+  presentations: SharablePresentation[];
 }
 
 type PanelTab = "chat" | "people" | "files";
@@ -43,6 +52,7 @@ export function MeetRoom({
   presenterId,
   currentMemberId,
   isPresenter,
+  presentations,
 }: MeetRoomProps) {
   const room = useRoomContext();
   const participants = useParticipants();
@@ -52,6 +62,12 @@ export function MeetRoom({
   const [floats, setFloats] = React.useState<FloatingReaction[]>([]);
   const [hands, setHands] = React.useState<Set<string>>(new Set());
   const [annots, setAnnots] = React.useState<ActiveAnnotation[]>([]);
+  // 발표자료 공유 상태(휘발) — 데이터 채널로 동기화. presentRef는 콜백/effect의 stale 클로저 방지.
+  const [present, setPresent] = React.useState<PresentState | null>(null);
+  const presentRef = React.useRef<PresentState | null>(null);
+  React.useEffect(() => {
+    presentRef.current = present;
+  }, [present]);
 
   const addFloat = React.useCallback((emoji: string) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -80,6 +96,23 @@ export function MeetRoom({
     setTimeout(() => setAnnots((prev) => prev.filter((x) => x.id !== id)), life);
   }, []);
 
+  // 발표 상태 반영 — 자료/페이지가 실제로 바뀔 때만 잔여 주석을 비운다(휘발 주석이라 안전).
+  // 늦은 입장 재전송처럼 같은 페이지를 다시 받을 땐 비우지 않는다(불필요한 깜빡임 방지).
+  const applyPresent = React.useCallback(
+    (p: { presentationId: string | null; page: number; pageCount: number }) => {
+      const cur = presentRef.current;
+      const changed =
+        !cur || p.presentationId !== cur.presentationId || p.page !== cur.page;
+      if (changed) setAnnots([]);
+      setPresent(
+        p.presentationId === null
+          ? null
+          : { presentationId: p.presentationId, page: p.page, pageCount: p.pageCount },
+      );
+    },
+    [],
+  );
+
   // 수신: 작성자는 identity로 판별(R3), 형식 위반은 무시.
   const onMessage = React.useCallback(
     (msg: { payload: Uint8Array; from?: { identity?: string } }) => {
@@ -95,11 +128,14 @@ export function MeetRoom({
         addFloat(m.emoji);
       } else if (m.kind === "hand") {
         setHand(identity, m.up);
-      } else {
+      } else if (m.kind === "annot") {
         addAnnot(m);
+      } else if (m.kind === "present") {
+        // 발표 상태는 발표자만 신뢰(R3) — 시청자가 위조해도 무대가 바뀌지 않는다.
+        if (identity === presenterId) applyPresent(m);
       }
     },
-    [addFloat, setHand, addAnnot],
+    [addFloat, setHand, addAnnot, applyPresent, presenterId],
   );
 
   useDataChannel(DATA_TOPIC, onMessage);
@@ -152,6 +188,67 @@ export function MeetRoom({
     setHand(currentMemberId, up);
   }
 
+  // 발표자: 자료 공유 시작 — 페이지 수를 받아 1쪽부터 전파(낙관적 로컬 반영). 실패는 조용히 무시(graceful).
+  const startPresent = React.useCallback(
+    async (presentationId: string) => {
+      try {
+        const res = await fetch(`/api/presentations/${presentationId}/pages`);
+        const json = (await res.json().catch(() => null)) as
+          | { data?: { count?: number } }
+          | null;
+        const count = json?.data?.count;
+        if (!res.ok || typeof count !== "number" || count < 1) return;
+        publish({ kind: "present", presentationId, page: 1, pageCount: count, at: Date.now() });
+        applyPresent({ presentationId, page: 1, pageCount: count });
+        setPanel(null); // 공유를 켜면 패널을 닫아 무대를 크게
+      } catch {
+        // 네트워크 실패 — 무대 변화 없음(graceful, R30)
+      }
+    },
+    [publish, applyPresent],
+  );
+
+  // 발표자: 페이지 이동 — [1, pageCount] 클램프 후 전파.
+  const changePage = React.useCallback(
+    (page: number) => {
+      const cur = presentRef.current;
+      if (!cur) return;
+      const p = Math.min(Math.max(1, page), cur.pageCount);
+      publish({
+        kind: "present",
+        presentationId: cur.presentationId,
+        page: p,
+        pageCount: cur.pageCount,
+        at: Date.now(),
+      });
+      applyPresent({ presentationId: cur.presentationId, page: p, pageCount: cur.pageCount });
+    },
+    [publish, applyPresent],
+  );
+
+  // 발표자: 공유 중지 — presentationId:null 전파.
+  const stopPresent = React.useCallback(() => {
+    publish({ kind: "present", presentationId: null, page: 1, pageCount: 1, at: Date.now() });
+    applyPresent({ presentationId: null, page: 1, pageCount: 1 });
+  }, [publish, applyPresent]);
+
+  // 늦은 입장 동기화: 참가자가 늘면(새로 입장) 발표자가 현재 발표 상태를 재전송한다.
+  // 데이터 채널은 과거 메시지를 재생하지 않으므로, 새 참가자에게 현재 페이지를 다시 알린다(ADR-019).
+  const prevParticipantCount = React.useRef(participants.length);
+  React.useEffect(() => {
+    const cur = presentRef.current;
+    if (isPresenter && cur && participants.length > prevParticipantCount.current) {
+      publish({
+        kind: "present",
+        presentationId: cur.presentationId,
+        page: cur.page,
+        pageCount: cur.pageCount,
+        at: Date.now(),
+      });
+    }
+    prevParticipantCount.current = participants.length;
+  }, [participants.length, isPresenter, publish]);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-3">
@@ -163,6 +260,8 @@ export function MeetRoom({
             hands={hands}
             annotations={annots}
             onDraw={isPresenter ? sendAnnot : undefined}
+            present={present}
+            onChangePage={isPresenter ? changePage : undefined}
           />
           <ReactionsLayer reactions={floats} />
         </div>
@@ -212,7 +311,15 @@ export function MeetRoom({
                   hands={hands}
                 />
               )}
-              {panel === "files" && <FilesPanel />}
+              {panel === "files" && (
+                <PresentationsPanel
+                  presentations={presentations}
+                  currentPresentationId={present?.presentationId ?? null}
+                  isPresenter={isPresenter}
+                  onShare={startPresent}
+                  onStop={stopPresent}
+                />
+              )}
             </div>
           </aside>
         )}
@@ -220,11 +327,15 @@ export function MeetRoom({
 
       <MeetControls
         canScreenShare={isPresenter}
+        canPresent={isPresenter}
+        presenting={!!present}
         handUp={handUpSelf}
         panelOpen={panel !== null}
         onToggleHand={toggleHand}
         onReact={react}
         onTogglePanel={() => setPanel((p) => (p ? null : "chat"))}
+        onOpenPresent={() => setPanel("files")}
+        onStopPresent={stopPresent}
       />
     </div>
   );
@@ -255,20 +366,81 @@ function PanelTabButton({
   );
 }
 
-// 자료 패널 — 세션↔발표자료 연결이 스키마에 없으므로 가짜 데이터를 만들지 않는다(R21).
-// 정직하게 발표 자료 목록으로 가는 링크 하나만 둔다(세션별 연결은 미결, ISSUES).
-function FilesPanel() {
+// 자료 패널 — 공유 가능한 발표자료(PDF) 목록. 발표자는 무대에 띄우거나(공유) 내릴 수 있고(중지),
+// 시청자는 현재 무엇이 발표 중인지 본다. 공유할 자료가 없으면 발표 자료 목록으로 안내(R26/R30).
+function PresentationsPanel({
+  presentations,
+  currentPresentationId,
+  isPresenter,
+  onShare,
+  onStop,
+}: {
+  presentations: SharablePresentation[];
+  currentPresentationId: string | null;
+  isPresenter: boolean;
+  onShare: (id: string) => void;
+  onStop: () => void;
+}) {
+  if (presentations.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
+        <p className="text-[12px] text-fg-subtle">
+          공유할 수 있는 PDF 발표자료가 아직 없어요.
+        </p>
+        <Link
+          href="/presentations"
+          className="rounded-sm border border-border-strong px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-bg-hover"
+        >
+          발표 자료 보러 가기
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
-      <p className="text-[12px] text-fg-subtle">
-        이 세미나에 연결된 자료는 아직 없어요.
-      </p>
-      <Link
-        href="/presentations"
-        className="rounded-sm border border-border-strong px-3 py-1.5 text-[12px] font-medium text-fg hover:bg-bg-hover"
-      >
-        발표 자료 보러 가기
-      </Link>
-    </div>
+    <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+      {presentations.map((p) => {
+        const active = p.id === currentPresentationId;
+        return (
+          <li
+            key={p.id}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-bg-hover"
+          >
+            <FileText
+              size={15}
+              aria-hidden="true"
+              className="shrink-0 text-fg-subtle"
+            />
+            <span className="min-w-0 flex-1 truncate text-[12px] text-fg">
+              {p.title}
+            </span>
+            {active && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-busy px-1.5 py-0.5 text-[10px] font-semibold text-accent-fg">
+                <Radio size={10} aria-hidden="true" />
+                발표 중
+              </span>
+            )}
+            {isPresenter &&
+              (active ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="shrink-0 rounded-sm border border-border-strong px-2 py-0.5 text-[11px] font-medium text-fg hover:bg-bg-hover"
+                >
+                  중지
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onShare(p.id)}
+                  className="shrink-0 rounded-sm bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent hover:bg-accent-soft/80"
+                >
+                  공유
+                </button>
+              ))}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

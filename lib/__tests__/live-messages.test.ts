@@ -48,6 +48,79 @@ describe("encode/decode 왕복", () => {
     };
     expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
   });
+
+  it("present (발표자료 공유 중)", () => {
+    const m: LiveMessage = {
+      kind: "present",
+      presentationId: "pres-1",
+      page: 3,
+      pageCount: 10,
+      at: 6000,
+    };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
+
+  it("present (공유 중지 — presentationId null)", () => {
+    const m: LiveMessage = {
+      kind: "present",
+      presentationId: null,
+      page: 1,
+      pageCount: 1,
+      at: 7000,
+    };
+    expect(decodeLiveMessage(encodeLiveMessage(m))).toEqual(m);
+  });
+});
+
+describe("present 검증", () => {
+  const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+
+  it("page는 [1, pageCount]로 clamp된다", () => {
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: "p", page: 0, pageCount: 5, at: 1 }),
+      ),
+    ).toMatchObject({ kind: "present", page: 1 });
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: "p", page: 99, pageCount: 5, at: 1 }),
+      ),
+    ).toMatchObject({ kind: "present", page: 5 });
+  });
+
+  it("pageCount는 최소 1로 clamp되고 소수는 내림한다", () => {
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: "p", page: 1, pageCount: 0, at: 1 }),
+      ),
+    ).toMatchObject({ kind: "present", pageCount: 1, page: 1 });
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: "p", page: 2.7, pageCount: 9.9, at: 1 }),
+      ),
+    ).toMatchObject({ kind: "present", page: 2, pageCount: 9 });
+  });
+
+  it("page/pageCount가 숫자가 아니면 null", () => {
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: "p", page: "3", pageCount: 5, at: 1 }),
+      ),
+    ).toBeNull();
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: "p", page: 3, pageCount: null, at: 1 }),
+      ),
+    ).toBeNull();
+  });
+
+  it("presentationId가 문자열도 null도 아니면 null", () => {
+    expect(
+      decodeLiveMessage(
+        enc({ kind: "present", presentationId: 42, page: 1, pageCount: 1, at: 1 }),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("chat 길이 clamp", () => {

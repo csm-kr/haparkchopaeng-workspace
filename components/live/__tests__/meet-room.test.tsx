@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 // MeetRoom 통합 테스트 — 데이터 채널 송수신을 검증한다.
 // 송신: publishData(encodeLiveMessage(...)). 수신: DataReceived→decodeLiveMessage→화면 반영.
@@ -51,13 +58,19 @@ const members = [
   { id: "jo", name: "조성민", initial: "조", color: "var(--m-jo)" },
 ];
 
-function renderRoom() {
+function renderRoom(opts?: {
+  presenterId?: string;
+  currentMemberId?: string;
+  isPresenter?: boolean;
+  presentations?: Array<{ id: string; title: string }>;
+}) {
   return render(
     <MeetRoom
       members={members}
-      presenterId="ha"
-      currentMemberId="jo"
-      isPresenter={false}
+      presenterId={opts?.presenterId ?? "ha"}
+      currentMemberId={opts?.currentMemberId ?? "jo"}
+      isPresenter={opts?.isPresenter ?? false}
+      presentations={opts?.presentations ?? []}
     />,
   );
 }
@@ -139,5 +152,110 @@ describe("MeetRoom", () => {
     const floats = container.querySelectorAll("[data-reaction]");
     expect(floats).toHaveLength(1);
     expect(floats[0].textContent).toBe("🎉");
+  });
+});
+
+describe("MeetRoom 발표자료 공유", () => {
+  it("발표자 identity의 present 수신 → 슬라이드 무대로 전환(R3 신뢰)", () => {
+    lk.participants = [{ identity: "ha" }, { identity: "jo" }];
+    const { container } = renderRoom({ presenterId: "ha", currentMemberId: "jo" });
+
+    act(() => {
+      lk.onMessage?.({
+        payload: encodeLiveMessage({
+          kind: "present",
+          presentationId: "pres-1",
+          page: 1,
+          pageCount: 3,
+          at: 1,
+        }),
+        from: { identity: "ha" }, // 발표자
+      });
+    });
+
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/presentations/pres-1/pages/1",
+    );
+  });
+
+  it("비-발표자가 위조한 present는 무시한다(R3)", () => {
+    lk.participants = [{ identity: "ha" }, { identity: "jo" }];
+    const { container } = renderRoom({ presenterId: "ha", currentMemberId: "jo" });
+
+    act(() => {
+      lk.onMessage?.({
+        payload: encodeLiveMessage({
+          kind: "present",
+          presentationId: "evil",
+          page: 1,
+          pageCount: 3,
+          at: 1,
+        }),
+        from: { identity: "jo" }, // 발표자 아님
+      });
+    });
+
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("발표자가 자료를 공유하면 /pages로 페이지 수를 받아 present를 publish한다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { count: 5 } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    lk.participants = [{ identity: "jo" }];
+
+    renderRoom({
+      presenterId: "jo",
+      currentMemberId: "jo",
+      isPresenter: true,
+      presentations: [{ id: "pres-1", title: "MoD 세미나" }],
+    });
+
+    // 컨트롤바의 '발표자료 공유' → 자료 패널 열림 → 목록의 '공유'
+    fireEvent.click(screen.getByRole("button", { name: "발표자료 공유" }));
+    fireEvent.click(await screen.findByRole("button", { name: "공유" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/presentations/pres-1/pages"),
+    );
+    await waitFor(() => {
+      const presentCalls = lk.publishData.mock.calls.filter(
+        ([p]) => decodeLiveMessage(p as Uint8Array)?.kind === "present",
+      );
+      expect(presentCalls.length).toBeGreaterThanOrEqual(1);
+      expect(decodeLiveMessage(presentCalls[0][0] as Uint8Array)).toMatchObject({
+        kind: "present",
+        presentationId: "pres-1",
+        page: 1,
+        pageCount: 5,
+      });
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("발표자료 공유 버튼은 발표자에게만 보인다(R7)", () => {
+    const { rerender } = renderRoom({
+      presenterId: "jo",
+      currentMemberId: "jo",
+      isPresenter: true,
+      presentations: [{ id: "pres-1", title: "MoD" }],
+    });
+    expect(
+      screen.getByRole("button", { name: "발표자료 공유" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <MeetRoom
+        members={members}
+        presenterId="ha"
+        currentMemberId="jo"
+        isPresenter={false}
+        presentations={[{ id: "pres-1", title: "MoD" }]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "발표자료 공유" })).toBeNull();
   });
 });

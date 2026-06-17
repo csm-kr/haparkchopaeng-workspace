@@ -7,7 +7,7 @@ import { useLive } from "@/components/providers";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { MeetHeader } from "./meet-header";
 import { MeetRoom } from "./meet-room";
-import type { LiveMember } from "./types";
+import type { LiveMember, SharablePresentation } from "./types";
 
 // 세미나 라이브 룸 — LiveKit 다자간 화상(ADR-019, ADR-002 대체). 'use client' 인터랙티브 섬(R32).
 // CRITICAL: `live`는 화면 state로 보관하지 않는다 — 앱 레벨 useLive()가 단일 소스(ADR-001/R5).
@@ -32,6 +32,8 @@ export interface LiveRoomProps {
   /** 서버(RSC)에서 주입한 첫 렌더 스냅샷(ADR-015). 없으면 라이브 없음. */
   initialSession: LiveRoomSession | null;
   members: LiveRoomMember[];
+  /** 공유 가능한 발표자료(PDF 자산 보유, 활성 팀). 발표자가 무대에 띄울 수 있다. */
+  shareablePresentations: SharablePresentation[];
 }
 
 /** 라우트가 준 LiveKit 접속 정보(참가자별·단기). */
@@ -47,6 +49,7 @@ export function LiveRoom({
   currentMemberId,
   initialSession,
   members,
+  shareablePresentations,
 }: LiveRoomProps) {
   const { live, setLive } = useLive();
 
@@ -304,6 +307,7 @@ export function LiveRoom({
             presenterId={session.presenterId}
             currentMemberId={currentMemberId}
             isPresenter={isPresenter}
+            presentations={shareablePresentations}
           />
         )}
       </LiveKitRoom>

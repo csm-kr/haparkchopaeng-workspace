@@ -125,6 +125,7 @@ function renderRoom(props: {
         currentMemberId={props.currentMemberId}
         initialSession={props.initialSession}
         members={members}
+        shareablePresentations={[]}
       />
     </LiveProvider>,
   );

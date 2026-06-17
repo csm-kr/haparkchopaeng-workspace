@@ -32,11 +32,15 @@ function renderControls(
   return render(
     <MeetControls
       canScreenShare={true}
+      canPresent={true}
+      presenting={false}
       handUp={false}
       panelOpen={false}
       onToggleHand={vi.fn()}
       onReact={vi.fn()}
       onTogglePanel={vi.fn()}
+      onOpenPresent={vi.fn()}
+      onStopPresent={vi.fn()}
       {...overrides}
     />,
   );
@@ -95,5 +99,26 @@ describe("MeetControls", () => {
     renderControls({ onTogglePanel });
     fireEvent.click(screen.getByRole("button", { name: /채팅/ }));
     expect(onTogglePanel).toHaveBeenCalled();
+  });
+
+  it("발표자: 발표자료 공유 클릭 → onOpenPresent", () => {
+    const onOpenPresent = vi.fn();
+    renderControls({ canPresent: true, presenting: false, onOpenPresent });
+    fireEvent.click(screen.getByRole("button", { name: "발표자료 공유" }));
+    expect(onOpenPresent).toHaveBeenCalled();
+  });
+
+  it("공유 중이면 버튼이 '공유 중지' → onStopPresent", () => {
+    const onStopPresent = vi.fn();
+    renderControls({ canPresent: true, presenting: true, onStopPresent });
+    fireEvent.click(screen.getByRole("button", { name: "발표자료 공유 중지" }));
+    expect(onStopPresent).toHaveBeenCalled();
+  });
+
+  it("시청자(발표자 아님): 발표자료 공유 버튼이 보이지 않는다(R7)", () => {
+    renderControls({ canPresent: false });
+    expect(
+      screen.queryByRole("button", { name: /발표자료 공유/ }),
+    ).toBeNull();
   });
 });
