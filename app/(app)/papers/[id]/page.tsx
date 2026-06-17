@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
-import { AnalysisView, DeletePaperButton } from "@/components/analyzer";
+import { AnalysisView, DeletePaperButton, PaperTitleEditable } from "@/components/analyzer";
 import { getSession } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
 import { getExpectedAnalysisMs, getPaperDetail } from "@/lib/papers";
@@ -135,9 +135,7 @@ export default async function PaperDetailPage({ params }: PageProps) {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
           <header className="flex flex-col gap-1.5">
-            <h1 className="text-[28px] leading-tight font-bold tracking-[-0.025em] text-fg">
-              {paper.title}
-            </h1>
+            <PaperTitleEditable paperId={paper.id} initialTitle={paper.title} />
             <p className="text-[13px] text-fg-muted">{paper.authors}</p>
             <p className="text-[12px] text-fg-subtle">
               {metaLine([
