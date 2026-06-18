@@ -189,6 +189,27 @@ describe("RoomStage 발표자료 공유", () => {
     expect(screen.getByText("2 / 5")).toBeInTheDocument();
   });
 
+  it("발표자는 키보드 ←/→로도 페이지를 넘긴다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const onChangePage = vi.fn();
+    renderPresent({ currentMemberId: "jo", onChangePage });
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(onChangePage).toHaveBeenCalledWith(3); // page 2 → 3
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(onChangePage).toHaveBeenCalledWith(1); // page 2 → 1
+  });
+
+  it("시청자 키보드 ←/→는 페이지를 넘기지 않는다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const onChangePage = vi.fn();
+    renderPresent({ currentMemberId: "ha" }); // onChangePage 없음 = 시청자
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(onChangePage).not.toHaveBeenCalled();
+  });
+
   it("발표 중에도 얼굴 스트립(−/+)이 함께 보인다", () => {
     lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
     renderPresent();
