@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MoreHorizontal } from "lucide-react";
 import { Avatar, Badge, Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -75,12 +76,18 @@ export function TeamManager({
   currentUserId,
   currentUserRole,
 }: TeamManagerProps) {
+  const router = useRouter();
   const [members, setMembers] = React.useState(initialMembers);
   const [invites, setInvites] = React.useState(initialInvites);
 
   const isOwner = currentUserRole === "owner";
   const isAdmin = currentUserRole === "admin";
   const canManage = isOwner || isAdmin;
+  const canLeave = currentUserRole !== "owner"; // owner는 탈퇴 불가(팀당 owner ≥ 1)
+
+  // 팀 나가기 확인
+  const [confirmLeave, setConfirmLeave] = React.useState(false);
+  const [leaving, setLeaving] = React.useState(false);
 
   // 초대 발급 폼
   const [inviteRole, setInviteRole] = React.useState<InviteRole>("member");
@@ -212,6 +219,20 @@ export function TeamManager({
     } finally {
       setRemoving(false);
       setRemoveTarget(null);
+    }
+  }
+
+  // 본인 탈퇴(비-owner) — 기존 멤버 DELETE 라우트가 isSelf를 허용(서버가 최종, R19). 성공 시 허브로.
+  async function confirmLeaveTeam() {
+    setLeaving(true);
+    setActionError(null);
+    try {
+      await callJson(`/api/teams/${teamSlug}/members/${currentUserId}`, { method: "DELETE" });
+      router.push("/teams");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "팀을 나가지 못했어요.");
+      setLeaving(false);
+      setConfirmLeave(false);
     }
   }
 
@@ -393,6 +414,12 @@ export function TeamManager({
                     )}
                   </span>
                 )}
+
+                {isSelf && canLeave && (
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmLeave(true)}>
+                    팀 나가기
+                  </Button>
+                )}
               </li>
             );
           })}
@@ -458,6 +485,36 @@ export function TeamManager({
               </Button>
               <Button variant="danger" size="sm" onClick={confirmRemove} disabled={removing}>
                 {removing ? "내보내는 중…" : "내보내기"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 팀 나가기 확인 — 파괴적은 아니나 접근 상실이라 확인(R27). */}
+      {confirmLeave && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_oklch,var(--fg)_28%,transparent)] p-4"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setConfirmLeave(false);
+          }}
+        >
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-label="팀 나가기 확인"
+            className="flex w-full max-w-sm flex-col gap-3 p-5"
+          >
+            <p className="text-[15px] font-semibold text-fg">이 팀을 나갈까요?</p>
+            <p className="text-[13px] text-fg-muted">
+              나가면 더 이상 이 팀에 접근할 수 없어요. 다시 합류하려면 초대를 받아야 해요.
+            </p>
+            <div className="mt-1 flex items-center justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setConfirmLeave(false)}>
+                취소
+              </Button>
+              <Button variant="danger" size="sm" onClick={confirmLeaveTeam} disabled={leaving}>
+                {leaving ? "나가는 중…" : "나가기"}
               </Button>
             </div>
           </Card>

@@ -164,6 +164,26 @@ export interface TeamMemberRow {
   role: TeamRole;
 }
 
+/**
+ * 팀과 그 팀에 속한 모든 데이터를 삭제한다(원자적). Membership·Invite는 Team FK(onDelete: Cascade)로,
+ * Paper/Presentation/ScheduleMonth/LiveSession의 자식들은 각자의 FK cascade로 자동 정리된다.
+ * teamId만 가진(FK 없는) 테이블은 여기서 수동 삭제한다.
+ * CRITICAL: MemberLedger는 FineConfig의 required 관계 자식(기본 Restrict)이라 FineConfig보다 먼저 지운다.
+ * Out: Supabase 스토리지 파일·Job(payload.paperId)은 지우지 않는다(DB-only, 합의된 범위).
+ */
+export async function deleteTeam(teamId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.memberLedger.deleteMany({ where: { teamId } });
+    await tx.fineConfig.deleteMany({ where: { teamId } });
+    await tx.paper.deleteMany({ where: { teamId } }); // → Analysis·Figure·SectionNote cascade
+    await tx.presentation.deleteMany({ where: { teamId } }); // → Asset·Version·Comment→Reaction cascade
+    await tx.scheduleMonth.deleteMany({ where: { teamId } }); // → ScheduleWeek cascade
+    await tx.liveSession.deleteMany({ where: { teamId } }); // → Participant cascade
+    await tx.teamInviteAcceptance.deleteMany({ where: { teamId } }); // 관계 없음 — 수동
+    await tx.team.delete({ where: { id: teamId } }); // → Membership·Invite cascade
+  });
+}
+
 /** 한 팀의 멤버 목록(합류 순). 멤버십 ⨝ Member. 관리 화면이 props로 받는다(ADR-015/R32). */
 export async function listTeamMembers(teamId: string): Promise<TeamMemberRow[]> {
   const memberships = await prisma.membership.findMany({

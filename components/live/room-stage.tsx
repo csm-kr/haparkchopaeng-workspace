@@ -100,6 +100,27 @@ export function RoomStage({
   // 오른쪽 스트립에 보일 얼굴 수 — 공유 소스가 바뀌어도 유지(컴포넌트 state).
   const [visibleCount, setVisibleCount] = React.useState(2);
 
+  // 발표자 키보드 내비 — 발표 중(onChangePage 보유=발표자)일 때 ←/→로 페이지를 넘긴다.
+  // 채팅 등 입력 중일 땐 무시한다(폼 요소 타깃). 범위 클램프는 호출부(changePage)가 한다.
+  React.useEffect(() => {
+    if (!present || !onChangePage) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      )
+        return;
+      e.preventDefault();
+      onChangePage(present.page + (e.key === "ArrowRight" ? 1 : -1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [present, onChangePage]);
+
   const isPresenterView = currentMemberId === presenterId;
   const nameOf = (identity: string) =>
     members.find((m) => m.id === identity)?.name ?? "발표자";
@@ -279,6 +300,17 @@ function StageShell({
 
 /** 발표자료 페이지 이미지 — 인증 자산 라우트라 next/image(서버 최적화)는 부적합, 일반 img(쿠키 전송). */
 function PresentImage({ present }: { present: PresentState }) {
+  // 인접 페이지 프리로드 — 다음/이전을 미리 받아 두면(서버 렌더 + 라우트 캐시 max-age=3600)
+  // 발표자가 넘길 때(또는 시청자가 따라갈 때) 페이지가 바로 뜬다.
+  React.useEffect(() => {
+    for (const n of [present.page + 1, present.page - 1]) {
+      if (n >= 1 && n <= present.pageCount) {
+        const img = new Image();
+        img.src = `/api/presentations/${present.presentationId}/pages/${n}`;
+      }
+    }
+  }, [present.presentationId, present.page, present.pageCount]);
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
