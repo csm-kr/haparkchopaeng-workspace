@@ -6,6 +6,10 @@ import type { PendingInviteView, TeamMemberView } from "../types";
 // 팀 관리 섬 — RTL. 멀티팀(ADR-018): 역할 영어 표기(owner/admin/member)·이메일 입력 없음·토큰 초대 링크 생성.
 // 관리 액션은 서버(route handler)가 최종 강제(R19) — 여기선 UI 게이팅·확인·fetch 호출을 확인한다.
 
+// 팀 나가기 성공 시 /teams로 이동하므로 useRouter를 모킹한다.
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
+
 const members: TeamMemberView[] = [
   { id: "ha", name: "하수현", handle: "@hajieun", email: "ha@habakjopaeng.team", role: "owner", color: "var(--m-ha)", initial: "하" },
   { id: "bak", name: "박진희", handle: "@parksj", email: "park@habakjopaeng.team", role: "admin", color: "var(--m-bak)", initial: "박" },
@@ -40,6 +44,7 @@ function renderTeam(opts?: {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  pushMock.mockClear();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -205,5 +210,33 @@ describe("TeamManager", () => {
     expect(
       screen.queryByRole("region", { name: "대기 중인 초대" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("비-owner 본인 행에는 '팀 나가기' 버튼이 있다", () => {
+    renderTeam({ currentUserId: "jo", currentUserRole: "member" });
+    expect(screen.getByRole("button", { name: "팀 나가기" })).toBeInTheDocument();
+  });
+
+  it("owner 본인 행에는 '팀 나가기' 버튼이 없다(owner는 탈퇴 불가)", () => {
+    renderTeam({ currentUserId: "ha", currentUserRole: "owner" });
+    expect(screen.queryByRole("button", { name: "팀 나가기" })).not.toBeInTheDocument();
+  });
+
+  it("팀 나가기는 확인을 거쳐 self DELETE 멤버 API를 호출하고 /teams로 이동한다(R27)", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonRes({ memberId: "jo" }));
+    renderTeam({ currentUserId: "jo", currentUserRole: "member" });
+
+    fireEvent.click(screen.getByRole("button", { name: "팀 나가기" }));
+    const dialog = screen.getByRole("dialog", { name: "팀 나가기 확인" });
+    expect(fetchMock).not.toHaveBeenCalled(); // 확인 전엔 호출 안 함
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "나가기" }));
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/teams/crew/members/jo",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(pushMock).toHaveBeenCalledWith("/teams");
   });
 });
