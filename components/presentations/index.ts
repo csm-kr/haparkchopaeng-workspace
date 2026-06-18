@@ -9,6 +9,7 @@ export { PdfSlideViewer } from "./pdf-slide-viewer";
 export type { PdfSlideViewerProps } from "./pdf-slide-viewer";
 export { CommentThread } from "./comment-thread";
 export { DeletePresentationButton } from "./delete-presentation-button";
+export { PresentationTitleEditable } from "./presentation-title";
 export type { CommentThreadProps } from "./comment-thread";
 export { parseMentions } from "./mentions";
 export type { MentionSegment } from "./mentions";
