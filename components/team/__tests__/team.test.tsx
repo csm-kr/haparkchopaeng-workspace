@@ -10,6 +10,10 @@ import type { PendingInviteView, TeamMemberView } from "../types";
 const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
 
+// 팀 삭제는 deleteTeamAction(Server Action)을 호출한다 — 모킹.
+const { deleteTeamActionMock } = vi.hoisted(() => ({ deleteTeamActionMock: vi.fn() }));
+vi.mock("@/app/teams/actions", () => ({ deleteTeamAction: deleteTeamActionMock }));
+
 const members: TeamMemberView[] = [
   { id: "ha", name: "하수현", handle: "@hajieun", email: "ha@habakjopaeng.team", role: "owner", color: "var(--m-ha)", initial: "하" },
   { id: "bak", name: "박진희", handle: "@parksj", email: "park@habakjopaeng.team", role: "admin", color: "var(--m-bak)", initial: "박" },
@@ -30,14 +34,18 @@ function renderTeam(opts?: {
   currentUserRole?: TeamMemberView["role"];
   currentUserId?: string;
   invites?: PendingInviteView[];
+  canDeleteTeam?: boolean;
+  teamName?: string;
 }) {
   render(
     <TeamManager
       teamSlug="crew"
+      teamName={opts?.teamName ?? "Crew"}
       members={members}
       invites={opts?.invites ?? invites}
       currentUserId={opts?.currentUserId ?? "ha"}
       currentUserRole={opts?.currentUserRole ?? "owner"}
+      canDeleteTeam={opts?.canDeleteTeam ?? false}
     />,
   );
 }
@@ -132,6 +140,16 @@ describe("TeamManager", () => {
     );
   });
 
+  it("admin 시점에는 초대 회수 버튼이 없다(회수는 owner만)", () => {
+    renderTeam({ currentUserRole: "admin", currentUserId: "bak" });
+    const section = screen.getByRole("region", { name: "대기 중인 초대" });
+    // 링크(resend)는 보이되 회수는 owner 전용이라 숨긴다.
+    expect(
+      within(section).getAllByRole("button", { name: "초대 링크 다시 보기" }).length,
+    ).toBeGreaterThan(0);
+    expect(within(section).queryByText("회수")).not.toBeInTheDocument();
+  });
+
   it("대기 초대의 '링크' 버튼은 resend API로 초대 링크를 다시 노출한다", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -220,6 +238,35 @@ describe("TeamManager", () => {
   it("owner 본인 행에는 '팀 나가기' 버튼이 없다(owner는 탈퇴 불가)", () => {
     renderTeam({ currentUserId: "ha", currentUserRole: "owner" });
     expect(screen.queryByRole("button", { name: "팀 나가기" })).not.toBeInTheDocument();
+  });
+
+  it("canDeleteTeam이면 '팀 삭제' 버튼을 보인다", () => {
+    renderTeam({ currentUserRole: "owner", canDeleteTeam: true });
+    expect(screen.getByRole("button", { name: "팀 삭제" })).toBeInTheDocument();
+  });
+
+  it("canDeleteTeam이 아니면 '팀 삭제' 버튼이 없다", () => {
+    renderTeam({ currentUserRole: "admin", currentUserId: "bak", canDeleteTeam: false });
+    expect(screen.queryByRole("button", { name: "팀 삭제" })).not.toBeInTheDocument();
+  });
+
+  it("팀 삭제는 팀 이름 입력 확인 후 deleteTeamAction 호출 → /teams로 이동한다(R27)", async () => {
+    deleteTeamActionMock.mockResolvedValue({ ok: true });
+    renderTeam({ currentUserRole: "owner", canDeleteTeam: true, teamName: "Crew" });
+
+    fireEvent.click(screen.getByRole("button", { name: "팀 삭제" }));
+    const dialog = screen.getByRole("dialog", { name: "팀 삭제 확인" });
+    expect(deleteTeamActionMock).not.toHaveBeenCalled(); // 확인 전엔 호출 안 함
+
+    fireEvent.change(within(dialog).getByLabelText("삭제 확인 팀 이름"), {
+      target: { value: "Crew" },
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "영구 삭제" }));
+    });
+
+    expect(deleteTeamActionMock).toHaveBeenCalledWith("crew");
+    expect(pushMock).toHaveBeenCalledWith("/teams");
   });
 
   it("팀 나가기는 확인을 거쳐 self DELETE 멤버 API를 호출하고 /teams로 이동한다(R27)", async () => {

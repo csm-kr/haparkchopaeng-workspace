@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MoreHorizontal } from "lucide-react";
 import { Avatar, Badge, Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { deleteTeamAction } from "@/app/teams/actions";
 import type { PendingInviteView, TeamMemberView } from "./types";
 import type { BadgeVariant } from "@/components/ui";
 import type { InviteRole, TeamRole } from "@/types";
@@ -62,19 +63,25 @@ function toInviteRole(value: string): InviteRole {
 
 export interface TeamManagerProps {
   teamSlug: string;
+  /** 팀 이름 — 삭제 확인 타이핑에 쓴다. */
+  teamName: string;
   members: TeamMemberView[];
   invites: PendingInviteView[];
   currentUserId: string;
   /** 보는 사람의 팀 멤버십 역할 — 관리 UI 게이팅(보조). 서버가 최종 강제(R19). */
   currentUserRole: TeamRole;
+  /** 팀 삭제 노출 여부 — owner이거나 전역 관리자. 서버 액션이 최종 강제(R19). */
+  canDeleteTeam: boolean;
 }
 
 export function TeamManager({
   teamSlug,
+  teamName,
   members: initialMembers,
   invites: initialInvites,
   currentUserId,
   currentUserRole,
+  canDeleteTeam,
 }: TeamManagerProps) {
   const router = useRouter();
   const [members, setMembers] = React.useState(initialMembers);
@@ -88,6 +95,12 @@ export function TeamManager({
   // 팀 나가기 확인
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   const [leaving, setLeaving] = React.useState(false);
+
+  // 팀 삭제 확인(파괴적 — 이름 타이핑, R27)
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deleteTeamText, setDeleteTeamText] = React.useState("");
+  const [deletingTeam, setDeletingTeam] = React.useState(false);
+  const [deleteTeamError, setDeleteTeamError] = React.useState<string | null>(null);
 
   // 초대 발급 폼
   const [inviteRole, setInviteRole] = React.useState<InviteRole>("member");
@@ -222,6 +235,20 @@ export function TeamManager({
     }
   }
 
+  // 팀 삭제 — owner/전역 관리자만(서버 액션이 최종 강제, R19). 이름 일치 후에만 호출. 성공 시 허브로.
+  async function confirmDeleteTeam() {
+    if (deleteTeamText !== teamName) return;
+    setDeletingTeam(true);
+    setDeleteTeamError(null);
+    const result = await deleteTeamAction(teamSlug);
+    if (!result.ok) {
+      setDeleteTeamError(result.message);
+      setDeletingTeam(false);
+      return;
+    }
+    router.push("/teams");
+  }
+
   // 본인 탈퇴(비-owner) — 기존 멤버 DELETE 라우트가 isSelf를 허용(서버가 최종, R19). 성공 시 허브로.
   async function confirmLeaveTeam() {
     setLeaving(true);
@@ -329,8 +356,8 @@ export function TeamManager({
         </div>
       )}
 
-      {/* 멤버 목록 */}
-      <Card className="flex flex-col">
+      {/* 멤버 목록 — overflow-visible: 멤버 ⋯ 드롭다운이 카드 경계에 잘리지 않도록(Card 기본 overflow-hidden 해제) */}
+      <Card className="flex flex-col overflow-visible">
         <div className="border-b border-border-token px-4 py-3">
           <h2 className="text-[20px] font-semibold text-fg">멤버 {members.length}명</h2>
         </div>
@@ -450,12 +477,38 @@ export function TeamManager({
                 >
                   <Copy size={13} aria-hidden="true" /> 링크
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => revokeInvite(inv)}>
-                  회수
-                </Button>
+                {/* 회수는 owner만(R19) — admin은 초대 생성·재발급은 되나 회수는 불가 */}
+                {isOwner && (
+                  <Button variant="ghost" size="sm" onClick={() => revokeInvite(inv)}>
+                    회수
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* 팀 삭제 — owner/전역 관리자만. 파괴적(R27): 이름 타이핑 확인을 거친다. */}
+      {canDeleteTeam && (
+        <section className="flex flex-col gap-2 border-t border-border-token pt-5">
+          <h2 className="text-[16px] font-semibold text-fg">팀 삭제</h2>
+          <p className="text-[13px] text-fg-muted">
+            팀과 모든 데이터(논문·발표·일정·벌금·라이브 기록)가 영구 삭제돼요. 되돌릴 수 없어요.
+          </p>
+          <div>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                setConfirmDelete(true);
+                setDeleteTeamText("");
+                setDeleteTeamError(null);
+              }}
+            >
+              팀 삭제
+            </Button>
+          </div>
         </section>
       )}
 
@@ -515,6 +568,54 @@ export function TeamManager({
               </Button>
               <Button variant="danger" size="sm" onClick={confirmLeaveTeam} disabled={leaving}>
                 {leaving ? "나가는 중…" : "나가기"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 팀 삭제 확인 — 파괴적(R27). 팀 이름 타이핑이 일치해야 활성. 성공 시 허브로. */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-[color-mix(in_oklch,var(--fg)_28%,transparent)] p-4"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setConfirmDelete(false);
+          }}
+        >
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-label="팀 삭제 확인"
+            className="flex w-full max-w-sm flex-col gap-3 p-5"
+          >
+            <p className="text-[15px] font-semibold text-fg">{teamName} 팀을 삭제할까요?</p>
+            <p className="text-[13px] text-fg-muted">
+              이 팀의 논문·발표·일정·벌금·라이브 기록이 모두 영구 삭제돼요. 되돌릴 수 없어요.
+            </p>
+            <label className="flex flex-col gap-1 text-[12px] text-fg-subtle">
+              확인을 위해 팀 이름 <b className="text-fg">{teamName}</b> 을(를) 입력하세요
+              <Input
+                aria-label="삭제 확인 팀 이름"
+                value={deleteTeamText}
+                onChange={(e) => setDeleteTeamText(e.target.value)}
+              />
+            </label>
+            {deleteTeamError && (
+              <p role="alert" className="text-[12px] text-busy">
+                {deleteTeamError}
+              </p>
+            )}
+            <div className="mt-1 flex items-center justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setConfirmDelete(false)}>
+                취소
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={confirmDeleteTeam}
+                disabled={deletingTeam || deleteTeamText !== teamName}
+              >
+                {deletingTeam ? "삭제 중…" : "영구 삭제"}
               </Button>
             </div>
           </Card>
