@@ -46,6 +46,10 @@
       "dir": "9-team-hub",
       "status": "completed",
       "completed_at": "2026-06-16T13:10:01+0900"
+    },
+    {
+      "dir": "10-news-tab",
+      "status": "pending"
     }
   ]
 }

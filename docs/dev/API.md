@@ -105,12 +105,26 @@
 - **CRITICAL: 미설정(키 부재) 시 `/start`·`/join`은 `503`**("아직 연결 안 됨", R30). build/test는 키 없이 통과(R2).
 - **전이 전파는 Supabase Realtime으로**(R33) — `/start`·`/end` 핸들러가 broadcast하고 클라는 폴링 없이 구독해 배지·배너·룸을 동시 갱신한다(ADR-014→016).
 
+### NEWS (팀 출판 실적 · ADR-022)
+| 메서드 | 경로 | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/news` | 실적 생성(`teamId`·`createdBy` 서버 주입) | 🔒 |
+| PATCH | `/api/news/:id` | 실적 수정(팀 스코프) | 🔒 |
+| DELETE | `/api/news/:id` | 실적 삭제(팀 스코프) + 티저 객체 best-effort 정리 | 🔒 |
+
+- **CRITICAL: 활성 팀 스코핑(ADR-020, R37).** `POST`는 활성 팀 `teamId`·세션 `createdBy`를 주입한다(클라가 보낸 값 미신뢰, R3). `PATCH`/`DELETE`는 활성 팀 소유 실적일 때만 — 다른 팀이면 `404`(존재 숨김, R19).
+- **읽기는 RSC 서버 조회(ADR-015).** 목록 `/news`·상세 `/news/:id` 화면은 `lib/news.ts`(`getPublications`/`getPublication`)로 Prisma를 직접 조회하며 활성 팀으로 필터한다 — 별도 GET route handler를 두지 않는다.
+- **모든 팀원이 추가·편집·삭제** 가능(역할 게이트 없음 — 논문·발표 자료와 같은 협업 모델, ADR-022).
+- **티저 이미지는 프리사인 직접 업로드(R36).** 아래 `kind:"news"` 프리사인으로 객체 키를 받아 스토리지에 직접 올리고 `POST`/`PATCH`에 그 키를 넘긴다. 서빙은 비공개 버킷 + 단기 서명 URL(figure 이미지와 동일 메커니즘).
+- **저자는 자유 텍스트.** 서버는 검증만 하고 저장은 원문 그대로 — 팀원 이름 강조는 렌더 시 `Member.name` 매칭으로 처리(별도 저장 없음).
+
 ### 업로드 / 스토리지
 | 메서드 | 경로 | 설명 | 권한 |
 |---|---|---|---|
-| POST | `/api/uploads/presign` | 프리사인 업로드 URL 발급(PDF만) | 🔒 |
+| POST | `/api/uploads/presign` | 프리사인 업로드 URL 발급(`kind`별: 논문 PDF / NEWS 이미지) | 🔒 |
 
 - **프리사인 직접 업로드:** 큰 PDF는 클라이언트→스토리지로 직접 올리고(서버는 서명만), 완료 후 `POST /api/papers`에 객체 키를 넘긴다. 서버를 통한 대용량 스트리밍을 피한다.
+- **CRITICAL: `kind`별 제약.** `kind:"paper"`(기본)는 `application/pdf`만 허용한다. `kind:"news"`는 이미지(png/jpg/jpeg/webp)만 허용하고 객체 키에 **`news/` 접두를 서버가 강제**한다(클라가 임의 경로를 지정하지 못하게). 허용 밖 확장자/타입은 `415`.
 
 ### 내부 / 웹훅 (인증은 서명 검증)
 | 메서드 | 경로 | 설명 |

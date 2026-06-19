@@ -9,6 +9,7 @@
 - (이력) 시작은 SQLite였으나 Supabase 채택으로 Postgres로 전환(ADR-010→016).
 - **멀티팀(ADR-018→020):** `Member`는 여러 `Team`에 속할 수 있고, 도메인 엔티티(`Paper`·`Presentation`·`ScheduleMonth`·`FineConfig`·`MemberLedger`·`LiveSession`)는 `teamId`로 스코핑된다. (단일 테넌트 `Workspace` 전제는 ADR-007→018에서 폐기.)
 - **CRITICAL — 팀 스코핑 운영 반영은 검토된 수동 단계(ADR-020):** `teamId` 컬럼 추가 + 제약/PK 변경 + 기존 행 백필을 담은 `prisma db push`(실 반영)는 **공유 운영 DB**라 코드와 분리해 사람이 검토 후 실행한다. harness step은 스키마·백필·테스트 코드까지만 만든다. 기존 행은 전부 부트스트랩된 "하박조팽" 팀(가장 먼저 생성된 팀)으로 백필하며 멱등이어야 한다.
+- **CRITICAL — NEWS 출판 실적(ADR-022):** 새 `Publication` 모델(`teamId` 스코핑)을 추가한다 — `Paper`(분석 대상)와 분리. **신규 테이블이라 백필 대상 기존 행이 없으나**, 공유 운영 DB에 실제 `prisma db push`(반영)는 harness step이 아니라 **사람이 검토 후 수동 실행**한다(harness는 스키마·코드·테스트까지만). 위 ADR-020 수동 push 정신과 동일.
 
 ### SQLite 제약 (구현 시 주의)
 - **`enum` 미지원.** 역할·관점·상태 등은 `String`으로 저장하고 애플리케이션 레이어(zod 등)에서 검증한다. 허용값은 각 필드 주석에 명시.
@@ -27,6 +28,7 @@ Workspace 1──* Member 1──* SectionNote
                   ├──* Presentation 1──* PresentationAsset
                   │                 1──* PresentationVersion
                   │                 1──* Comment
+                  ├──* Publication            (NEWS 출판 실적, ADR-022)
                   ├──* ScheduleWeek *──1 ScheduleMonth
                   ├──* MemberLedger *──1 FineConfig(year)
                   └──* Participant  *──1 LiveSession
@@ -280,6 +282,24 @@ model Job {
   @@index([status, runAfter])
   // 분 단위 작업은 외부 durable 잡 러너(Inngest/Trigger.dev/QStash)가 실행하고,
   // 이 테이블은 그 상태 미러(멱등·재시도·실패 보존)로 둔다(ADR-013→016).
+}
+
+model Publication {
+  id          String   @id @default(cuid())
+  teamId      String   @default("") // Team.id — CRITICAL: 활성 팀 스코핑(ADR-020/R37). default ""는 백필 sentinel(쓰기 시 명시 주입)
+  title       String
+  authors     String   // 자유 텍스트(쉼표 구분). 렌더 시 Member.name 일치 팀원만 강조(Member FK 없음 — YAGNI)
+  venue       String   // 학회/저널명 (예: "NeurIPS 2025")
+  year        Int      // 정렬·그룹화 기준
+  month       Int?     // 1–12, 선택(없으면 연도만 표시)
+  teaserImage String?  // 스토리지 객체 키(news/ 접두) — 비공개 버킷 + 서명 URL(R36). 없으면 플레이스홀더
+  links       Json     // [{ label, url }] — arXiv/PDF/코드/프로젝트
+  createdBy   String   // Member.id — CRITICAL: 작성자는 세션에서 주입(R3)
+  createdAt   DateTime @default(now())
+  @@index([teamId])
+  // CRITICAL: NEWS는 분석 대상이 아니다 — analyses/figures/notes를 붙이지 마라(Paper와 의미 분리, ADR-022).
+  // CRITICAL: 모든 조회·변이는 활성 팀(teamId)으로 스코핑(ADR-020, R37). 쓰기 teamId·createdBy는 서버 주입.
+  // CRITICAL: 신규 테이블 — 운영 db push는 harness가 아니라 사람이 검토 후 수동(ADR-020 정신).
 }
 ```
 
