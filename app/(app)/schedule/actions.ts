@@ -46,9 +46,9 @@ export async function draftMonthAction(
   // 활성 팀으로 스코핑(R37/ADR-020) — 순번은 같은 팀의 직전 저장월에서 이어받는다.
   const team = await getActiveTeam(session.memberId);
   if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
-  // 로테이션 = 실제 멤버(가입순). 시작 순번은 직전 저장월에서 이어받는다(연속 전진).
+  // 로테이션 = 활성 팀 멤버(가입순). 시작 순번은 직전 저장월에서 이어받는다(연속 전진).
   // 멤버 수를 넘는 자투리 주는 draftWeeks가 방학으로 둔다.
-  const rotation = (await getScheduleMembers()).map((m) => m.id);
+  const rotation = (await getScheduleMembers(team.id)).map((m) => m.id);
   const startIdx = await resolveStartIdx(parsed.data.year, parsed.data.month, team.id);
   return draftWeeks(parsed.data.year, parsed.data.month, startIdx, rotation);
 }
@@ -155,7 +155,7 @@ export async function saveMonth(input: {
   // 순번 연속 전진: 이 달 시작 인덱스 = 같은 팀 직전 저장월의 rotationPointerAfter,
   // 이 달 발표 배정 수(방학 제외)만큼 전진. 멤버 수는 가변이라 실제 멤버 수로 나눈다(R16).
   const startIdx = await resolveStartIdx(year, month, team.id);
-  const len = (await getScheduleMembers()).length;
+  const len = (await getScheduleMembers(team.id)).length;
   const presented = weeks.filter((w) => w.presenterId !== null).length;
   const pointer = nextPointer(startIdx, presented, len);
 
@@ -251,15 +251,22 @@ const ReorderInput = z.array(z.string().min(1)).min(1);
 
 /** 로테이션 순서(iteration) 편성 — 관리자만(👑). 보낸 순서대로 rotationOrder를 1..N으로 굳힌다. */
 export async function reorderRotation(orderedIds: string[]): Promise<MemberOption[]> {
-  await requireRole("관리자");
+  const session = await requireRole("관리자");
   const parsed = ReorderInput.safeParse(orderedIds);
   if (!parsed.success) {
     throw new HttpError(400, "BAD_REQUEST", "순서를 확인해주세요.");
   }
 
-  // 실제 멤버 id만 신뢰(R3) — 보낸 목록에서 존재하는 것만, 보낸 순서대로.
-  const existing = await prisma.member.findMany({ select: { id: true } });
-  const valid = new Set(existing.map((m) => m.id));
+  // 활성 팀으로 스코핑(R37/ADR-020) — 활성 팀 멤버만 재정렬한다(교차 팀 변이 차단, R19).
+  const team = await getActiveTeam(session.memberId);
+  if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
+
+  // 활성 팀 소속 멤버 id만 신뢰(R3) — 보낸 목록에서 팀 멤버인 것만, 보낸 순서대로.
+  const memberships = await prisma.membership.findMany({
+    where: { teamId: team.id },
+    select: { memberId: true },
+  });
+  const valid = new Set(memberships.map((m) => m.memberId));
   const ids = parsed.data.filter((id) => valid.has(id));
 
   await prisma.$transaction(
@@ -268,5 +275,5 @@ export async function reorderRotation(orderedIds: string[]): Promise<MemberOptio
     ),
   );
   revalidatePath("/schedule");
-  return getScheduleMembers();
+  return getScheduleMembers(team.id);
 }

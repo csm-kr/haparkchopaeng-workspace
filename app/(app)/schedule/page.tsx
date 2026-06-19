@@ -9,7 +9,7 @@ import { draftMonthAction, reorderRotation, saveMonth, updateFines } from "./act
 
 // 스케줄 — RSC. 읽기는 서버에서 Prisma 직접(ADR-015/R32). 쓰기는 actions.ts(Server Action).
 // CRITICAL: 빈 달은 자동 생성하지 않는다 — GET이 row를 만들지 않는다(R15/ADR-006).
-// CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 달/벌금은 활성 팀 것만. 멤버는 전역.
+// CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — 달/벌금/멤버 모두 활성 팀 것만(멤버는 Membership 소속).
 // 월은 ?y=&m= 쿼리로 결정(기본은 현재월). 토큰만 사용(R20).
 
 interface PageProps {
@@ -39,7 +39,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
     const [monthData, fines, members] = await Promise.all([
       getMonth(year, month, team.id),
       getFines(year, team.id),
-      getScheduleMembers(),
+      getScheduleMembers(team.id),
     ]);
 
     body = (

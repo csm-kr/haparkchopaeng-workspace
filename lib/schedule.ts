@@ -51,9 +51,18 @@ export async function getMonth(
   };
 }
 
-/** 발표자 선택·로테이션 표시에 쓸 멤버(가입순 = 로테이션 순서). */
-export async function getScheduleMembers(): Promise<MemberOption[]> {
+/**
+ * 발표자 선택·로테이션 표시에 쓸 멤버(가입순 = 로테이션 순서).
+ * CRITICAL: 활성 팀으로 스코핑(R37/ADR-020) — Member는 전역이지만 소속은 Membership으로 결정한다.
+ * 다른 팀 멤버가 로테이션/발표자에 섞이지 않는다.
+ */
+export async function getScheduleMembers(teamId: string): Promise<MemberOption[]> {
+  const memberships = await prisma.membership.findMany({
+    where: { teamId },
+    select: { memberId: true },
+  });
   const members = await prisma.member.findMany({
+    where: { id: { in: memberships.map((ms) => ms.memberId) } },
     // 로테이션 순서(iteration)가 지정된 멤버 우선, 미지정(null)은 가입순으로 뒤에.
     orderBy: [
       { rotationOrder: { sort: "asc", nulls: "last" } },
@@ -92,7 +101,13 @@ export async function getFines(
   });
   if (!config) return null;
 
+  // 장부 표도 활성 팀 멤버만(R37/ADR-020) — Membership으로 스코핑. 다른 팀 멤버가 장부에 끼지 않는다.
+  const memberships = await prisma.membership.findMany({
+    where: { teamId },
+    select: { memberId: true },
+  });
   const members = await prisma.member.findMany({
+    where: { id: { in: memberships.map((ms) => ms.memberId) } },
     // 로테이션과 동일 순서(iteration 우선, 미지정은 가입순) — 장부 표도 같은 정렬.
     orderBy: [
       { rotationOrder: { sort: "asc", nulls: "last" } },

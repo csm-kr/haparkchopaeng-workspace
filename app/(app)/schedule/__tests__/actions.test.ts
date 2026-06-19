@@ -32,14 +32,23 @@ const { txMock, prismaMock } = vi.hoisted(() => {
   return {
     txMock,
     prismaMock: {
-      $transaction: vi.fn(async (fn: (tx: typeof txMock) => unknown) => fn(txMock)),
+      // callback 형(저장)과 배열 형(reorderRotation) 둘 다 지원.
+      $transaction: vi.fn(async (arg: unknown) =>
+        typeof arg === "function"
+          ? (arg as (tx: typeof txMock) => unknown)(txMock)
+          : Promise.all(arg as unknown[]),
+      ),
       fineConfig: { updateMany: vi.fn() },
+      membership: { findMany: vi.fn() },
+      member: { update: vi.fn() },
     },
   };
 });
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
-const { saveMonth, updateFines } = await import("@/app/(app)/schedule/actions");
+const { reorderRotation, saveMonth, updateFines } = await import(
+  "@/app/(app)/schedule/actions"
+);
 
 const validWeeks = [
   {
@@ -114,5 +123,39 @@ describe("updateFines — 팀 스코핑 수정", () => {
         where: expect.objectContaining({ teamId: "tA", year: 2026 }),
       }),
     );
+  });
+});
+
+describe("reorderRotation — 활성 팀 멤버만 재정렬", () => {
+  it("팀 소속 아닌 id는 거르고 보낸 순서대로 rotationOrder 1..N을 쓴다", async () => {
+    prismaMock.membership.findMany.mockResolvedValue([
+      { memberId: "ha" },
+      { memberId: "bak" },
+    ]);
+    getScheduleMembersMock.mockResolvedValue([{ id: "bak" }, { id: "ha" }]);
+
+    // "jo"(다른 팀)는 무시되고, ha·bak만 보낸 순서대로 굳는다.
+    await reorderRotation(["bak", "jo", "ha"]);
+
+    // 멤버십 조회는 활성 팀(tA)으로 스코핑된다.
+    expect(prismaMock.membership.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ teamId: "tA" }) }),
+    );
+    // jo는 제외 → bak=1, ha=2 (두 번만 update).
+    expect(prismaMock.member.update).toHaveBeenCalledTimes(2);
+    expect(prismaMock.member.update).toHaveBeenNthCalledWith(1, {
+      where: { id: "bak" },
+      data: { rotationOrder: 1 },
+    });
+    expect(prismaMock.member.update).toHaveBeenNthCalledWith(2, {
+      where: { id: "ha" },
+      data: { rotationOrder: 2 },
+    });
+  });
+
+  it("활성 팀이 없으면 throw하고 아무것도 쓰지 않는다", async () => {
+    getActiveTeamMock.mockResolvedValue(null);
+    await expect(reorderRotation(["ha"])).rejects.toThrow();
+    expect(prismaMock.member.update).not.toHaveBeenCalled();
   });
 });
