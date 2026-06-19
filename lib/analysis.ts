@@ -411,6 +411,9 @@ export interface AnalyzePaperDeps {
     paperId: string,
     figures: FigureExtract[],
   ): Promise<FigureExtract[]>;
+  extractRepoAndDiagram(
+    pdf: Buffer,
+  ): Promise<{ repo: RepoStructure; diagram: ModelDiagram }>;
 }
 
 /** 스토리지에서 원문 PDF 바이트를 가져온다(비공개 버킷 → 단기 서명 URL, R36). */
@@ -431,6 +434,7 @@ export const realDeps: AnalyzePaperDeps = {
   extractAnalysis,
   extractFigures,
   renderFigures,
+  extractRepoAndDiagram,
 };
 
 /** 분석 시작 시각부터 now까지의 소요(ms). 시작이 없으면 null, 음수는 0(시계 역행 방어). */
@@ -505,10 +509,11 @@ export async function analyzePaper(
 
   try {
     const pdf = await deps.loadPdf(paperId);
-    const [research, repro, extracted] = await Promise.all([
+    const [research, repro, extracted, repoDiagram] = await Promise.all([
       deps.extractAnalysis(pdf, "research"),
       deps.extractAnalysis(pdf, "repro"),
       deps.extractFigures(pdf),
+      deps.extractRepoAndDiagram(pdf),
     ]);
     // figure 이미지 렌더(크롭/페이지 fallback)로 imageUrl을 채운다.
     // renderFigures는 figure·PDF 단위로 격리(throw 안 함)하지만, 방어적으로 감싸 메타 분석을 지킨다(R28).
@@ -519,10 +524,15 @@ export async function analyzePaper(
       // 렌더 전체가 실패해도 분석을 막지 않는다 — extracted는 이미 imageUrl=null이라 그대로 저장.
       figures = extracted;
     }
+    const fullRepro: ReproPayload = {
+      ...(repro as ReproPayload),
+      repo: repoDiagram.repo,
+      diagram: repoDiagram.diagram,
+    };
     await persistAnalysis(
       paperId,
       research as ResearchPayload,
-      repro as ReproPayload,
+      fullRepro,
       figures,
     );
     await prisma.job.update({

@@ -300,11 +300,26 @@ describe("Gemini repo/diagram 추출 (extractRepoAndDiagram)", () => {
 });
 
 describe("분석 오케스트레이션 (analyzePaper)", () => {
+  const repoDiagram = {
+    repo: {
+      found: true,
+      url: "https://github.com/x/y",
+      summary: "요약",
+      tree: [{ name: "model.py", desc: "모델" }],
+      source: "repo" as const,
+    },
+    diagram: {
+      nodes: [{ id: "m", label: "Model", detail: "T", group: "model" as const }],
+      edges: [],
+    },
+  };
+
   const deps = {
     loadPdf: vi.fn(),
     extractAnalysis: vi.fn(),
     extractFigures: vi.fn(),
     renderFigures: vi.fn(),
+    extractRepoAndDiagram: vi.fn(),
   };
 
   beforeEach(() => {
@@ -323,6 +338,7 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
         figs: Array<{ imageUrl: string | null }>,
       ) => figs,
     );
+    deps.extractRepoAndDiagram.mockResolvedValue(repoDiagram);
     prismaMock.job.create.mockResolvedValue({ id: "job1" });
     prismaMock.job.update.mockResolvedValue({});
     prismaMock.paper.update.mockResolvedValue({});
@@ -345,7 +361,7 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
     expect(prismaMock.analysis.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { paperId_lens: { paperId: "p1", lens: "repro" } },
-        create: expect.objectContaining({ payload: repro }),
+        create: expect.objectContaining({ payload: { ...repro, ...repoDiagram } }),
       }),
     );
     // Figure 재생성(매핑, imageUrl=null).
@@ -378,6 +394,16 @@ describe("분석 오케스트레이션 (analyzePaper)", () => {
       where: { id: "job1" },
       data: { status: "done" },
     });
+  });
+
+  it("extractRepoAndDiagram 결과를 repro payload에 머지해 저장한다", async () => {
+    await analyzePaper("p1", deps);
+    const reproCall = prismaMock.analysis.upsert.mock.calls.find(
+      (c) => c[0].where.paperId_lens.lens === "repro",
+    );
+    expect(reproCall?.[0].create.payload.repo).toEqual(repoDiagram.repo);
+    expect(reproCall?.[0].create.payload.diagram).toEqual(repoDiagram.diagram);
+    expect(deps.extractRepoAndDiagram).toHaveBeenCalledTimes(1);
   });
 
   it("renderFigures가 채운 imageUrl이 Figure 저장(createMany)에 반영된다", async () => {
