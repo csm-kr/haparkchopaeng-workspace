@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "api-layer",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-19T19:19:52+0900",
+      "summary": "presign news 종류(이미지 확장자만→news/ 키) + /api/news POST·[id] PATCH/DELETE(teamId·createdBy 서버주입·클라 위조 무시, 활성 팀 스코프 404, teaserImage ^news/ 제한, 삭제 시 removeObject best-effort)·테스트. db push는 미실행(수동 후속)",
+      "completed_at": "2026-06-19T19:27:00+0900"
     },
     {
       "step": 3,
