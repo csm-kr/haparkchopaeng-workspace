@@ -121,20 +121,34 @@ describe("nextPointer (순번 전진 — 연속)", () => {
   });
 });
 
-describe("currentWeekIndex (파생 current)", () => {
-  it("첫 비-done 주차의 인덱스를 돌려준다", () => {
+describe("currentWeekIndex (오늘 날짜 기준 이번 주)", () => {
+  it("아직 지나지 않은 첫 토요일 주차의 인덱스를 돌려준다", () => {
+    // 6/19 기준: 6/6·6/13은 지났고 6/20이 첫 미래 → index 2
     expect(
-      currentWeekIndex([
-        { status: "done" },
-        { status: "done" },
-        { status: "upcoming" },
-        { status: "upcoming" },
-      ]),
+      currentWeekIndex(
+        2026,
+        6,
+        [
+          { date: "6월 6일" },
+          { date: "6월 13일" },
+          { date: "6월 20일" },
+          { date: "6월 27일" },
+        ],
+        new Date(2026, 5, 19),
+      ),
     ).toBe(2);
   });
 
-  it("모두 done이면 -1", () => {
-    expect(currentWeekIndex([{ status: "done" }])).toBe(-1);
+  it("당일 세미나는 이번 주로 본다(date >= 오늘)", () => {
+    expect(
+      currentWeekIndex(2026, 6, [{ date: "6월 20일" }], new Date(2026, 5, 20)),
+    ).toBe(0);
+  });
+
+  it("모든 주차가 지났으면 -1", () => {
+    expect(
+      currentWeekIndex(2026, 6, [{ date: "6월 6일" }], new Date(2026, 5, 19)),
+    ).toBe(-1);
   });
 });
 

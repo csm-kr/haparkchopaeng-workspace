@@ -84,12 +84,44 @@ describe("ScheduleBoard — 빈/편집/확정 상태", () => {
   });
 
   it("확정(저장된) 달은 읽기전용 행 + 상태 알약 + [수정]을 보인다", () => {
-    makeBoard(savedMonth);
-    expect(screen.getByText("완료")).toBeInTheDocument(); // 1주차 done
-    expect(screen.getByText("이번 주")).toBeInTheDocument(); // 첫 비-done = current(파생)
-    expect(screen.getByRole("button", { name: /수정/ })).toBeInTheDocument();
-    // 읽기전용 — 발표자 select가 없다
-    expect(screen.queryByLabelText("1주차 발표자")).not.toBeInTheDocument();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 10)); // 6/10 → 6/14(2주차)가 이번 주(날짜 기준)
+    try {
+      makeBoard(savedMonth);
+      expect(screen.getByText("완료")).toBeInTheDocument(); // 1주차 done
+      expect(screen.getByText("이번 주")).toBeInTheDocument(); // 날짜 기준 이번 주
+      expect(screen.getByRole("button", { name: /수정/ })).toBeInTheDocument();
+      // 읽기전용 — 발표자 select가 없다
+      expect(screen.queryByLabelText("1주차 발표자")).not.toBeInTheDocument();
+      // 입장(/meeting) 링크는 제거됐다
+      expect(
+        screen.queryByRole("link", { name: /입장/ }),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("모든 주차가 지난 달에는 '이번 주'를 붙이지 않는다(날짜 기준)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 1)); // 7/1 — 6월 주차는 모두 과거
+    try {
+      const pastMonth: ScheduleMonthView = {
+        year: 2026,
+        month: 6,
+        day: "토요일",
+        rotationPointerAfter: 0,
+        version: 0,
+        weeks: [
+          { week: 1, date: "6월 6일", time: "10:00", presenterId: "ha", topic: "A", confirmed: true, status: "upcoming", presentationId: null },
+          { week: 2, date: "6월 13일", time: "10:00", presenterId: "bak", topic: "B", confirmed: true, status: "upcoming", presentationId: null },
+        ],
+      };
+      makeBoard(pastMonth);
+      expect(screen.queryByText("이번 주")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("편집 중에는 월 이동이 잠긴다(라우터 push 호출 안 함 + 안내)", async () => {
