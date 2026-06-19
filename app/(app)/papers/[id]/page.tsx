@@ -121,6 +121,8 @@ export default async function PaperDetailPage({ params }: PageProps) {
           <div className="flex items-center gap-2">
             <a
               href={`/api/papers/${paper.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-sm border border-border-strong bg-bg-elevated px-3.5 py-[7px] text-[13px] font-medium text-fg hover:bg-bg-subtle"
             >
               <Download size={14} aria-hidden="true" />
