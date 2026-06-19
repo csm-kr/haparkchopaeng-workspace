@@ -29,7 +29,10 @@
     {
       "step": 3,
       "name": "ui-components",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-19T19:29:11+0900",
+      "summary": "components/news/*(list+빈상태·card·form[presign 업로드·링크 행]·teaser-view·저자강조)·RTL. 데이터는 props, RSC 배선은 step 4",
+      "completed_at": "2026-06-19T19:40:00+0900"
     },
     {
       "step": 4,
