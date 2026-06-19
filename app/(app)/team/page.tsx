@@ -41,6 +41,8 @@ export default async function TeamPage() {
     const viewer = await getMembership(team.id, currentUserId);
     const currentUserRole = viewer?.role ?? "member";
     const canManage = currentUserRole === "owner" || currentUserRole === "admin";
+    // 팀 삭제 노출: 그 팀 owner이거나 전역 관리자(서버 액션이 최종 강제, R19).
+    const canDeleteTeam = currentUserRole === "owner" || session?.role === "관리자";
 
     const members = await listTeamMembers(team.id);
     const invites = canManage ? await listActiveInvites(team.id) : [];
@@ -48,10 +50,12 @@ export default async function TeamPage() {
     body = (
       <TeamManager
         teamSlug={team.slug}
+        teamName={team.name}
         members={members}
         invites={invites}
         currentUserId={currentUserId}
         currentUserRole={currentUserRole}
+        canDeleteTeam={canDeleteTeam}
       />
     );
   } catch {
