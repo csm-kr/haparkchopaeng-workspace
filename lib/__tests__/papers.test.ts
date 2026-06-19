@@ -145,6 +145,50 @@ describe("getPaperDetail(id, teamId) — 단건 교차 팀 차단", () => {
   });
 });
 
+describe("getPaperDetail — 재구현 payload 기본값(옛 논문 호환)", () => {
+  const reproBase = {
+    data: { caption: "", columns: [], rows: [] },
+    model: { params: "", items: [] },
+    loss: [],
+    metrics: [],
+    training: { caption: "", rows: [] },
+    gpu: { hardware: "", count: 0, vramGb: 0, vramUsedGb: 0, trainDays: 0, note: "" },
+  };
+
+  it("repo·diagram이 없으면 기본값으로 채워 내려준다", async () => {
+    const p = paper("a1", "tA");
+    p.analyses = [{ lens: "repro", payload: { ...reproBase } }];
+    db.papers = [p];
+
+    const detail = await getPaperDetail("a1", "tA");
+    expect(detail?.repro?.repo).toEqual({
+      found: false,
+      url: null,
+      summary: "",
+      tree: [],
+      source: "paper",
+    });
+    expect(detail?.repro?.diagram).toEqual({ nodes: [], edges: [] });
+  });
+
+  it("repo·diagram이 있으면 그대로 통과시킨다", async () => {
+    const repoVal = { found: true, url: "u", summary: "s", tree: [], source: "repo" };
+    const diagramVal = {
+      nodes: [{ id: "m", label: "M", detail: "d", group: "model" }],
+      edges: [],
+    };
+    const p = paper("a1", "tA");
+    p.analyses = [
+      { lens: "repro", payload: { ...reproBase, repo: repoVal, diagram: diagramVal } },
+    ];
+    db.papers = [p];
+
+    const detail = await getPaperDetail("a1", "tA");
+    expect(detail?.repro?.repo).toEqual(repoVal);
+    expect(detail?.repro?.diagram).toEqual(diagramVal);
+  });
+});
+
 describe("getExpectedAnalysisMs(teamId) — 팀 평균 예상 시간", () => {
   it("표본 3개 이상이면 팀 평균(ms 반올림)을 돌려준다", async () => {
     db.papers = [
