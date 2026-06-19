@@ -65,9 +65,23 @@ export function nextPointer(
   return (((startIdx + count) % rotationLen) + rotationLen) % rotationLen;
 }
 
-/** current(이번 주)는 파생 — 첫 비-done 주차의 인덱스. 모두 done이거나 비어 있으면 -1. */
-export function currentWeekIndex(weeks: Array<{ status: WeekStatus }>): number {
-  return weeks.findIndex((w) => w.status !== "done");
+/**
+ * current(이번 주)는 파생 — 오늘 날짜 기준 아직 지나지 않은(date >= 오늘) 첫 주차.
+ * 지난 주차는 건너뛰고 "다음에 할" 발표를 가리킨다. 모두 지났거나 비어 있으면 -1.
+ * date는 "M월 D일" 문자열이라 year/month로 실제 날짜를 만들어 비교한다.
+ */
+export function currentWeekIndex(
+  year: number,
+  month: number,
+  weeks: ReadonlyArray<{ date: string }>,
+  today: Date = new Date(),
+): number {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return weeks.findIndex((w) => {
+    const day = Number(w.date.match(/(\d+)\s*일/)?.[1]);
+    if (!day) return false;
+    return new Date(year, month - 1, day) >= start;
+  });
 }
 
 /**

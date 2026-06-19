@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Pencil,
   Plus,
-  Video,
 } from "lucide-react";
 import { Avatar, Badge, Button, Card, EmptyState, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -364,20 +363,29 @@ export function ScheduleBoard({
 
       {/* 확정(읽기전용) 모드 */}
       {!editing && saved && (
-        <ConfirmedWeeks weeks={saved.weeks} memberById={memberById} />
+        <ConfirmedWeeks
+          year={saved.year}
+          month={saved.month}
+          weeks={saved.weeks}
+          memberById={memberById}
+        />
       )}
     </Card>
   );
 }
 
 function ConfirmedWeeks({
+  year,
+  month,
   weeks,
   memberById,
 }: {
+  year: number;
+  month: number;
   weeks: ScheduleMonthView["weeks"];
   memberById: Map<string, MemberOption>;
 }) {
-  const currentIdx = currentWeekIndex(weeks);
+  const currentIdx = currentWeekIndex(year, month, weeks);
 
   return (
     <ul className="divide-y divide-border-token">
@@ -432,13 +440,6 @@ function ConfirmedWeeks({
                     className="rounded-sm border border-border-strong px-2.5 py-1 text-[12px] font-medium text-fg hover:bg-bg-hover"
                   >
                     자료
-                  </Link>
-                ) : isCurrent ? (
-                  <Link
-                    href="/meeting"
-                    className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-fg hover:bg-accent-hover"
-                  >
-                    <Video size={12} aria-hidden="true" /> 입장
                   </Link>
                 ) : w.presentationId ? (
                   <Link
