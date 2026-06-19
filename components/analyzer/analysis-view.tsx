@@ -357,8 +357,9 @@ export function AnalysisView({
         })
       )}
 
-      {/* Figure 분석 — 두 관점 공통, 항상 하단 고정(ADR-004/R10). 노트는 lens:any(R11). */}
-      <section aria-labelledby="section-figures" className="flex flex-col gap-3">
+      {/* Figure 분석 — 연구 관점 전용(재구현은 중복이라 제외). 노트는 lens:any(R11). */}
+      {lens === "research" && (
+        <section aria-labelledby="section-figures" className="flex flex-col gap-3">
         <h3 id="section-figures" className="text-[16px] font-semibold text-fg">
           Figure 분석
         </h3>
@@ -397,7 +398,8 @@ export function AnalysisView({
         <Card className="px-4 py-3">
           {renderNotes(FIGURES_SECTION_ID, "Figure 분석")}
         </Card>
-      </section>
+        </section>
+      )}
     </div>
   );
 }

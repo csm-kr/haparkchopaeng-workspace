@@ -4,7 +4,9 @@ import type {
   GpuSpec,
   IOSpec,
   LossItem,
+  ModelDiagram,
   NamedItem,
+  RepoStructure,
   ReproPayload,
   ResearchPayload,
   TableBlock,
@@ -243,7 +245,100 @@ export function researchSections(p: ResearchPayload): SectionDef[] {
   ];
 }
 
-/** 재구현 관점 섹션 — 데이터 · 모델 · 학습 · 리소스 (ADR-004). */
+/** GitHub 저장소 구조 — 못 찾으면 안내, 찾으면 URL·요약·트리. source=paper면 "추정" 배지. */
+function RepoBlock({ repo }: { repo: RepoStructure }) {
+  if (!repo.found) {
+    return (
+      <p className="text-[13px] text-fg-subtle">공개 코드 저장소를 못 찾았어요.</p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        {repo.url && (
+          <a
+            href={repo.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[12px] text-accent underline underline-offset-2"
+          >
+            {repo.url}
+          </a>
+        )}
+        {repo.source === "paper" && (
+          <span className="rounded-sm bg-bg-subtle px-1.5 py-0.5 text-[11px] text-fg-subtle">
+            추정
+          </span>
+        )}
+      </div>
+      {repo.summary && <p className="text-fg-muted">{repo.summary}</p>}
+      {repo.tree.length > 0 && <DescList items={repo.tree} />}
+    </div>
+  );
+}
+
+const DIAGRAM_GROUP_LABEL: Record<ModelDiagram["nodes"][number]["group"], string> = {
+  data: "데이터",
+  model: "모델",
+  loss: "손실",
+};
+
+/** 모델/손실 도식 — group(데이터→모델→손실) 레인별 박스를 ↓로 쌓고, 연결은 "연결" 목록으로. */
+function DiagramBlock({ diagram }: { diagram: ModelDiagram }) {
+  if (diagram.nodes.length === 0) {
+    return <p className="text-[13px] text-fg-subtle">다이어그램이 아직 없어요.</p>;
+  }
+  const labelById = new Map(diagram.nodes.map((n) => [n.id, n.label]));
+  const groups = (["data", "model", "loss"] as const).filter((g) =>
+    diagram.nodes.some((n) => n.group === g),
+  );
+  return (
+    <div className="flex flex-col gap-3 text-[13px]">
+      {groups.map((g) => {
+        const nodes = diagram.nodes.filter((n) => n.group === g);
+        return (
+          <div key={g} className="flex flex-col gap-1.5">
+            <p className="text-[12px] font-medium text-fg-subtle">
+              {DIAGRAM_GROUP_LABEL[g]}
+            </p>
+            <div className="flex flex-col gap-1">
+              {nodes.map((n, i) => (
+                <React.Fragment key={n.id || i}>
+                  <div className="rounded-md border border-border-token bg-bg-subtle px-3 py-2">
+                    <p className="font-medium text-fg">{n.label}</p>
+                    {n.detail && (
+                      <p className="text-[12px] text-fg-muted">{n.detail}</p>
+                    )}
+                  </div>
+                  {i < nodes.length - 1 && (
+                    <span aria-hidden="true" className="text-center text-fg-faint">
+                      ↓
+                    </span>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {diagram.edges.length > 0 && (
+        <div className="flex flex-col gap-1 border-t border-border-token pt-2">
+          <p className="text-[12px] font-medium text-fg-subtle">연결</p>
+          <ul className="flex flex-col gap-0.5 text-[12px] text-fg-muted">
+            {diagram.edges.map((e, i) => (
+              <li key={i}>
+                {labelById.get(e.from) ?? e.from} → {labelById.get(e.to) ?? e.to}
+                {e.label ? ` · ${e.label}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 재구현 관점 섹션 — 데이터 · 모델 · 학습 · 리소스 · GitHub 구조 · 모델 구조 (ADR-004). */
 export function reproSections(p: ReproPayload): SectionDef[] {
   return [
     { id: "data", title: "데이터", content: <DataTable block={p.data} /> },
@@ -272,5 +367,11 @@ export function reproSections(p: ReproPayload): SectionDef[] {
       ),
     },
     { id: "gpu", title: "리소스", content: <GpuBlock gpu={p.gpu} /> },
+    { id: "repo", title: "GitHub 구조", content: <RepoBlock repo={p.repo} /> },
+    {
+      id: "diagram",
+      title: "모델 구조",
+      content: <DiagramBlock diagram={p.diagram} />,
+    },
   ];
 }

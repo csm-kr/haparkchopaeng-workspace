@@ -3,7 +3,9 @@ import type { PaperListItem, PaperUploader } from "@/components/library";
 import type { FigureView, NoteView } from "@/components/analyzer";
 import type {
   AnalysisStatus,
+  ModelDiagram,
   NoteLens,
+  RepoStructure,
   ReproPayload,
   ResearchPayload,
 } from "@/types";
@@ -94,6 +96,22 @@ export interface PaperDetailView {
   notes: NoteView[];
 }
 
+// 옛 논문(repo·diagram 키 부재)을 기본값으로 채워 UI가 항상 well-formed repro payload를 받게 한다.
+function reproWithDefaults(payload: unknown): ReproPayload {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  const repo =
+    (o.repo as RepoStructure | undefined) ?? {
+      found: false,
+      url: null,
+      summary: "",
+      tree: [],
+      source: "paper",
+    };
+  const diagram =
+    (o.diagram as ModelDiagram | undefined) ?? { nodes: [], edges: [] };
+  return { ...(o as unknown as ReproPayload), repo, diagram };
+}
+
 export async function getPaperDetail(
   id: string,
   teamId: string,
@@ -138,7 +156,7 @@ export async function getPaperDetail(
         : null,
     },
     research: research ? (research as unknown as ResearchPayload) : null,
-    repro: repro ? (repro as unknown as ReproPayload) : null,
+    repro: repro ? reproWithDefaults(repro) : null,
     figures: paper.figures.map((f) => ({
       id: f.id,
       title: f.title,

@@ -68,6 +68,20 @@ const repro: ReproPayload = {
   metrics: [{ name: "PPL", desc: "퍼플렉서티" }],
   training: { caption: "하이퍼파라미터", rows: [["Optimizer", "AdamW"]] },
   gpu: { hardware: "A100", count: 16, vramGb: 80, vramUsedGb: 58, trainDays: 3, note: "추정" },
+  repo: {
+    found: true,
+    url: "https://github.com/acme/model",
+    summary: "공식 구현 저장소",
+    tree: [{ name: "src/model.py", desc: "모델 정의" }],
+    source: "repo",
+  },
+  diagram: {
+    nodes: [
+      { id: "in", label: "입력 데이터", detail: "토큰 시퀀스", group: "data" },
+      { id: "enc", label: "Encoder", detail: "12-layer Transformer", group: "model" },
+    ],
+    edges: [{ from: "in", to: "enc", label: "임베딩" }],
+  },
 };
 
 const figures = [
@@ -147,17 +161,35 @@ describe("AnalysisView 관점 토글", () => {
   });
 });
 
+describe("AnalysisView 재구현 — GitHub 구조·모델 구조", () => {
+  it("재구현 관점에 GitHub 구조와 모델 구조 섹션이 보인다", () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /재구현 분석/ }));
+
+    expect(screen.getByRole("heading", { name: "GitHub 구조" })).toBeInTheDocument();
+    expect(screen.getByText("https://github.com/acme/model")).toBeInTheDocument();
+    expect(screen.getByText("src/model.py")).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { name: "모델 구조" })).toBeInTheDocument();
+    expect(screen.getByText("Encoder")).toBeInTheDocument();
+    expect(screen.getByText("12-layer Transformer")).toBeInTheDocument();
+  });
+});
+
 describe("AnalysisView Figure 분석", () => {
-  it("두 관점 모두에서 figure가 공통으로 보인다", () => {
+  it("연구 관점에서만 figure가 보이고 재구현 관점에선 사라진다", () => {
     renderView();
     // 연구 관점에서 figure 노출.
     expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
     expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
 
-    // 재구현으로 토글해도 figure는 그대로.
+    // 재구현으로 토글하면 figure 섹션이 사라진다.
     fireEvent.click(screen.getByRole("button", { name: /재구현 분석/ }));
-    expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
-    expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
+    expect(screen.queryByText("Figure 1 — 개요")).toBeNull();
+    expect(screen.queryByText("원문 PDF p.3에서 추출")).toBeNull();
+    // 대신 GitHub 구조·모델 구조가 보인다.
+    expect(screen.getByRole("heading", { name: "GitHub 구조" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "모델 구조" })).toBeInTheDocument();
   });
 });
 

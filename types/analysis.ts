@@ -76,6 +76,39 @@ export interface GpuSpec {
   note: string;
 }
 
+// --- GitHub 저장소 구조 (재구현 관점) ---
+
+/** 논문이 링크한 공개 코드 저장소 분석. found=false는 "못 찾음"(에러 아님). source로 신뢰도 표시. */
+export interface RepoStructure {
+  found: boolean;
+  url: string | null;
+  summary: string;
+  tree: NamedItem[]; // name=경로, desc=역할
+  source: "repo" | "paper"; // 실제 레포 분석 vs PDF 추론 폴백
+}
+
+// --- 모델/손실 다이어그램 (재구현 관점) ---
+
+/** 다이어그램 노드. group으로 데이터→모델→손실 레인 분류. */
+export interface DiagramNode {
+  id: string;
+  label: string;
+  detail: string;
+  group: "data" | "model" | "loss";
+}
+
+/** 노드 id 연결. label은 빈 문자열 허용(이름 없는 흐름). */
+export interface DiagramEdge {
+  from: string;
+  to: string;
+  label: string;
+}
+
+export interface ModelDiagram {
+  nodes: DiagramNode[];
+  edges: DiagramEdge[];
+}
+
 export interface ReproPayload {
   data: TableBlock;
   model: ModelSpec;
@@ -83,6 +116,8 @@ export interface ReproPayload {
   metrics: NamedItem[];
   training: TrainingSpec;
   gpu: GpuSpec;
+  repo: RepoStructure; // 신규 — GitHub 구조
+  diagram: ModelDiagram; // 신규 — 모델/손실 도식
 }
 
 /** lens → payload 매핑 (Analysis 엔티티에서 사용) */
