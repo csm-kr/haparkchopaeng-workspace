@@ -68,6 +68,20 @@ const repro: ReproPayload = {
   metrics: [{ name: "PPL", desc: "퍼플렉서티" }],
   training: { caption: "하이퍼파라미터", rows: [["Optimizer", "AdamW"]] },
   gpu: { hardware: "A100", count: 16, vramGb: 80, vramUsedGb: 58, trainDays: 3, note: "추정" },
+  repo: {
+    found: true,
+    url: "https://github.com/acme/model",
+    summary: "공식 구현 저장소",
+    tree: [{ name: "src/model.py", desc: "모델 정의" }],
+    source: "repo",
+  },
+  diagram: {
+    nodes: [
+      { id: "in", label: "입력 데이터", detail: "토큰 시퀀스", group: "data" },
+      { id: "enc", label: "Encoder", detail: "12-layer Transformer", group: "model" },
+    ],
+    edges: [{ from: "in", to: "enc", label: "임베딩" }],
+  },
 };
 
 const figures = [

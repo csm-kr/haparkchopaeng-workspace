@@ -65,6 +65,8 @@ const repro: ReproPayload = {
   metrics: [{ name: "PPL", desc: "퍼플렉서티" }],
   training: { caption: "하이퍼", rows: [["opt", "AdamW"]] },
   gpu: { hardware: "A100", count: 8, vramGb: 80, vramUsedGb: 60, trainDays: 2, note: "추정" },
+  repo: { found: false, url: null, summary: "", tree: [], source: "paper" },
+  diagram: { nodes: [], edges: [] },
 };
 
 beforeEach(() => {
