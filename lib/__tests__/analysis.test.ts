@@ -44,8 +44,13 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/figure-render", () => ({ renderFigures: vi.fn() }));
 
 // 모킹 후에 import — 모듈이 모킹된 의존성을 받도록.
-const { analyzePaper, extractAnalysis, extractFigures, durationMsFrom } =
-  await import("@/lib/analysis");
+const {
+  analyzePaper,
+  extractAnalysis,
+  extractFigures,
+  extractRepoAndDiagram,
+  durationMsFrom,
+} = await import("@/lib/analysis");
 
 const research: ResearchPayload = {
   problem: { oneLine: "한 줄", setting: "세팅", assumptions: ["a"] },
@@ -201,6 +206,96 @@ describe("Gemini figure 추출 (extractFigures)", () => {
     });
     const figs = await extractFigures(Buffer.from("x"));
     expect(figs[0].box).toBeNull();
+  });
+});
+
+describe("Gemini repo/diagram 추출 (extractRepoAndDiagram)", () => {
+  it("레포를 찾으면 repo를 파싱하고 source=repo·diagram을 채운다(스키마 대신 검색 도구)", async () => {
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        repo: {
+          found: true,
+          url: "https://github.com/x/y",
+          summary: "요약",
+          tree: [{ name: "src/model.py", desc: "모델" }],
+          source: "repo",
+        },
+        diagram: {
+          nodes: [{ id: "enc", label: "Encoder", detail: "12L", group: "model" }],
+          edges: [{ from: "in", to: "enc", label: "" }],
+        },
+      }),
+    });
+
+    const out = await extractRepoAndDiagram(Buffer.from("x"));
+    expect(out.repo).toEqual({
+      found: true,
+      url: "https://github.com/x/y",
+      summary: "요약",
+      tree: [{ name: "src/model.py", desc: "모델" }],
+      source: "repo",
+    });
+    expect(out.diagram.nodes[0]).toEqual({
+      id: "enc",
+      label: "Encoder",
+      detail: "12L",
+      group: "model",
+    });
+
+    const arg = generateContentMock.mock.calls[0][0];
+    // 검색 그라운딩 도구가 켜져 있고, strict 스키마는 쓰지 않는다.
+    expect(arg.config.tools).toEqual([{ googleSearch: {} }]);
+    expect(arg.config.responseSchema).toBeUndefined();
+    // PDF는 base64 inlineData로 함께 보낸다.
+    expect(arg.contents[0].parts[0].inlineData.mimeType).toBe("application/pdf");
+  });
+
+  it("레포를 못 찾으면 found=false·source=paper(에러 아님)", async () => {
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        repo: { found: false, url: null, summary: "", tree: [], source: "paper" },
+        diagram: { nodes: [{ id: "m", label: "M", detail: "", group: "model" }], edges: [] },
+      }),
+    });
+    const out = await extractRepoAndDiagram(Buffer.from("x"));
+    expect(out.repo.found).toBe(false);
+    expect(out.repo.source).toBe("paper");
+    expect(out.diagram.nodes).toHaveLength(1);
+  });
+
+  it("```json 코드펜스로 감싼 응답도 파싱한다", async () => {
+    generateContentMock.mockResolvedValue({
+      text:
+        "```json\n" +
+        JSON.stringify({
+          repo: { found: true, url: "u", summary: "s", tree: [], source: "repo" },
+          diagram: { nodes: [], edges: [] },
+        }) +
+        "\n```",
+    });
+    const out = await extractRepoAndDiagram(Buffer.from("x"));
+    expect(out.repo.found).toBe(true);
+    expect(out.repo.url).toBe("u");
+  });
+
+  it("알 수 없는 group은 model로 정규화한다(방어적)", async () => {
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify({
+        repo: { found: false, url: null, summary: "", tree: [], source: "paper" },
+        diagram: { nodes: [{ id: "z", label: "Z", detail: "", group: "weird" }], edges: [] },
+      }),
+    });
+    const out = await extractRepoAndDiagram(Buffer.from("x"));
+    expect(out.diagram.nodes[0].group).toBe("model");
+  });
+
+  it("깨진 JSON/빈 응답이면 throw 없이 기본값을 돌려준다(격리, R28)", async () => {
+    generateContentMock.mockResolvedValue({ text: "이건 JSON이 아니에요" });
+    const out = await extractRepoAndDiagram(Buffer.from("x"));
+    expect(out).toEqual({
+      repo: { found: false, url: null, summary: "", tree: [], source: "paper" },
+      diagram: { nodes: [], edges: [] },
+    });
   });
 });
 

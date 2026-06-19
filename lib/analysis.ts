@@ -8,7 +8,13 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { signedDownloadUrl } from "@/lib/storage";
 import { renderFigures } from "@/lib/figure-render";
-import type { Lens, ReproPayload, ResearchPayload } from "@/types";
+import type {
+  Lens,
+  ModelDiagram,
+  RepoStructure,
+  ReproPayload,
+  ResearchPayload,
+} from "@/types";
 
 // 논문 분석 파이프라인 (서버 전용). PDF → 두 관점(연구/재구현) 구조화 분석 + figure 해석.
 // LLM 제공자는 Google Gemini(`@google/genai`)다(ADR-011). Anthropic SDK는 쓰지 않는다.
@@ -286,6 +292,111 @@ export async function extractFigures(pdf: Buffer): Promise<FigureExtract[]> {
     box: parseBox(f.box),
     imageUrl: null,
   }));
+}
+
+// --- GitHub 구조 + 모델/손실 다이어그램 추출 (재구현 관점 보강) ---
+
+const REPO_DIAGRAM_PROMPT =
+  "이 논문의 공개 코드 저장소(GitHub 등)를 웹에서 검색해 찾아라. 그리고 모델·손실 구조를 도식화하라. " +
+  "아래 JSON 한 개만 출력한다(코드펜스 허용, 그 외 설명 금지). 한국어로 쓴다.\n" +
+  '{ "repo": { "found": boolean, "url": string|null, "summary": string, ' +
+  '"tree": [{"name":"경로","desc":"역할"}], "source": "repo"|"paper" }, ' +
+  '"diagram": { "nodes": [{"id":string,"label":string,"detail":string,' +
+  '"group":"data"|"model"|"loss"}], "edges": [{"from":id,"to":id,"label":string}] } }\n' +
+  '저장소를 찾으면 found=true·source="repo"로 실제 구조를 채우고, 못 찾으면 found=false·source="paper"로 ' +
+  "논문 본문만으로 추론한다. diagram은 데이터→모델→손실 흐름을 nodes/edges로 표현한다.";
+
+const DEFAULT_REPO: RepoStructure = {
+  found: false,
+  url: null,
+  summary: "",
+  tree: [],
+  source: "paper",
+};
+const DEFAULT_DIAGRAM: ModelDiagram = { nodes: [], edges: [] };
+const DIAGRAM_GROUPS = ["data", "model", "loss"] as const;
+
+/** ```json 펜스를 벗겨 순수 JSON 문자열을 얻는다(그라운딩 호출은 스키마를 못 써 펜스가 섞일 수 있다). */
+function stripCodeFence(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (fenced ? fenced[1] : text).trim();
+}
+
+function parseRepoStructure(raw: unknown): RepoStructure {
+  if (!raw || typeof raw !== "object") return DEFAULT_REPO;
+  const o = raw as Record<string, unknown>;
+  const treeRaw = Array.isArray(o.tree) ? o.tree : [];
+  const tree = treeRaw.map((t) => {
+    const ti = (t ?? {}) as Record<string, unknown>;
+    return { name: String(ti.name ?? ""), desc: String(ti.desc ?? "") };
+  });
+  return {
+    found: Boolean(o.found),
+    url: typeof o.url === "string" ? o.url : null,
+    summary: String(o.summary ?? ""),
+    tree,
+    source: o.source === "repo" ? "repo" : "paper",
+  };
+}
+
+function parseDiagram(raw: unknown): ModelDiagram {
+  if (!raw || typeof raw !== "object") return DEFAULT_DIAGRAM;
+  const o = raw as Record<string, unknown>;
+  const nodesRaw = Array.isArray(o.nodes) ? o.nodes : [];
+  const edgesRaw = Array.isArray(o.edges) ? o.edges : [];
+  const nodes = nodesRaw.map((n) => {
+    const ni = (n ?? {}) as Record<string, unknown>;
+    const group = DIAGRAM_GROUPS.includes(
+      ni.group as (typeof DIAGRAM_GROUPS)[number],
+    )
+      ? (ni.group as ModelDiagram["nodes"][number]["group"])
+      : "model";
+    return {
+      id: String(ni.id ?? ""),
+      label: String(ni.label ?? ""),
+      detail: String(ni.detail ?? ""),
+      group,
+    };
+  });
+  const edges = edgesRaw.map((e) => {
+    const ei = (e ?? {}) as Record<string, unknown>;
+    return {
+      from: String(ei.from ?? ""),
+      to: String(ei.to ?? ""),
+      label: String(ei.label ?? ""),
+    };
+  });
+  return { nodes, edges };
+}
+
+/**
+ * 공개 코드 저장소 구조 + 모델/손실 다이어그램을 추출한다.
+ * googleSearch 그라운딩으로 레포를 검색한다 — 그라운딩은 strict JSON 스키마와 동시 사용이 불가하므로
+ * 펜스드 JSON을 방어적으로 파싱한다. 검색·파싱·안전차단 실패는 throw 없이 기본값으로 격리한다(R28).
+ */
+export async function extractRepoAndDiagram(
+  pdf: Buffer,
+): Promise<{ repo: RepoStructure; diagram: ModelDiagram }> {
+  try {
+    const ai = getAi();
+    const res = await ai.models.generateContent({
+      model: modelId(),
+      contents: [
+        { role: "user", parts: [pdfPart(pdf), { text: REPO_DIAGRAM_PROMPT }] },
+      ],
+      config: { tools: [{ googleSearch: {} }] },
+    });
+    const parsed = JSON.parse(stripCodeFence(responseText(res))) as {
+      repo?: unknown;
+      diagram?: unknown;
+    };
+    return {
+      repo: parseRepoStructure(parsed.repo),
+      diagram: parseDiagram(parsed.diagram),
+    };
+  } catch {
+    return { repo: DEFAULT_REPO, diagram: DEFAULT_DIAGRAM };
+  }
 }
 
 // --- 오케스트레이션 (Inngest 잡이 호출) ---
