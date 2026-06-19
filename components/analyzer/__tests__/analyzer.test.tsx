@@ -161,6 +161,21 @@ describe("AnalysisView 관점 토글", () => {
   });
 });
 
+describe("AnalysisView 재구현 — GitHub 구조·모델 구조", () => {
+  it("재구현 관점에 GitHub 구조와 모델 구조 섹션이 보인다", () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: /재구현 분석/ }));
+
+    expect(screen.getByRole("heading", { name: "GitHub 구조" })).toBeInTheDocument();
+    expect(screen.getByText("https://github.com/acme/model")).toBeInTheDocument();
+    expect(screen.getByText("src/model.py")).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { name: "모델 구조" })).toBeInTheDocument();
+    expect(screen.getByText("Encoder")).toBeInTheDocument();
+    expect(screen.getByText("12-layer Transformer")).toBeInTheDocument();
+  });
+});
+
 describe("AnalysisView Figure 분석", () => {
   it("두 관점 모두에서 figure가 공통으로 보인다", () => {
     renderView();
