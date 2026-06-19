@@ -177,16 +177,19 @@ describe("AnalysisView 재구현 — GitHub 구조·모델 구조", () => {
 });
 
 describe("AnalysisView Figure 분석", () => {
-  it("두 관점 모두에서 figure가 공통으로 보인다", () => {
+  it("연구 관점에서만 figure가 보이고 재구현 관점에선 사라진다", () => {
     renderView();
     // 연구 관점에서 figure 노출.
     expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
     expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
 
-    // 재구현으로 토글해도 figure는 그대로.
+    // 재구현으로 토글하면 figure 섹션이 사라진다.
     fireEvent.click(screen.getByRole("button", { name: /재구현 분석/ }));
-    expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
-    expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
+    expect(screen.queryByText("Figure 1 — 개요")).toBeNull();
+    expect(screen.queryByText("원문 PDF p.3에서 추출")).toBeNull();
+    // 대신 GitHub 구조·모델 구조가 보인다.
+    expect(screen.getByRole("heading", { name: "GitHub 구조" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "모델 구조" })).toBeInTheDocument();
   });
 });
 
