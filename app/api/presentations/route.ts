@@ -3,6 +3,8 @@ import { requireAuth } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
+import { downloadObject } from "@/lib/storage";
+import { countPdfPages } from "@/lib/pdf-page-render";
 
 // POST /api/presentations — 발표 자료 생성.
 // CRITICAL: teamId는 활성 팀에서, 발표자(presenterId)는 세션에서 취한다 — 클라 입력 미신뢰(R3/R37).
@@ -43,6 +45,17 @@ export async function POST(req: Request): Promise<Response> {
     }
     const { title, duration, asset } = parsed.data;
 
+    // PDF 첨부면 페이지 수를 세어 slideCount로 저장한다(라이브 공유 카운트와 같은 헬퍼).
+    // PPTX는 서버에서 셀 수 없어 0. 카운트 실패가 생성을 막지 않게 방어한다(업로드≠분석, R28).
+    let slideCount = 0;
+    if (asset && assetType(asset.filename) === "pdf") {
+      try {
+        slideCount = countPdfPages(await downloadObject(asset.objectPath));
+      } catch {
+        slideCount = 0;
+      }
+    }
+
     const pres = await prisma.presentation.create({
       data: {
         title,
@@ -50,7 +63,7 @@ export async function POST(req: Request): Promise<Response> {
         presenterId: session.memberId,
         date: new Date(),
         duration: duration ?? null,
-        slideCount: 0,
+        slideCount,
         tags: [],
         summary: null,
         keypoints: [],
