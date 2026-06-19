@@ -37,7 +37,10 @@
     {
       "step": 4,
       "name": "routes-nav",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-19T19:42:15+0900",
+      "summary": "/news 목록·/news/[id] 상세 RSC(활성 팀 스코프·티저 서명URL 폴백·저자강조 splitAuthors)·loading 스켈레톤·nav NEWS 항목('논문' 다음) 추가. build/test/lint green(seed 3건은 공유DB 데이터 상태 환경실패, 무관). E2E는 db push 후 수동",
+      "completed_at": "2026-06-19T19:47:32+0900"
     }
   ],
   "created_at": "2026-06-19T19:07:34+0900"
