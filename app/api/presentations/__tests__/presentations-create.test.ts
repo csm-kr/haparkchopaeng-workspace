@@ -15,6 +15,16 @@ const { prismaMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
+const { downloadObjectMock } = vi.hoisted(() => ({
+  downloadObjectMock: vi.fn(),
+}));
+vi.mock("@/lib/storage", () => ({ downloadObject: downloadObjectMock }));
+
+const { countPdfPagesMock } = vi.hoisted(() => ({
+  countPdfPagesMock: vi.fn(),
+}));
+vi.mock("@/lib/pdf-page-render", () => ({ countPdfPages: countPdfPagesMock }));
+
 const { POST } = await import("@/app/api/presentations/route");
 
 const req = (body: unknown) =>
@@ -28,6 +38,8 @@ beforeEach(() => {
   prismaMock.presentation.create.mockResolvedValue({ id: "pres-new" });
   requireAuthMock.mockResolvedValue({ memberId: "ha", role: "멤버" });
   getActiveTeamMock.mockResolvedValue({ id: "tA", slug: "alpha", role: "member" });
+  downloadObjectMock.mockResolvedValue(Buffer.from("%PDF-fake"));
+  countPdfPagesMock.mockReturnValue(0);
 });
 
 describe("POST /api/presentations", () => {
@@ -75,6 +87,44 @@ describe("POST /api/presentations", () => {
       size: "6.4MB",
       url: "presentations/abc.pptx",
     });
+    // PPTX는 서버에서 페이지를 셀 수 없어 slideCount 0 + PDF 다운로드 안 함.
+    expect(arg.data.slideCount).toBe(0);
+    expect(downloadObjectMock).not.toHaveBeenCalled();
+  });
+
+  it("PDF를 주면 페이지 수를 세어 slideCount로 저장한다", async () => {
+    countPdfPagesMock.mockReturnValue(12);
+    const res = await POST(
+      req({
+        title: "MoD 리뷰",
+        asset: {
+          objectPath: "presentations/mod.pdf",
+          filename: "MoD.pdf",
+          size: "3.2MB",
+        },
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(downloadObjectMock).toHaveBeenCalledWith("presentations/mod.pdf");
+    const arg = prismaMock.presentation.create.mock.calls[0][0];
+    expect(arg.data.slideCount).toBe(12);
+  });
+
+  it("PDF 카운트가 실패해도 생성을 막지 않고 slideCount 0", async () => {
+    downloadObjectMock.mockRejectedValue(new Error("storage down"));
+    const res = await POST(
+      req({
+        title: "MoD 리뷰",
+        asset: {
+          objectPath: "presentations/mod.pdf",
+          filename: "MoD.pdf",
+          size: "3.2MB",
+        },
+      }),
+    );
+    expect(res.status).toBe(201);
+    const arg = prismaMock.presentation.create.mock.calls[0][0];
+    expect(arg.data.slideCount).toBe(0);
   });
 
   it("객체 키가 presentations/ 밖이면 400 (위조 방지)", async () => {
