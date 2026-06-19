@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "data-model",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-19T19:15:07+0900",
+      "summary": "Publication 모델 추가·prisma generate(로컬), lib/news.ts(getPublications/getPublication/splitAuthors)·테스트. db push는 미실행(수동 후속)",
+      "completed_at": "2026-06-19T19:19:08+0900"
     },
     {
       "step": 2,

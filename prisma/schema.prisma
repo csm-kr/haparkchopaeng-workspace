@@ -213,6 +213,26 @@ model Reaction {
   @@unique([commentId, memberId, emoji])
 }
 
+// NEWS 출판 실적 쇼케이스 (ADR-022). 우리 팀이 발표한 논문 = 실적. Paper(분석 대상)와 의미 분리.
+model Publication {
+  id          String   @id @default(cuid())
+  teamId      String   @default("") // Team.id — 활성 팀 스코핑(ADR-020/R37). default ""는 컨벤션 일치 sentinel — 쓰기 시 명시 주입.
+  title       String
+  authors     String // 자유 텍스트(쉼표 구분). 렌더 시 Member.name 일치 팀원만 강조(Member FK 없음 — YAGNI)
+  venue       String // 학회/저널명 (예: "NeurIPS 2025")
+  year        Int // 정렬·그룹화 기준
+  month       Int? // 1–12, 선택(없으면 연도만 표시)
+  teaserImage String? // 스토리지 객체 키(news/ 접두) — 비공개 버킷 + 서명 URL(R36). 없으면 플레이스홀더
+  links       Json // [{ label, url }] — arXiv/PDF/코드/프로젝트
+  createdBy   String // Member.id — CRITICAL: 작성자는 세션에서 주입(R3)
+  createdAt   DateTime @default(now())
+  // CRITICAL: NEWS는 분석 대상이 아니다 — analyses/figures/notes를 붙이지 마라(Paper와 의미 분리, ADR-022).
+  // CRITICAL: 모든 조회·변이는 활성 팀(teamId)으로 스코핑(ADR-020, R37). 쓰기 teamId·createdBy는 서버 주입.
+  // CRITICAL: 신규 테이블 — 운영 db push는 harness가 아니라 사람이 검토 후 수동(ADR-020 정신).
+
+  @@index([teamId])
+}
+
 model ScheduleMonth {
   id                   String         @id @default(cuid())
   teamId               String         @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
