@@ -7,7 +7,8 @@
       "name": "docs-news",
       "status": "completed",
       "started_at": "2026-06-19T19:07:34+0900",
-      "summary": "ADR-022 + DB/API/SCREENS에 NEWS(Publication 모델·팀 내부 전용·팀 스코핑·프리사인 티저 이미지) 명세 추가, 코드 변경 없음, db push는 수동 후속"
+      "summary": "ADR-022 + DB/API/SCREENS에 NEWS(Publication 모델·팀 내부 전용·팀 스코핑·프리사인 티저 이미지) 명세 추가, 코드 변경 없음, db push는 수동 후속",
+      "completed_at": "2026-06-19T19:15:06+0900"
     },
     {
       "step": 1,
