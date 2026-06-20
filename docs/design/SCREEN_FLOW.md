@@ -8,13 +8,13 @@
 auth ──(로그인)──> teams (팀 허브) ──(팀 선택)──> app 셸
        └─(초대 next 우선)──────────────────────┘ (허브 건너뜀)
                                       │
-   ┌──────────────┬─────────────┬─────┴───────┬──────────┬──────────┐
- dashboard      library      presentations   schedule    team     meeting   profile
-   │ ＋업로드      │ row클릭      │ 항목클릭        │ 액션      │          │          │
-   ▼              ▼             ▼               ▼          │          │          │
-UploadModal     paper       presentation    (입장)→meeting │          │          │
-   │                                                       │          │          │
-   └──(분석완료)──> paper                                   └─ 자료 ──> presentation
+   ┌──────────┬────────┬───────┬──────────────┬─────────┬───────┬────────┐
+ dashboard  library    news  presentations  schedule   team  meeting  profile
+   │ ＋업로드   │ row클릭   │ 카드/추가 │ 항목클릭        │ 액션     │       │        │
+   ▼          ▼         ▼       ▼              ▼         │       │        │
+UploadModal  paper  news-detail presentation (입장)→meeting       │        │
+   │                                                    │       │        │
+   └──(분석완료)─> paper                                 └─ 자료 ─> presentation
 ```
 
 - 로그인 후 **항상 팀 허브 `/teams`에 착지**한다(팀이 1개여도) — 거기서 팀을 골라야 셸(`/dashboard`)로 들어간다(ADR-021). 단 **초대 복귀(`next`)는 우선**해 허브를 건너뛴다.
@@ -92,6 +92,15 @@ idle ─(PDF drop | arXiv URL)→ uploading(진행률) → analyzing("읽는 중
 ```
 PDF 전용. PPTX/MD·빈 노트 단축 제거(ADR-003). **업로드 성공 ≠ 분석 성공** — 분리해 처리(논문은 남고 분석만 재시도).
 
+### news — NEWS 실적 (CRUD 쇼케이스)
+```
+목록 ─[＋ 실적 추가 | 빈 상태 CTA]→ 추가 폼 ─[저장]→ presign(news)+직접 업로드 → POST /api/news → 목록 갱신
+목록 ─[카드 클릭]→ news-detail ─[편집]→ 폼 / ─[삭제](확인)→ DELETE → 목록
+news-detail ◇ 다른 팀/없는 id → "찾을 수 없음"(404, R19/R37)
+```
+- **로딩:** 카드 그리드 스켈레톤. **빈:** "아직 등록된 실적이 없어요" + 첫 실적 추가하기. **에러:** 목록 에러 카드 + 다시 시도.
+- 모든 팀원이 추가·편집·삭제(역할 게이트 없음 — ADR-022). 정렬은 연/월 내림차순(null 월은 뒤로). 분석 대상 '논문'과 별개.
+
 ## 조건부 UI 치트시트
 
 | 조건 | UI |
@@ -105,6 +114,8 @@ PDF 전용. PPTX/MD·빈 노트 단축 제거(ADR-003). **업로드 성공 ≠ �
 | figure 섹션 | "PDF 추출" 배지; 노트 관점 공통 |
 | role === guest | 앰버 배지 |
 | upload | PDF 전용 드롭존 + arXiv URL |
+| news 실적 0개 | 빈 상태 + 첫 실적 추가하기 CTA |
+| news-detail 다른 팀/없는 id | "찾을 수 없음"(404 등가) |
 
 ## 빈 상태 원칙
 

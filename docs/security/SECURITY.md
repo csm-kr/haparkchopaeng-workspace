@@ -4,8 +4,8 @@
 
 ## 위협 모델 (단일 테넌트, 4인 비공개)
 
-- **자산:** 논문 PDF·분석, 발표 자료, 라이브 송출 자격증명, 멤버 PII(이메일), 벌금 장부, 외부 API 키(Gemini·Cloudflare·Supabase).
-- **주요 위협:** ① 초대 외 무단 접근(공개 가입 없음) ② 라이브 Stream Key 유출 → 무단 송출 ③ 비밀 키의 클라이언트 노출 ④ 스토리지 객체 무단 다운로드 ⑤ 작성자 위변조(노트/댓글) ⑥ 권한 상승(멤버→관리자).
+- **자산:** 논문 PDF·분석, 발표 자료, 라이브 입장 토큰(LiveKit), 멤버 PII(이메일), 벌금 장부, 외부 API 키(Gemini·LiveKit·Supabase).
+- **주요 위협:** ① 초대 외 무단 접근(공개 가입 없음) ② LiveKit 입장 토큰 유출 → 무단 입장·화면공유 ③ 비밀 키의 클라이언트 노출 ④ 스토리지 객체 무단 다운로드 ⑤ 작성자 위변조(노트/댓글) ⑥ 권한 상승(멤버→관리자).
 - **범위 밖:** 멀티테넌트 격리(테넌트가 1개), 대규모 DDoS(4인 사설).
 
 ## 인증 (Authentication)
@@ -39,13 +39,14 @@
 ## 비밀 관리
 
 - **CRITICAL: 모든 키는 `.env`(서버)에서만.** 클라이언트 번들·`NEXT_PUBLIC_*`에 비밀 금지. `.env`는 커밋 금지(→ [`../dev/ENV.md`](../dev/ENV.md)).
-- 외부 호출(Gemini 분석·Cloudflare·Supabase)은 **서버 route handler에서만**. 클라이언트는 자체 API 경유.
+- 외부 호출(Gemini 분석·LiveKit 토큰 서명·Supabase)은 **서버 route handler에서만**. 클라이언트는 자체 API 경유.
 - 키 유출 시 즉시 회전. 최소 권한 토큰 사용.
 
-## 라이브(Cloudflare Stream Live)
+## 라이브(LiveKit · ADR-019)
 
-- **CRITICAL: Stream Key(RTMPS/SRT 송출 자격증명)는 발표자 본인에게만** 반환한다(`/live/start`). 시청자 `/join` 응답에는 **재생용 HLS만**, 송출 자격증명 절대 미포함.
-- 동시 active 세션 1개 강제(`409`) — 전역 `live`와 1:1(ADR-001). `/end`만 전체 종료.
+- **CRITICAL: LiveKit 입장 토큰은 참가자별로 서버가 서명·발급하고 본인에게만** 반환한다(`/live/start`=발표자, `/join`=참가자). **화면공유 grant는 발표자 토큰에만**(R7). 신원(identity)은 세션에서 주입 — 클라가 보낸 식별자 미신뢰(R3). 토큰 서명 키(`LIVEKIT_API_SECRET`)는 서버 전용.
+- 동시 active 세션은 **팀당 1개** 강제(`409`) — 팀 전역 `live`와 1:1(ADR-001/ADR-020). `/end`만 전체 종료(LiveKit 룸 삭제 best-effort), `/leave`는 본인만.
+- 채팅·반응·손들기는 LiveKit **데이터 채널**로 룸 내부에서만(휘발·미저장). 페이로드의 author를 신뢰하지 않고 LiveKit identity로 판별.
 
 ## 파일 스토리지
 

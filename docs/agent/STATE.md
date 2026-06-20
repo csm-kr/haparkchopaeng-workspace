@@ -42,6 +42,7 @@
 | `papers`(+`analysisStatus`) + `analyses`(research/repro) + `figures` | 두 관점 구조화 + 페이지 출처 figure. `analysisStatus`(pending/ready/failed)로 분석 상태를 UI에 노출 | ADR-004 |
 | `sectionNotes` | `{paperId, sectionId, lens, authorId, title, body}` | figure 노트 `lens:any` (ADR-005) |
 | `presentations` + `assets` + `versions` + `comments`(반응·@멘션) | 회고 스레드 | ADR-004 |
+| `publications` | 팀 출판 실적(제목·학회·저자·연/월·티저·링크) | 분석 대상 아님(Paper와 분리)·팀 스코핑 (ADR-022) |
 | `scheduleMonth` + `scheduleWeeks` + 순번 포인터 | 월별 계획 | row 부재 = 빈 달 (ADR-006) |
 | `fineConfig` + `memberLedger` | 벌금·장부 | 누적·미납은 파생 |
 | `members` + `invites` | 역할·대기 초대 | 초대 전용 (ADR-007) |

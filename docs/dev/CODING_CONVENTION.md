@@ -23,7 +23,7 @@ app/
   api/                    # CRITICAL: 모든 서버 로직은 여기 route handler에서만
     papers/  presentations/  schedule/  live/  invites/ …
 components/               # 재사용 UI (shell, analyzer, cards …) — 기본 RSC, 인터랙티브만 "use client"
-lib/                      # 서버 유틸: prisma, supabase(server/admin/realtime), cloudflare, gemini(@google/genai), storage, auth, validators
+lib/                      # 서버 유틸: prisma, supabase(server/admin/realtime), livekit, gemini(@google/genai), storage, auth, validators
 worker/                   # 백그라운드 잡 워커(분석·arXiv·녹화) — 요청 경로와 분리 (ADR-013)
 types/                    # 공유 타입
 prisma/                   # schema.prisma, seed.ts
@@ -34,7 +34,7 @@ styles/                   # 토큰·전역 css
 
 ## CRITICAL 규칙 (CLAUDE.md 직결)
 
-1. **모든 서버/외부 로직은 서버에서만** — 읽기는 RSC의 `lib/` 서버 함수(Prisma 직접), 쓰기는 route handler/Server Action. 클라이언트 컴포넌트에서 DB·Cloudflare·스토리지·외부 API 직접 호출 금지. (ADR-015)
+1. **모든 서버/외부 로직은 서버에서만** — 읽기는 RSC의 `lib/` 서버 함수(Prisma 직접), 쓰기는 route handler/Server Action. 클라이언트 컴포넌트에서 DB·LiveKit·스토리지·외부 API 직접 호출 금지. (ADR-015)
 2. **긴 작업(분석·arXiv·녹화)은 요청 경로가 아니라 `worker/`에서.** API는 잡만 적재하고 즉시 응답. 인라인 LLM 호출 금지(타임아웃). (ADR-013)
 3. **클라이언트 컴포넌트에서 외부 API 직접 호출 금지.** 항상 자체 API/서버를 경유한다.
 4. **컴포넌트는 `components/`, 타입은 `types/`로 분리.**

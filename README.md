@@ -32,7 +32,7 @@
 | `data.js`의 `window.PAPERS`, `window.TEAM`, `window.SCHEDULE` 등 | API + 타입드 모델 / DB |
 | `useDetailState` / `useAnState` / `useMeetState` (로컬 `useState`) | 실제 상태 + 서버 영속화 |
 | `<image-slot>` 웹 컴포넌트(드래그앤드롭 플레이스홀더) | 실제 이미지 업로드 / 렌더링된 PDF figure |
-| `getUserMedia` 프리뷰 타일, 타인용 정적 아바타 | **Cloudflare Stream Live**(Live Input 생성 → 발표자 RTMPS/SRT 송출 → 시청자 HLS/Cloudflare Player 재생). 앱은 방송 생성·권한 체크·플레이어 노출만 담당 |
+| `getUserMedia` 프리뷰 타일, 타인용 정적 아바타 | **LiveKit(SFU)** — 참가자별 입장 토큰으로 같은 룸에 접속해 다자간 비디오 타일·화면공유(ADR-019, Cloudflare Stream Live 대체). 앱은 토큰 발급·권한 체크·룸 정리만 담당 |
 | Tweaks 패널(`tweaks-panel.jsx`) | **제거** — 제품 기능이 아니라 디자인 탐색 도구 |
 
 ## 앱 구조 & 라우팅

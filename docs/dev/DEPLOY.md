@@ -12,7 +12,7 @@
 | 실시간 | **Supabase Realtime** | `lib/realtime.ts`·LiveProvider 구독 | Realtime 활성(기본 on) |
 | 스토리지 | **Supabase Storage** | `lib/storage.ts`(프리사인/서명 URL) | 비공개 버킷 생성 |
 | 잡 | **Inngest** | `app/api/inngest`·`worker/analyze-paper` | Inngest 앱 연결(prod 키) |
-| 라이브 | **Cloudflare Stream Live** | `lib/cloudflare.ts`·live 라우트 | 계정 토큰 + 웹훅 등록 |
+| 라이브 | **LiveKit (SFU)** | `lib/livekit.ts`·live 라우트 | LiveKit Cloud 프로젝트 + API 키 |
 | 분석 | **Google Gemini** | `lib/analysis.ts`(`@google/genai`) | `GEMINI_API_KEY` 발급 |
 
 ## 순서
@@ -25,10 +25,10 @@
 5. **Realtime**: 기본 활성. `live` 브로드캐스트 채널을 쓴다(별도 설정 불필요).
 6. `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`·`SUPABASE_SERVICE_ROLE_KEY` 복사. **service role은 서버 전용**(R2).
 
-### 2. Cloudflare Stream (라이브가 필요할 때만)
-1. `CLOUDFLARE_ACCOUNT_ID` + Stream 권한 API 토큰(`CLOUDFLARE_STREAM_API_TOKEN`) 발급.
-2. 녹화 완료 웹훅을 `{APP_BASE_URL}/api/webhooks/cloudflare`로 등록하고 서명 시크릿을 `CLOUDFLARE_WEBHOOK_SECRET`에 넣는다(HMAC 검증, S4.6).
-> 키가 없으면 앱은 정상 배포되고 라이브 화면의 빈 상태/시작 버튼까지 동작한다 — **실제 송출만** 키가 있어야 한다.
+### 2. LiveKit (라이브가 필요할 때만)
+1. LiveKit Cloud 프로젝트 생성(또는 self-host) → `LIVEKIT_URL`(`wss://…`)·`LIVEKIT_API_KEY`·`LIVEKIT_API_SECRET` 발급(ADR-019, → [`./ENV.md`](./ENV.md)).
+2. 별도 웹훅 등록은 불필요 — 앱이 서버에서 참가자별 입장 토큰을 서명해 발급한다(`participant_left` 웹훅은 추후, ISSUES).
+> 키가 없으면 앱은 정상 배포되고 라이브 화면의 빈 상태/시작 버튼까지 동작한다 — **실제 화상 접속만** 키가 있어야 한다(`/start`·`/join`이 `503`, R30).
 
 ### 3. Inngest
 1. Inngest 앱 생성 → `INNGEST_EVENT_KEY`·`INNGEST_SIGNING_KEY` 발급.
@@ -40,7 +40,7 @@
 ### 5. Vercel
 1. 레포 연결(프레임워크 Next.js 자동 감지, 별도 `vercel.json` 불필요).
 2. **Environment Variables**에 [`./ENV.md`](./ENV.md) 변수 전부 입력. `APP_BASE_URL`은 운영 도메인. `AUTH_SECRET`·`INVITE_TOKEN_SECRET`은 새 난수.
-3. 배포. `postinstall`이 `prisma generate`를 돌린다. 빌드 후 §3-2 Inngest sync, §2-2 Cloudflare 웹훅의 도메인을 운영 URL로 갱신.
+3. 배포. `postinstall`이 `prisma generate`를 돌린다. 빌드 후 §3-2 Inngest sync로 서브 URL을 운영 도메인으로 갱신(LiveKit은 웹훅 없음).
 
 ## 배포 전 체크 (로컬에서 green 확인)
 
@@ -54,7 +54,7 @@ npx playwright test # 9 passed
 ## 키 없이도 되는 것 / 키가 있어야 하는 것
 
 - **키 없이 배포·동작:** 전 화면 렌더, 초대/팀/스케줄/논문 목록·상세·노트/발표 자료·회고 댓글, 라이브 **빈 상태 + 시작 버튼**.
-- **키가 있어야 실제 동작:** 논문 분석 결과 생성(Gemini+Inngest), PDF 업로드 저장(Supabase Storage), Google 로그인(Supabase Auth), 라이브 **송출/시청**(Cloudflare), 전이 실시간 푸시(Supabase Realtime).
+- **키가 있어야 실제 동작:** 논문 분석 결과 생성(Gemini+Inngest), PDF 업로드 저장(Supabase Storage), Google 로그인(Supabase Auth), 라이브 **화상 접속**(LiveKit), 전이 실시간 푸시(Supabase Realtime).
 
 > 비밀 키는 `.env`/Vercel 환경변수에만. **커밋 금지**(`.gitignore`). `NEXT_PUBLIC_`은 anon·URL 같은 공개값에만 — service role·API 토큰·시크릿에 붙이지 마라(R2).
 

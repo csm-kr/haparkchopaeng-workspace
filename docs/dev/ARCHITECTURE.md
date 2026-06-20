@@ -21,7 +21,7 @@
 
 ## 프로덕션 런타임 아키텍처
 
-> 프로토타입은 단일 클라이언트 SPA지만, 프로덕션은 **Vercel(앱) + Supabase(데이터·인증·스토리지·실시간) + 외부 잡 러너 + Cloudflare(영상)**가 얽힌다. 결정 근거: [`../agent/ADR.md`](../agent/ADR.md) **ADR-016(배포·ADR-010/012/013/014 개정)** · ADR-015 · ADR-017.
+> 프로토타입은 단일 클라이언트 SPA지만, 프로덕션은 **Vercel(앱) + Supabase(데이터·인증·스토리지·실시간) + 외부 잡 러너 + LiveKit(영상)**가 얽힌다. 결정 근거: [`../agent/ADR.md`](../agent/ADR.md) **ADR-016(배포·ADR-010/012/013/014 개정)** · ADR-015 · ADR-017.
 
 ### 배포 토폴로지 (ADR-016)
 ```
@@ -117,7 +117,7 @@ src/
   읽기: RSC(서버) → Prisma 직접 조회 → HTML 스트리밍
   쓰기: 클라이언트 인터랙티브 섬 → Server Action/route handler → DB/외부 → revalidate
   긴 작업: 요청은 즉시 응답(pending) + 잡 트리거 → 외부 durable 잡 러너 처리 → Realtime/재조회로 반영
-  라이브: Live Input 생성 → 발표자 RTMPS/SRT 송출 → 시청자 HLS/Player; 전이는 Supabase Realtime로 전 클라 동기화
+  라이브: LiveKit 룸 생성 + 참가자별 입장 토큰 발급 → 같은 룸에서 다자간 화상·화면공유(채팅은 데이터 채널); 전이는 Supabase Realtime로 전 클라 동기화
 ```
 > 상세는 위 §프로덕션 런타임 아키텍처. 클라이언트가 DB·외부 서비스를 직접 보지 않는다는 원칙은 유지하되, 읽기는 RSC 서버 조회, 쓰기는 Server Action/route handler로 구체화한다.
 

@@ -4,7 +4,7 @@
 
 ## 원칙
 
-- **CRITICAL: 모든 서버/외부 로직은 Next.js App Router의 route handler(`app/api/**/route.ts`) 또는 Server Action에서만 처리한다.** 클라이언트 컴포넌트에서 DB·Cloudflare·파일 스토리지를 직접 호출하지 않는다(CLAUDE.md 규칙).
+- **CRITICAL: 모든 서버/외부 로직은 Next.js App Router의 route handler(`app/api/**/route.ts`) 또는 Server Action에서만 처리한다.** 클라이언트 컴포넌트에서 DB·LiveKit·파일 스토리지를 직접 호출하지 않는다(CLAUDE.md 규칙).
 - **CRITICAL: 활성 팀(쿠키)으로 암묵 스코핑(ADR-020, R37).** 경로에 `teamId`를 노출하지 않는다 — 서버가 세션의 **활성 팀**(쿠키, 반드시 검증된 멤버십)으로 조회를 필터하고 변이의 `teamId`를 주입한다(클라가 보낸 `teamId` 미신뢰, R3). 다른 팀 엔티티 접근은 `403`(R19).
 - **인증 필수:** 모든 엔드포인트는 세션(초대 기반 로그인)을 요구한다. 미인증 → `401`. 권한 부족 → `403`. 자세한 권한 표는 [`../security/SECURITY.md`](../security/SECURITY.md).
 - **응답 포맷:** `{ data }` 또는 `{ error: { code, message } }`. 목록은 `{ data: [...] }`.

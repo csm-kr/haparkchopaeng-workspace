@@ -2,7 +2,7 @@
 
 > 엔드포인트는 [`./API.md`](./API.md), 모델은 [`./DB.md`](./DB.md), 화면 전환은 [`../design/SCREEN_FLOW.md`](../design/SCREEN_FLOW.md)를 본다. 이 문서는 주요 동작의 **컴포넌트 간 호출 순서**를 다룬다. 다이어그램은 Mermaid로, 텍스트로도 읽히게 작성한다.
 
-참여자: `Client`(클라이언트 컴포넌트) · `API`(route handler/Server Action) · `DB`(Prisma) · `Storage`(파일) · `CF`(Cloudflare Stream Live).
+참여자: `Client`(클라이언트 컴포넌트) · `API`(route handler/Server Action) · `DB`(Prisma) · `Storage`(파일) · `LK`(LiveKit SFU, ADR-019).
 
 ---
 
@@ -62,48 +62,52 @@ sequenceDiagram
 
 - ※ CRITICAL: 작성자는 **서버가 세션에서 강제**. 위변조 방지(→ [`../security/SECURITY.md`](../security/SECURITY.md)).
 
-## S3. 라이브 시작 (발표자) — Cloudflare
+## S3. 라이브 시작 (발표자) — LiveKit
 
 ```mermaid
 sequenceDiagram
   participant P as Client (발표자)
   participant A as API (/api/live/start)
   participant D as DB
-  participant C as CF (Stream Live)
+  participant LK as LiveKit (SFU)
   P->>A: POST /api/live/start
-  A->>D: active LiveSession 존재? (있으면 409)
-  A->>C: Live Input 생성
-  C-->>A: { liveInputId, rtmps{url,key}, srt, playback{hls} }
-  A->>D: LiveSession 생성(active=true, cloudflareLiveInputId)
-  A-->>P: { rtmps, srt, playback }  ※ Stream Key는 발표자에게만
-  Note over P: OBS 등으로 RTMPS/SRT 송출
+  A->>A: requireAuth + 활성 팀 해석(teamId)
+  A->>D: 활성 팀에 active LiveSession 존재? (있으면 409)
+  A->>D: LiveSession 생성(active=true, teamId, presenterId)
+  A->>A: LiveKit AccessToken 서명(identity=Member.id, 룸=live-{id}, 화면공유 grant 포함)
+  A-->>P: { session, token, url }  ※ 토큰은 발표자 본인에게만
+  Note over P,LK: 발표자가 토큰으로 LiveKit 룸 접속(카메라/마이크/화면공유 publish)
   A->>A: Supabase Realtime 채널에 live.started broadcast → 구독자에게 푸시 (S4.5)
 ```
+- ※ 키(`LIVEKIT_*`) 부재 시 `/start`는 `503`("아직 연결 안 됨", R30) — build/test는 키 없이 통과(R2).
 
-## S4. 라이브 입장(시청자) vs 나가기 vs 종료
+## S4. 라이브 입장(참가자) vs 나가기 vs 종료
 
 ```mermaid
 sequenceDiagram
-  participant V as Client (시청자)
+  participant V as Client (참가자)
   participant A as API
   participant D as DB
-  participant C as CF
+  participant LK as LiveKit (SFU)
   V->>A: POST /api/live/:id/join
-  A->>D: Participant upsert
-  A-->>V: { playback{hls} }  ※ 송출 자격증명 없음
-  V->>C: HLS 재생
+  A->>D: Participant upsert (다른 팀 세션이면 403)
+  A->>A: LiveKit AccessToken 서명(카메라/마이크 publish · 화면공유 grant 없음)
+  A-->>V: { token, url }  ※ 본인에게만
+  Note over V,LK: 같은 LiveKit 룸 접속(카메라는 선택 — 끄면 아바타 타일)
 
   alt 나가기 (본인만)
     V->>A: POST /api/live/:id/leave
     A->>D: Participant.leftAt 기록 (세션은 active 유지)
+    Note over V,LK: 클라이언트가 LiveKit 연결 종료
   else 종료 (발표자/관리자)
     V->>A: POST /api/live/:id/end
-    A->>C: Live Input 정리
     A->>D: LiveSession active=false, endedAt
+    A->>LK: 룸 삭제 (best-effort)
     A->>A: Supabase Realtime에 live.ended broadcast
     A-->>V: ok
   end
 ```
+- ※ 채팅·반응·손들기·발표자료 페이지 동기화는 **LiveKit 데이터 채널**(휘발·미저장).
 
 ## S4.5 라이브 전이 실시간 전파 (Supabase Realtime) — CRITICAL
 
@@ -121,18 +125,9 @@ sequenceDiagram
 ```
 - 서버리스/다중 리전에서도 성립(인-프로세스 버스 가정 금지). `LiveSession` 변경을 `postgres_changes`로 구독하는 방식도 가능. @멘션 알림 채널은 미결(ISSUES I-5).
 
-## S4.6 녹화 완료 웹훅 (Cloudflare → 앱)
+## S4.6 녹화 — 미결 (범위 밖)
 
-```mermaid
-sequenceDiagram
-  participant C as Cloudflare Stream
-  participant A as API (/api/webhooks/cloudflare)
-  participant D as DB
-  C->>A: POST 녹화 완료 (HMAC 서명)
-  A->>A: 서명 검증 (세션 인증 아님)
-  A->>D: LiveSession.recordingUrl 기록
-  Note over A,D: 발표 자료로 아카이브할지 결정 (미결 ISSUES I-3)
-```
+> ADR-019(LiveKit 전환)로 **Cloudflare 녹화 완료 웹훅 경로는 폐기**했다(`/api/webhooks/cloudflare` 제거). 녹화가 필요하면 LiveKit Egress로 가능하나 이번 범위 밖이다(미결 → [`../agent/ISSUES.md`](../agent/ISSUES.md) I-3). `LiveSession.recordingUrl`은 미사용 레거시 컬럼이다.
 
 - ※ `/leave`는 세션을 끝내지 않는다. `/end`만 전역 종료(ADR-001).
 

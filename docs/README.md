@@ -20,7 +20,7 @@
 | [SEQUENCE_DIAGRAM](./dev/SEQUENCE_DIAGRAM.md) | 주요 동작의 컴포넌트 호출 순서 |
 | [CODING_CONVENTION](./dev/CODING_CONVENTION.md) | 스택·네이밍·타입·금지 규칙 |
 | [ENV](./dev/ENV.md) | 환경 변수·논문 분석 LLM 파이프라인 |
-| [DEPLOY](./dev/DEPLOY.md) | 배포 런북(Vercel·Supabase·Cloudflare·Inngest) |
+| [DEPLOY](./dev/DEPLOY.md) | 배포 런북(Vercel·Supabase·LiveKit·Inngest) |
 
 ### 🎨 디자이너 — `design/`
 | 문서 | 내용 |
@@ -37,7 +37,7 @@
 ### 🤖 에이전트 — `agent/`
 | 문서 | 내용 |
 |---|---|
-| [ADR](./agent/ADR.md) | 주요 결정 기록(ADR-001~015) |
+| [ADR](./agent/ADR.md) | 주요 결정 기록(ADR-001~022) |
 | [STATE](./agent/STATE.md) | 앱 레벨 vs 서버 영속 상태 |
 | [ISSUES](./agent/ISSUES.md) | 미결 사항·열린 질문 |
 | [RULES](./agent/RULES.md) | 절대 어기면 안 되는 불변 규칙 |
@@ -46,7 +46,7 @@
 
 - **스택:** Next.js 15 (App Router) + TS strict + Tailwind + shadcn (ADR-009)
 - **DB:** Prisma + SQLite, Postgres 이전 경로 유지 (ADR-010)
-- **라이브:** Cloudflare Stream Live, MVP 포함 (ADR-002)
+- **라이브:** LiveKit 다자간 화상(SFU), MVP 포함 (ADR-019, ADR-002 대체)
 - **논문 분석:** Google Gemini 보조 추출, 키는 `.env`(서버 전용) (ADR-011, [ENV](./dev/ENV.md))
 
 ### 런타임 아키텍처 (ADR-015·016 → [ARCHITECTURE](./dev/ARCHITECTURE.md))

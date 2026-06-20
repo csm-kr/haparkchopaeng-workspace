@@ -11,14 +11,14 @@
 - **현재 방향:** 1차는 LLM 보조 추출 + 수동 업로드 폴백(`imageUrl=null` 허용). 자동 렌더링 파이프라인은 추후. 설명은 LLM 초안 → 사람 검수(ADR-011).
 - **영향:** [`../dev/DB.md`](../dev/DB.md) `Figure`, [`../dev/ENV.md`](../dev/ENV.md) 분석 파이프라인.
 
-### I-2 🟡 라이브 방송 모델
-- **질문:** 발표자가 OBS로 RTMPS/SRT 송출하는 **1인 방송**으로 가는가(프로토타입의 상호 비디오 그리드 대신)?
-- **현재 방향:** Cloudflare Stream Live 기반 1인 송출 + 다수 시청(ADR-002). 프로토타입 그리드는 이 모델로 재해석.
+### I-2 ✅ 라이브 방송 모델 (해결 — ADR-019)
+- **질문:** 발표자 1인 송출(OBS RTMPS/SRT) vs 상호 비디오 그리드?
+- **결정:** **다자간 실시간 화상 컨퍼런스로 확정**(LiveKit SFU, ADR-019). 1인 송출(Cloudflare Stream Live, ADR-002)은 폐기. 모두 같은 룸에 접속(카메라 선택), 발표자만 화면공유 grant.
 - **영향:** meeting 화면 UI, [`../dev/SEQUENCE_DIAGRAM.md`](../dev/SEQUENCE_DIAGRAM.md) S3/S4.
 
-### I-3 🟡 녹화 보존 / 아카이브
+### I-3 🟢 녹화 보존 / 아카이브
 - **질문:** 녹화본 보존 기간? 종료 시 녹화본을 발표 자료로 자동 아카이브?
-- **현재 방향:** 미정. `LiveSession.recordingUrl` 필드만 확보.
+- **현재 방향:** 미정·추후. ADR-019(LiveKit 전환)로 기존 Cloudflare 녹화 웹훅은 폐기 — 필요 시 LiveKit Egress로(범위 밖). `LiveSession.recordingUrl`은 미사용 레거시 컬럼.
 
 ### I-4 🟡 벌금 = 정보 vs 결제 연동
 - **질문:** 장부는 정보 제공용인가, 실제 결제 추적과 연동?

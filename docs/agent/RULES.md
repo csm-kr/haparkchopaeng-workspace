@@ -4,7 +4,7 @@
 
 ## 아키텍처 / 서버
 
-- **R1. 모든 서버·외부 로직은 route handler/Server Action(`app/api/**`)에서만.** 클라이언트 컴포넌트에서 DB·Cloudflare·스토리지·LLM 직접 호출 금지. (CLAUDE.md, [`../dev/CODING_CONVENTION.md`](../dev/CODING_CONVENTION.md))
+- **R1. 모든 서버·외부 로직은 route handler/Server Action(`app/api/**`)에서만.** 클라이언트 컴포넌트에서 DB·LiveKit·스토리지·LLM 직접 호출 금지. (CLAUDE.md, [`../dev/CODING_CONVENTION.md`](../dev/CODING_CONVENTION.md))
 - **R2. 비밀은 `.env`(서버)에서만.** `NEXT_PUBLIC_*`에 키 금지, 클라이언트 번들 노출 금지. ([`../dev/ENV.md`](../dev/ENV.md), [`../security/SECURITY.md`](../security/SECURITY.md))
 - **R3. 작성자/소유자 ID는 세션에서 취한다.** 클라가 보낸 `authorId` 등 미신뢰. ([`../security/SECURITY.md`](../security/SECURITY.md))
 - **R4. 스택은 Next.js 15 + TS strict + Tailwind + Prisma/SQLite.** 벗어나지 않는다. (ADR-009/010)
