@@ -54,6 +54,15 @@ export interface FinesView {
   members: MemberLedgerRow[];
 }
 
+/** 장부 편집 입력 — 원자료 4개만 보낸다. 누적/미납은 보내지 않는다(파생, DB.md). teamId는 서버가 활성 팀 주입(R3). */
+export interface LedgerRowInput {
+  memberId: string;
+  count: number;
+  missedPresenter: number;
+  missedAbsent: number;
+  paid: number;
+}
+
 /** saveMonth 입력 주차 — 순번 포인터는 보내지 않는다(서버가 원자적으로 계산, R16). */
 export interface WeekInput {
   week: number;

@@ -10,6 +10,7 @@ export type {
   MemberOption,
   MemberLedgerRow,
   FinesView,
+  LedgerRowInput,
   WeekInput,
   SaveMonthResult,
 } from "./types";

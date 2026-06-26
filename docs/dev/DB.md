@@ -312,6 +312,8 @@ model Publication {
 | 주차 `current` 상태 | 첫 번째 비-`done` 주차 | 클라이언트 |
 | 앱 전역 `live` | `LiveSession.active == true` 존재 여부 | 서버→클라 |
 
+> **장부 채우는 법(런타임):** `FineConfig`는 관리자가 **명시 생성**한다(조회가 자동 생성하지 않음 — row 부재 = 미설정, ADR-006/R15). `MemberLedger`(참여·발표자 불참·일반 불참·납부)는 관리자가 **수동 편집으로 upsert**한다(스케줄 자동 집계 아님 — ADR-023). 위 모델 시그니처는 변경 없음(이미 존재). 누적 벌금·미납은 표대로 파생(저장 안 함).
+
 ## 시드 데이터
 
 `src/data.js`의 `window.TEAM/PAPERS/PRESENTATIONS/SCHEDULE/SEMINAR_STATS/ANALYSIS/PRES_EXTRA` 등을 시드 스크립트(`prisma/seed.ts`)로 옮긴다. 멤버 4인·논문 5건·발표 자료 3건·6월 스케줄·2026 장부가 최소 시드.
