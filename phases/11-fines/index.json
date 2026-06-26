@@ -1,0 +1,24 @@
+{
+  "project": "하박조팽",
+  "phase": "11-fines",
+  "steps": [
+    {
+      "step": 0,
+      "name": "docs-fines-ledger",
+      "status": "completed",
+      "started_at": "2026-06-26T13:17:11+0900",
+      "summary": "ADR-023 추가(장부 수동 편집·설정 명시 생성·관리자 전용·스키마 무변경) + SCREENS('벌금 설정 시작' 버튼·멤버 현황 수정/저장 토글, 누적/미납 읽기 전용)/DB(채우는 법 한 줄) 보강, 코드 변경 없음"
+    },
+    {
+      "step": 1,
+      "name": "ledger-actions",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "fines-panel-edit",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-06-26T13:17:11+0900"
+}
