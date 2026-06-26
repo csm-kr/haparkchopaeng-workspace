@@ -149,15 +149,57 @@ const fines: FinesView = {
   ],
 };
 
+// 설정이 없을 때 onCreate가 돌려줄 빈 장부(멤버 0행). SCREENS: 생성 직후 멤버 현황 표가 즉시 나타난다.
+const emptyFines: FinesView = {
+  year: 2026,
+  finePresenter: 30000,
+  fineAbsent: 10000,
+  members: [],
+};
+
+// FinesPanel은 이제 year·onCreate·onUpdateLedger를 추가로 받는다 — 헬퍼로 기본값을 채워 렌더한다.
+function renderFines(
+  overrides: {
+    fines?: FinesView | null;
+    isAdmin?: boolean;
+    year?: number;
+    onUpdate?: (i: {
+      year: number;
+      finePresenter: number;
+      fineAbsent: number;
+    }) => Promise<FinesView>;
+    onCreate?: (year: number) => Promise<FinesView>;
+    onUpdateLedger?: (i: {
+      year: number;
+      rows: Array<{
+        memberId: string;
+        count: number;
+        missedPresenter: number;
+        missedAbsent: number;
+        paid: number;
+      }>;
+    }) => Promise<FinesView>;
+  } = {},
+) {
+  const onUpdate = overrides.onUpdate ?? vi.fn(async () => fines);
+  const onCreate = overrides.onCreate ?? vi.fn(async () => emptyFines);
+  const onUpdateLedger = overrides.onUpdateLedger ?? vi.fn(async () => fines);
+  render(
+    <FinesPanel
+      fines={overrides.fines === undefined ? fines : overrides.fines}
+      isAdmin={overrides.isAdmin ?? false}
+      year={overrides.year ?? 2026}
+      onUpdate={onUpdate}
+      onCreate={onCreate}
+      onUpdateLedger={onUpdateLedger}
+    />,
+  );
+  return { onUpdate, onCreate, onUpdateLedger };
+}
+
 describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
   it("누적 벌금·미납을 파생 계산해 표시한다(완납/미납 구분)", () => {
-    render(
-      <FinesPanel
-        fines={fines}
-        isAdmin={false}
-        onUpdate={vi.fn()}
-      />,
-    );
+    renderFines({ isAdmin: false });
     // jo: 누적 40,000(발표자불참1*30000 + 일반불참1*10000) — 표에서 유일
     expect(screen.getByText("40,000원")).toBeInTheDocument();
     // jo: 미납 10,000은 미납 색(text-busy) 셀로만 — 그 셀이 존재한다
@@ -170,13 +212,7 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
   });
 
   it("비관리자에게는 벌금 수정 버튼을 노출하지 않는다(👑)", () => {
-    render(
-      <FinesPanel
-        fines={fines}
-        isAdmin={false}
-        onUpdate={vi.fn()}
-      />,
-    );
+    renderFines({ isAdmin: false });
     expect(screen.queryByRole("button", { name: /수정/ })).not.toBeInTheDocument();
   });
 
@@ -187,14 +223,9 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
         finePresenter: 50000,
       }),
     );
-    render(
-      <FinesPanel
-        fines={fines}
-        isAdmin
-        onUpdate={onUpdate}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /수정/ }));
+    renderFines({ isAdmin: true, onUpdate });
+    // 금액 설정 카드 토글(정확히 "수정") — 멤버 현황 토글("멤버 현황 수정")과 구분된다.
+    fireEvent.click(screen.getByRole("button", { name: "수정" }));
     fireEvent.change(screen.getByLabelText("발표자 불참 벌금"), {
       target: { value: "50000" },
     });
@@ -210,6 +241,62 @@ describe("FinesPanel — 파생 벌금 + 관리자 전용 수정", () => {
     await waitFor(() =>
       expect(screen.getByText("60,000원")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("FinesPanel — 설정 생성 + 장부 편집(관리자 전용)", () => {
+  it("비관리자 + 설정 없음: '벌금 설정 시작' 버튼이 없고 안내문만 보인다", () => {
+    renderFines({ fines: null, isAdmin: false });
+    expect(
+      screen.getByText("이 해의 벌금 설정이 아직 없어요."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "벌금 설정 시작" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("관리자 + 설정 없음: '벌금 설정 시작'을 누르면 onCreate(year)가 호출된다", async () => {
+    const onCreate = vi.fn(async () => emptyFines);
+    renderFines({ fines: null, isAdmin: true, year: 2026, onCreate });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "벌금 설정 시작" }));
+    });
+    expect(onCreate).toHaveBeenCalledWith(2026);
+  });
+
+  it("비관리자 + 설정 있음: 멤버 현황 표에 수정 토글이 없다(읽기 전용)", () => {
+    renderFines({ fines, isAdmin: false });
+    expect(
+      screen.queryByRole("button", { name: "멤버 현황 수정" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("관리자 + 설정 있음: 표를 편집해 저장하면 onUpdateLedger가 {year, rows}로 호출된다", async () => {
+    const onUpdateLedger = vi.fn(async () => fines);
+    renderFines({ fines, isAdmin: true, year: 2026, onUpdateLedger });
+    // 표 전체 편집 모드 진입(금액 토글과 구분되는 "멤버 현황 수정").
+    fireEvent.click(screen.getByRole("button", { name: "멤버 현황 수정" }));
+    // 참여·발표자 불참·일반 불참·납부가 숫자 입력으로 — 한 멤버의 '참여'를 바꾼다.
+    fireEvent.change(screen.getByLabelText("하수현 참여"), {
+      target: { value: "9" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "멤버 현황 저장" }));
+    });
+    expect(onUpdateLedger).toHaveBeenCalledTimes(1);
+    const arg = onUpdateLedger.mock.calls[0][0];
+    expect(arg.year).toBe(2026);
+    const haRow = arg.rows.find((r) => r.memberId === "ha");
+    // 바꾼 값(참여 9)이 담기고, 나머지 원자료는 그대로. 누적/미납은 보내지 않는다(파생).
+    expect(haRow).toMatchObject({
+      memberId: "ha",
+      count: 9,
+      missedPresenter: 0,
+      missedAbsent: 1,
+      paid: 10000,
+    });
+    expect(haRow).not.toHaveProperty("accruedFine");
+    expect(haRow).not.toHaveProperty("outstanding");
   });
 });
 
