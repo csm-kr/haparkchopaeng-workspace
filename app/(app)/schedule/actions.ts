@@ -277,3 +277,111 @@ export async function reorderRotation(orderedIds: string[]): Promise<MemberOptio
   revalidatePath("/schedule");
   return getScheduleMembers(team.id);
 }
+
+const CreateFineConfigSchema = z.object({ year: z.number().int() });
+
+/**
+ * 연도별 벌금 설정 명시 생성 — 관리자만(👑, SECURITY). 자동 생성 아님(ADR-023).
+ * CRITICAL: 멱등 upsert — 이미 있으면 그대로 둔다(중복·덮어쓰기 금지). 금액은 스키마 default(30000/10000).
+ * teamId는 활성 팀에서 주입(R3/R37). 생성 직후 최신 FinesView를 돌려준다.
+ */
+export async function createFineConfig(year: number): Promise<FinesView> {
+  const session = await requireRole("관리자");
+  const parsed = CreateFineConfigSchema.safeParse({ year });
+  if (!parsed.success) {
+    throw new HttpError(400, "BAD_REQUEST", "연도를 확인해주세요.");
+  }
+
+  // 활성 팀으로 스코핑(R37/ADR-020) — 설정은 (teamId, year) PK, teamId는 활성 팀 주입(R3).
+  const team = await getActiveTeam(session.memberId);
+  if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
+
+  await prisma.fineConfig.upsert({
+    where: { teamId_year: { teamId: team.id, year: parsed.data.year } },
+    create: { teamId: team.id, year: parsed.data.year },
+    update: {},
+  });
+  revalidatePath("/schedule");
+
+  const fines = await getFines(parsed.data.year, team.id);
+  if (!fines) throw new HttpError(404, "NOT_FOUND", "벌금 설정이 없어요.");
+  return fines;
+}
+
+const LedgerRowSchema = z.object({
+  memberId: z.string().min(1),
+  count: z.number().int().min(0),
+  missedPresenter: z.number().int().min(0),
+  missedAbsent: z.number().int().min(0),
+  paid: z.number().int().min(0),
+});
+
+const UpdateLedgerSchema = z.object({
+  year: z.number().int(),
+  rows: z.array(LedgerRowSchema),
+});
+
+/**
+ * 멤버 장부 수동 편집 — 관리자만(👑, SECURITY). 참여·발표자 불참·일반 불참·납부 원자료만 저장(ADR-023).
+ * CRITICAL: 누적 벌금·미납은 저장하지 않는다 — 화면에서 파생(DB.md). 음수 거부(원자료 ≥ 0).
+ * CRITICAL: teamId는 활성 팀 주입, memberId는 membership으로 검증한다(R3/R37) — 외부/다른 팀 id는 무시.
+ */
+export async function updateLedger(input: {
+  year: number;
+  rows: Array<{
+    memberId: string;
+    count: number;
+    missedPresenter: number;
+    missedAbsent: number;
+    paid: number;
+  }>;
+}): Promise<FinesView> {
+  const session = await requireRole("관리자");
+  const parsed = UpdateLedgerSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new HttpError(400, "BAD_REQUEST", "장부를 확인해주세요.");
+  }
+  const { year, rows } = parsed.data;
+
+  // 활성 팀으로 스코핑(R37/ADR-020) — 쓰기 teamId는 활성 팀에서 주입(R3).
+  const team = await getActiveTeam(session.memberId);
+  if (!team) throw new HttpError(403, "FORBIDDEN", "활성 팀이 없어요.");
+
+  // 신뢰 경계(R3/R37): 활성 팀 소속 멤버 id만 신뢰 — 보낸 행에서 팀 멤버인 것만 남긴다(reorderRotation과 동일).
+  const memberships = await prisma.membership.findMany({
+    where: { teamId: team.id },
+    select: { memberId: true },
+  });
+  const valid = new Set(memberships.map((m) => m.memberId));
+  const validRows = rows.filter((r) => valid.has(r.memberId));
+
+  await prisma.$transaction(
+    validRows.map((r) =>
+      prisma.memberLedger.upsert({
+        where: {
+          teamId_year_memberId: { teamId: team.id, year, memberId: r.memberId },
+        },
+        create: {
+          teamId: team.id, // R3/R37: 활성 팀에서 주입
+          year,
+          memberId: r.memberId,
+          count: r.count,
+          missedPresenter: r.missedPresenter,
+          missedAbsent: r.missedAbsent,
+          paid: r.paid,
+        },
+        update: {
+          count: r.count,
+          missedPresenter: r.missedPresenter,
+          missedAbsent: r.missedAbsent,
+          paid: r.paid,
+        },
+      }),
+    ),
+  );
+  revalidatePath("/schedule");
+
+  const fines = await getFines(year, team.id);
+  if (!fines) throw new HttpError(404, "NOT_FOUND", "벌금 설정이 없어요.");
+  return fines;
+}

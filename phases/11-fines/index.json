@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "ledger-actions",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-06-26T13:22:28+0900",
+      "summary": "schedule/actions.ts에 createFineConfig(멱등 upsert·기본값 30000/10000) + updateLedger(팀 멤버만 upsert·음수 거부·누적/미납 파생 미저장) Server Action 추가, teamId 활성팀 주입·memberId membership 검증(R3/R37)·관리자 게이팅, getFines 최신 FinesView 반환 — 테스트 6개 추가(RED→GREEN)",
+      "completed_at": "2026-06-26T13:26:00+0900"
     },
     {
       "step": 2,
