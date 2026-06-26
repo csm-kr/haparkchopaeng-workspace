@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-06-26T13:27:30+0900",
       "summary": "FinesPanel 설정 시작 버튼(null+관리자) + 멤버 현황 표 전체 편집 모드(참여·불참·납부, 누적/미납 읽기전용·파생) + page 배선(year·onCreate·onUpdateLedger)·LedgerRowInput DTO·RTL 4건(RED→GREEN). 멤버 토글 접근명은 금액 토글과 구분(멤버 현황 수정/저장)",
-      "completed_at": "2026-06-26T13:38:00+0900"
+      "completed_at": "2026-06-26T13:38:58+0900"
     }
   ],
   "created_at": "2026-06-26T13:17:11+0900"
