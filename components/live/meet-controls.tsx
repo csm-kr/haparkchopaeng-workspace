@@ -3,16 +3,22 @@
 import * as React from "react";
 import { useLocalParticipant } from "@livekit/components-react";
 import {
+  BackgroundProcessor,
+  supportsBackgroundProcessors,
+} from "@livekit/track-processors";
+import {
   Hand,
   MessageSquare,
   Mic,
   MicOff,
   MonitorUp,
   Presentation,
+  Sparkles,
   Video,
   VideoOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { setCameraBlur, type CameraProcessorTrack } from "@/lib/video-background";
 
 // 컨트롤바 — Google Meet 스타일. 마이크/카메라/화면공유는 LiveKit 로컬 트랙 API로 토글한다.
 // CRITICAL: 화면공유는 발표자(grant 보유)에게만 노출한다 — 서버가 grant로 막지만 UI도 정직하게(R7).
@@ -56,11 +62,14 @@ export function MeetControls({
     isMicrophoneEnabled,
     isCameraEnabled,
     isScreenShareEnabled,
+    cameraTrack,
     localParticipant,
   } = useLocalParticipant();
 
   // 장치/권한 거부를 사람 말로 안내(R30). 성공하면 지운다.
   const [notice, setNotice] = React.useState<string | null>(null);
+  // 배경 흐림 on/off — 현재 카메라 트랙에 track-processor를 붙였는지.
+  const [blurOn, setBlurOn] = React.useState(false);
 
   async function toggle(
     fn: (v: boolean) => Promise<unknown> | void,
@@ -72,6 +81,28 @@ export function MeetControls({
       await fn(next);
     } catch {
       setNotice(deniedMsg);
+    }
+  }
+
+  // 배경 흐림 토글 — 카메라 트랙에 MediaPipe 프로세서를 붙였다 뗀다(lib가 분기 처리).
+  // 미지원·카메라 꺼짐·실패는 던지지 않고 따뜻하게 안내한다(R30).
+  async function toggleBlur() {
+    setNotice(null);
+    const next = !blurOn;
+    const track = cameraTrack?.track as CameraProcessorTrack | undefined;
+    const outcome = await setCameraBlur(track, next, {
+      isSupported: supportsBackgroundProcessors,
+      createBlur: () =>
+        BackgroundProcessor({ mode: "background-blur", blurRadius: 10 }),
+    });
+    if (outcome === "applied" || outcome === "removed") {
+      setBlurOn(next);
+    } else if (outcome === "no-track") {
+      setNotice("카메라를 먼저 켜주세요. 배경 흐림은 카메라가 켜져 있을 때 동작해요.");
+    } else if (outcome === "unsupported") {
+      setNotice("이 브라우저에선 배경 흐림을 지원하지 않아요.");
+    } else {
+      setNotice("배경 흐림을 적용할 수 없어요. 잠시 후 다시 시도해주세요.");
     }
   }
 
@@ -116,6 +147,15 @@ export function MeetControls({
               "카메라를 켤 수 없어요. 권한과 장치를 확인해주세요.",
             )
           }
+        />
+
+        {/* 배경 흐림 — 카메라 영상의 배경만 흐리게(MediaPipe, 브라우저 내 처리). 누구나 사용. */}
+        <CtrlButton
+          label="배경 흐림"
+          ariaLabel={blurOn ? "배경 흐림 끄기" : "배경 흐림 켜기"}
+          active={blurOn}
+          icon={<Sparkles size={18} aria-hidden="true" />}
+          onClick={toggleBlur}
         />
 
         {canScreenShare && (
