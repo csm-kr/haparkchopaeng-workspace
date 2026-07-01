@@ -9,6 +9,16 @@ import { MeetHeader } from "./meet-header";
 import { MeetRoom } from "./meet-room";
 import type { LiveMember, SharablePresentation } from "./types";
 
+// 오디오 캡처 기본값 — autoGainControl만 끈다(음량 자동보정 해제 = 목소리 다이내믹 압축 해제).
+// echo/noise는 LiveKit 기본과 동일(true). 브라우저 내장 한계라 강한 노이즈캔슬은 아니다(Krisp는 별도·Cloud).
+const AUDIO_CAPTURE_OPTIONS = {
+  audioCaptureDefaults: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: false,
+  },
+} as const;
+
 // 세미나 라이브 룸 — LiveKit 다자간 화상(ADR-019, ADR-002 대체). 'use client' 인터랙티브 섬(R32).
 // CRITICAL: `live`는 화면 state로 보관하지 않는다 — 앱 레벨 useLive()가 단일 소스(ADR-001/R5).
 // CRITICAL: 접속 토큰은 라우트(/start·/join)에서만 받는다 — 클라가 DB/LiveKit 서버 키를 직접 보지 않는다(R2/R32).
@@ -311,6 +321,7 @@ export function LiveRoom({
         key={reconnect}
         serverUrl={connection.url}
         token={connection.token}
+        options={AUDIO_CAPTURE_OPTIONS}
         connect
         audio={false}
         video={false}
