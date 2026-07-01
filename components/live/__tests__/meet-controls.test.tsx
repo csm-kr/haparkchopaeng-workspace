@@ -29,6 +29,10 @@ const lk = vi.hoisted(() => ({
   cameraPublication: null as { track: unknown } | null,
   // 브라우저가 배경 프로세서를 지원하는지.
   supported: true,
+  // BackgroundProcessor()가 돌려주는 핸들 — 한 번 붙인 뒤 switchTo로 전환.
+  bgHandle: { switchTo: vi.fn() },
+  // BackgroundProcessor(opts) 호출 인자를 기록하는 스파이(모드·강도·경로 검증).
+  createProcessor: vi.fn(),
 }));
 
 vi.mock("@livekit/components-react", () => ({
@@ -43,7 +47,10 @@ vi.mock("@livekit/components-react", () => ({
 
 vi.mock("@livekit/track-processors", () => ({
   supportsBackgroundProcessors: () => lk.supported,
-  BackgroundProcessor: () => ({ name: "blur" }),
+  BackgroundProcessor: (opts: unknown) => {
+    lk.createProcessor(opts);
+    return lk.bgHandle;
+  },
 }));
 
 const { MeetControls } = await import("@/components/live/meet-controls");
@@ -147,53 +154,115 @@ describe("MeetControls", () => {
   });
 });
 
-describe("MeetControls 배경 흐림", () => {
-  it("배경 흐림 버튼이 누구에게나 보인다", () => {
+describe("MeetControls 배경", () => {
+  function openMenu() {
+    fireEvent.click(screen.getByRole("button", { name: /배경 선택/ }));
+  }
+
+  it("배경 버튼이 누구에게나 보인다", () => {
     renderControls({ canScreenShare: false, canPresent: false });
     expect(
-      screen.getByRole("button", { name: /배경 흐림/ }),
+      screen.getByRole("button", { name: /배경 선택/ }),
     ).toBeInTheDocument();
   });
 
-  it("카메라 켜짐 + 배경 흐림 클릭 → 카메라 트랙에 setProcessor 적용", async () => {
+  it("배경 버튼 클릭 → 팝오버가 열리고 끄기·흐림·이미지 옵션이 보인다", () => {
     renderControls();
-    fireEvent.click(screen.getByRole("button", { name: /배경 흐림/ }));
+    openMenu();
+    expect(screen.getByRole("menuitemradio", { name: /끄기/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemradio", { name: /흐림 강하게/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemradio", { name: /하와이 해변/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("흐림 강하게 선택(카메라 켜짐) → radius 28로 프로세서 생성·setProcessor", async () => {
+    renderControls();
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /흐림 강하게/ }));
     await waitFor(() =>
-      expect(lk.camTrack.setProcessor).toHaveBeenCalledOnce(),
+      expect(lk.camTrack.setProcessor).toHaveBeenCalledWith(lk.bgHandle),
     );
+    expect(lk.createProcessor).toHaveBeenCalledWith({
+      mode: "background-blur",
+      blurRadius: 28,
+    });
     expect(lk.camTrack.stopProcessor).not.toHaveBeenCalled();
   });
 
-  it("배경 흐림 켠 뒤 다시 클릭 → stopProcessor로 제거", async () => {
+  it("하와이 해변 선택 → virtual-background imagePath로 생성·setProcessor", async () => {
     renderControls();
-    const btn = screen.getByRole("button", { name: /배경 흐림/ });
-    fireEvent.click(btn);
-    await waitFor(() =>
-      expect(lk.camTrack.setProcessor).toHaveBeenCalledOnce(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /배경 흐림/ }));
-    await waitFor(() =>
-      expect(lk.camTrack.stopProcessor).toHaveBeenCalledOnce(),
-    );
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /하와이 해변/ }));
+    await waitFor(() => expect(lk.camTrack.setProcessor).toHaveBeenCalledOnce());
+    expect(lk.createProcessor).toHaveBeenCalledWith({
+      mode: "virtual-background",
+      imagePath: "/backgrounds/hawaii.webp",
+    });
   });
 
-  it("카메라 꺼짐(트랙 없음): 클릭 시 안내 + setProcessor 미호출", async () => {
+  it("배경 적용 후 다른 배경 선택 → switchTo로 전환(setProcessor는 1회만)", async () => {
+    renderControls();
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /흐림 보통/ }));
+    await waitFor(() => expect(lk.camTrack.setProcessor).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /맑은 하늘/ }));
+    await waitFor(() =>
+      expect(lk.bgHandle.switchTo).toHaveBeenCalledWith({
+        mode: "virtual-background",
+        imagePath: "/backgrounds/sky.webp",
+      }),
+    );
+    expect(lk.camTrack.setProcessor).toHaveBeenCalledOnce();
+  });
+
+  it("배경 적용 후 끄기 → stopProcessor로 제거", async () => {
+    renderControls();
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /흐림 보통/ }));
+    await waitFor(() => expect(lk.camTrack.setProcessor).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /끄기/ }));
+    await waitFor(() => expect(lk.camTrack.stopProcessor).toHaveBeenCalledOnce());
+  });
+
+  it("카메라 꺼짐(트랙 없음): 흐림 선택 시 안내 + setProcessor 미호출", async () => {
     lk.cameraPublication = null;
     renderControls();
-    fireEvent.click(screen.getByRole("button", { name: /배경 흐림/ }));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /흐림 보통/ }));
     await waitFor(() =>
       expect(screen.getByText(/카메라를 먼저 켜/)).toBeInTheDocument(),
     );
     expect(lk.camTrack.setProcessor).not.toHaveBeenCalled();
   });
 
-  it("미지원 브라우저: 클릭 시 안내 + setProcessor 미호출", async () => {
+  it("미지원 브라우저: 흐림 선택 시 안내 + setProcessor 미호출", async () => {
     lk.supported = false;
     renderControls();
-    fireEvent.click(screen.getByRole("button", { name: /배경 흐림/ }));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /흐림 보통/ }));
     await waitFor(() =>
       expect(screen.getByText(/지원하지 않/)).toBeInTheDocument(),
     );
     expect(lk.camTrack.setProcessor).not.toHaveBeenCalled();
+  });
+
+  it("선택한 배경에 체크 표시(aria-checked) — 기본은 끄기", async () => {
+    renderControls();
+    openMenu();
+    expect(
+      screen.getByRole("menuitemradio", { name: /끄기/ }),
+    ).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /흐림 강하게/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("menuitemradio", { name: /흐림 강하게/ }),
+      ).toHaveAttribute("aria-checked", "true"),
+    );
   });
 });

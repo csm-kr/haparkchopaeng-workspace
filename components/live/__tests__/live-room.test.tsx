@@ -26,6 +26,10 @@ const lk = vi.hoisted(() => ({
     source: string;
     publication?: unknown;
   }>,
+  // LiveKitRoom에 전달된 options(오디오 캡처 기본값 검증용).
+  roomOptions: undefined as
+    | { audioCaptureDefaults?: Record<string, unknown> }
+    | undefined,
 }));
 
 vi.mock("livekit-client", () => ({
@@ -46,10 +50,13 @@ vi.mock("@livekit/components-react", async () => {
     LiveKitRoom: ({
       children,
       onConnected,
+      options,
     }: {
       children: React.ReactNode;
       onConnected?: () => void;
+      options?: { audioCaptureDefaults?: Record<string, unknown> };
     }) => {
+      lk.roomOptions = options;
       React.useEffect(() => {
         onConnected?.();
       }, [onConnected]);
@@ -138,6 +145,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   lk.participants = [];
   lk.tracks = [];
+  lk.roomOptions = undefined;
   sendBeacon = vi.fn(() => true);
   Object.defineProperty(navigator, "sendBeacon", {
     configurable: true,
@@ -397,6 +405,38 @@ describe("LiveRoom", () => {
 
     // 시청자 이탈은 본인 퇴장(/leave)만 — 전역 종료(/end)는 발표자만(R6).
     expect(sendBeacon).not.toHaveBeenCalled();
+  });
+
+  it("룸 진입 시 오디오 캡처는 autoGainControl=false로 캡처(디컴프레션, 나머지는 유지)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      route((url, method) => {
+        if (url === "/api/live/start" && method === "POST")
+          return res(201, {
+            data: {
+              session: {
+                id: "s1",
+                presenterId: "ha",
+                startedAt: "2026-06-15T01:00:00Z",
+              },
+              token: "TKN-presenter",
+              url: "wss://lk.example",
+            },
+          });
+        return res(500, {});
+      }),
+    );
+
+    renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });
+    fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    // autoGainControl만 끈다(음량 자동보정 해제 = 다이내믹 압축 해제). echo/noise는 기본 유지.
+    expect(lk.roomOptions?.audioCaptureDefaults).toMatchObject({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: false,
+    });
   });
 
   it("발표자: 단일 언로드에서 beforeunload+pagehide 둘 다 떠도 비콘은 1회만", async () => {
