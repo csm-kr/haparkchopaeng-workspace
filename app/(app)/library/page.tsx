@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { PaperList } from "@/components/library";
-import { UploadButton } from "@/components/upload";
+import { UploadButton, QuotaBadge } from "@/components/upload";
 import { getPapers } from "@/lib/papers";
 import { getSession } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
@@ -46,7 +46,15 @@ export default async function LibraryPage() {
 
   return (
     <>
-      <Topbar crumbs={[{ label: "논문" }]} actions={<UploadButton quota={quota} />} />
+      <Topbar
+        crumbs={[{ label: "논문" }]}
+        actions={
+          <>
+            <QuotaBadge quota={quota} />
+            <UploadButton quota={quota} />
+          </>
+        }
+      />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">{content}</div>
       </div>
