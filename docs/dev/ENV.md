@@ -13,7 +13,7 @@
 |---|---|---|
 | `GEMINI_API_KEY` | 논문 분석 LLM(Google Gemini) 호출 | **비밀.** 서버 전용 |
 | `GEMINI_MODEL` | 분석 모델 ID | 기본 `gemini-2.5-pro` |
-| `PAPER_WEEKLY_LIMIT` | 인당 주간(롤링 7일) 논문 업로드 한도 — Gemini 비용 가드 | 미설정 시 운영=20·그 외 무제한, 0 이하=무제한 |
+| `PAPER_WEEKLY_LIMIT` | 인당 주간(월요일 00:00 KST 리셋) 논문 업로드 한도 — Gemini 비용 가드 | 미설정 시 운영=20·그 외 무제한, 0 이하=무제한 |
 | `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` | 잡 러너(프로덕션) | 로컬은 Inngest Dev Server(키 불필요) |
 | `DATABASE_URL` | Prisma 연결(pooler) | Supabase Postgres(ADR-016) |
 | `DIRECT_URL` | Prisma `db push`/마이그레이션 직결 | Supabase |

@@ -51,7 +51,7 @@
 | DELETE | `/api/papers/:id` | 논문 삭제(분석·figure·노트·원문 PDF 정리) | ✍️ |
 
 - **CRITICAL: 업로드는 `application/pdf`만 허용.** 그 외 Content-Type → `415`. arXiv URL은 서버가 PDF를 가져온다.
-- **CRITICAL: 비용 가드(POST /api/papers).** ① **30쪽 초과 PDF 거부** → `413`(읽을 수 없는 PDF는 `400`). 파일 경로는 초과 시 업로드된 객체를 정리한다. ② **인당 주간 업로드 한도**(롤링 7일, 기본 운영 20편 — `PAPER_WEEKLY_LIMIT`로 조정, 0 이하=무제한) 초과 → `429`. 두 경로(파일·arXiv) 모두 적용. (reanalyze는 새 Paper를 만들지 않아 한도에 들지 않는다. 관리자 예외는 추후.)
+- **CRITICAL: 비용 가드(POST /api/papers).** ① **30쪽 초과 PDF 거부** → `413`(읽을 수 없는 PDF는 `400`). 파일 경로는 초과 시 업로드된 객체를 정리한다. ② **인당 주간 업로드 한도**(이번 주=월요일 00:00 KST 이후, 매주 리셋, 기본 운영 20편 — `PAPER_WEEKLY_LIMIT`로 조정, 0 이하=무제한) 초과 → `429`. 두 경로(파일·arXiv) 모두 적용. (reanalyze는 새 Paper를 만들지 않아 한도에 들지 않는다. 관리자 예외는 추후.)
 - **CRITICAL: 업로드 성공과 분석 성공을 분리한다.** `POST /api/papers`는 분석이 실패해도 `Paper`를 저장하고 `analysisStatus: pending|failed`로 응답한다. UI는 논문을 열고 분석 섹션만 재시도 상태로 보인다(→ [`./ENV.md`](./ENV.md), [`../design/SCREENS.md`](../design/SCREENS.md)). 원문 PDF 다운로드는 분석 상태와 무관하게 동작.
 - **노트 작성자**는 서버가 세션에서 강제 주입한다. 클라이언트가 보낸 `authorId`는 신뢰하지 않는다.
 - `lens`는 `sectionId === "figures"`일 때 서버가 `any`로 강제한다(ADR-005).
