@@ -21,7 +21,7 @@ vi.mock("@livekit/components-react", () => ({
   useTracks: () => lk.tracks,
 }));
 
-const { RoomStage, orderParticipantsForStrip } = await import(
+const { RoomStage, orderParticipantsForStrip, clampStripPos } = await import(
   "@/components/live/room-stage"
 );
 
@@ -94,6 +94,35 @@ describe("RoomStage 화면공유", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "얼굴 수 줄이기" }));
     fireEvent.click(screen.getByRole("button", { name: "얼굴 수 줄이기" }));
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(1);
+  });
+
+  it("'−'로 0명까지 접으면 얼굴이 사라지고 헤더만 남는다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    lk.tracks = [share()];
+    const { container } = renderStage();
+
+    const minus = screen.getByRole("button", { name: "얼굴 수 줄이기" });
+    fireEvent.click(minus); // 2 → 1
+    fireEvent.click(minus); // 1 → 0
+
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(0);
+    // 헤더는 남아 있어야 다시 늘릴 수 있다.
+    expect(screen.getByText(/얼굴 0/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "얼굴 수 줄이기" })).toBeDisabled();
+  });
+
+  it("0명에서 '+'를 누르면 다시 1명이 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    lk.tracks = [share()];
+    const { container } = renderStage();
+
+    const minus = screen.getByRole("button", { name: "얼굴 수 줄이기" });
+    fireEvent.click(minus);
+    fireEvent.click(minus);
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "얼굴 수 늘리기" }));
     expect(container.querySelectorAll("[data-identity]")).toHaveLength(1);
   });
 
@@ -219,6 +248,58 @@ describe("RoomStage 발표자료 공유", () => {
   });
 });
 
+describe("RoomStage 내 얼굴 숨기기", () => {
+  function renderHidden(extra?: {
+    present?: { presentationId: string; page: number; pageCount: number };
+  }) {
+    return render(
+      <RoomStage
+        members={members}
+        presenterId="jo"
+        currentMemberId="ha"
+        hands={new Set()}
+        hideSelf
+        present={extra?.present}
+      />,
+    );
+  }
+
+  it("그리드에서 내 타일만 빠지고 친구들은 그대로 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    const { container } = renderHidden();
+
+    expect(container.querySelector('[data-identity="ha"]')).toBeNull();
+    expect(container.querySelector('[data-identity="jo"]')).not.toBeNull();
+    expect(container.querySelector('[data-identity="bak"]')).not.toBeNull();
+  });
+
+  it("발표 중 얼굴 스트립 후보에서도 내가 빠진다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    const { container } = renderHidden({
+      present: { presentationId: "pres-1", page: 1, pageCount: 3 },
+    });
+
+    // 기본 2명: 숨기지 않았다면 jo(발표자)·ha 순서지만, 숨기면 jo·bak이 뜬다.
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(2);
+    expect(container.querySelector('[data-identity="ha"]')).toBeNull();
+    expect(container.querySelector('[data-identity="bak"]')).not.toBeNull();
+    // 개수 한도도 친구 수(2명) 기준 — 더 늘릴 수 없다.
+    expect(screen.getByRole("button", { name: "얼굴 수 늘리기" })).toBeDisabled();
+  });
+
+  it("혼자 있는 방에서 숨기면 따뜻한 안내를 보여준다", () => {
+    lk.participants = [{ identity: "ha" }];
+    renderHidden();
+    expect(screen.getByText(/내 얼굴을 숨겼어요/)).toBeInTheDocument();
+  });
+
+  it("숨기지 않으면 내 타일이 그대로 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const { container } = renderStage(); // hideSelf 없음
+    expect(container.querySelector('[data-identity="ha"]')).not.toBeNull();
+  });
+});
+
 describe("RoomStage 전체화면", () => {
   // JSDOM은 Fullscreen API 미구현 — requestFullscreen이 호출되면 그 요소를
   // fullscreenElement로 두고 fullscreenchange를 디스패치해 실제 동작을 흉내낸다.
@@ -310,5 +391,139 @@ describe("RoomStage 전체화면", () => {
     expect(
       container.querySelectorAll("[data-identity]").length,
     ).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("clampStripPos", () => {
+  it("컨테이너 안으로 제한한다", () => {
+    expect(
+      clampStripPos(
+        { x: 900, y: 500 },
+        { width: 200, height: 300 },
+        { width: 1000, height: 600 },
+      ),
+    ).toEqual({ x: 800, y: 300 });
+  });
+
+  it("음수는 0으로 막는다", () => {
+    expect(
+      clampStripPos(
+        { x: -50, y: -10 },
+        { width: 200, height: 300 },
+        { width: 1000, height: 600 },
+      ),
+    ).toEqual({ x: 0, y: 0 });
+  });
+
+  it("컨테이너를 잴 수 없으면(0) 상한을 두지 않는다", () => {
+    expect(
+      clampStripPos(
+        { x: 300, y: 200 },
+        { width: 0, height: 0 },
+        { width: 0, height: 0 },
+      ),
+    ).toEqual({ x: 300, y: 200 });
+  });
+});
+
+describe("RoomStage 스트립 위치 이동", () => {
+  // JSDOM은 PointerEvent를 구현하지 않을 수 있다 — MouseEvent로 대체해 clientX/Y가 전달되게 한다.
+  const hadPointerEvent = typeof window.PointerEvent !== "undefined";
+
+  function setFsElement(el: Element | null) {
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      value: el,
+    });
+  }
+
+  beforeEach(() => {
+    if (!hadPointerEvent) {
+      (window as unknown as { PointerEvent: unknown }).PointerEvent =
+        window.MouseEvent;
+    }
+    setFsElement(null);
+    Element.prototype.requestFullscreen = vi.fn(function (this: Element) {
+      setFsElement(this);
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    }) as unknown as typeof Element.prototype.requestFullscreen;
+    (document as { exitFullscreen: typeof document.exitFullscreen }).exitFullscreen =
+      vi.fn(() => {
+        setFsElement(null);
+        document.dispatchEvent(new Event("fullscreenchange"));
+        return Promise.resolve();
+      }) as unknown as typeof document.exitFullscreen;
+  });
+
+  afterEach(() => {
+    if (!hadPointerEvent) {
+      delete (window as unknown as { PointerEvent?: unknown }).PointerEvent;
+    }
+    delete (Element.prototype as Partial<Element>).requestFullscreen;
+    delete (document as Partial<Document>).exitFullscreen;
+    setFsElement(null);
+  });
+
+  function enterFullscreen() {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    lk.tracks = [share()];
+    const rendered = renderStage();
+    fireEvent.click(screen.getByRole("button", { name: "전체화면" }));
+    return rendered;
+  }
+
+  it("전체화면이 아니면 이동 손잡이가 없다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    lk.tracks = [share()];
+    renderStage();
+    expect(screen.queryByRole("button", { name: /얼굴 위치 옮기기/ })).toBeNull();
+  });
+
+  it("전체화면에서 손잡이를 끌면 스트립 위치가 바뀐다", () => {
+    const { container } = enterFullscreen();
+    const handle = screen.getByRole("button", { name: /얼굴 위치 옮기기/ });
+    const strip = container.querySelector("[data-face-strip]") as HTMLElement;
+    expect(strip.style.left).toBe("");
+
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(handle, { clientX: 300, clientY: 200 });
+    fireEvent.pointerUp(handle, { clientX: 300, clientY: 200 });
+
+    expect(strip.style.left).toBe("300px");
+    expect(strip.style.top).toBe("200px");
+  });
+
+  it("전체화면에서 손잡이에 방향키를 주면 24px씩 움직인다", () => {
+    const { container } = enterFullscreen();
+    const handle = screen.getByRole("button", { name: /얼굴 위치 옮기기/ });
+    const strip = container.querySelector("[data-face-strip]") as HTMLElement;
+
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(strip.style.left).toBe("24px");
+
+    fireEvent.keyDown(handle, { key: "ArrowDown" });
+    expect(strip.style.top).toBe("24px");
+  });
+
+  it("손잡이에서 누른 방향키는 발표 페이지를 넘기지 않는다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const onChangePage = vi.fn();
+    render(
+      <RoomStage
+        members={members}
+        presenterId="jo"
+        currentMemberId="jo"
+        hands={new Set()}
+        present={{ presentationId: "pres-1", page: 2, pageCount: 5 }}
+        onChangePage={onChangePage}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "전체화면" }));
+
+    const handle = screen.getByRole("button", { name: /얼굴 위치 옮기기/ });
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+
+    expect(onChangePage).not.toHaveBeenCalled();
   });
 });

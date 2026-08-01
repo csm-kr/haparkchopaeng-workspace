@@ -8,6 +8,8 @@ import {
 } from "@livekit/track-processors";
 import {
   Check,
+  Eye,
+  EyeOff,
   Hand,
   MessageSquare,
   Mic,
@@ -30,6 +32,7 @@ import {
 // CRITICAL: 화면공유는 발표자(grant 보유)에게만 노출한다 — 서버가 grant로 막지만 UI도 정직하게(R7).
 // CRITICAL: 토큰/장치 권한 거부는 정체불명 에러가 아니라 따뜻한 안내로(R30).
 // 손들기·반응·채팅 토글은 상위(MeetRoom)가 데이터 채널/패널 상태를 소유하므로 콜백으로 올린다.
+// '내 얼굴' 버튼은 로컬 뷰만 바꾼다 — 트랙을 끄지 않으므로 상대 화면엔 그대로 보인다(카메라 끄기와 구분).
 
 /** 컨트롤바 반응 이모지 — 프로토타입과 동일 집합. */
 export const REACTIONS = ["👍", "🔥", "👏", "🤔", "🎉"] as const;
@@ -64,6 +67,10 @@ export interface MeetControlsProps {
   onOpenPresent: () => void;
   /** 발표자료 공유 중지. */
   onStopPresent: () => void;
+  /** 내 화면에서만 내 얼굴을 숨긴 상태. */
+  hideSelf: boolean;
+  /** 내 얼굴 숨기기 토글. */
+  onToggleHideSelf: () => void;
 }
 
 export function MeetControls({
@@ -77,6 +84,8 @@ export function MeetControls({
   onTogglePanel,
   onOpenPresent,
   onStopPresent,
+  hideSelf,
+  onToggleHideSelf,
 }: MeetControlsProps) {
   const {
     isMicrophoneEnabled,
@@ -210,6 +219,29 @@ export function MeetControls({
               "카메라를 켤 수 없어요. 권한과 장치를 확인해주세요.",
             )
           }
+        />
+
+        {/* 내 얼굴 숨기기 — 내 화면에서만 숨긴다(카메라 끄기와 달리 상대에겐 계속 보인다). */}
+        <CtrlButton
+          label="내 얼굴"
+          ariaLabel={hideSelf ? "내 얼굴 다시 보기" : "내 화면에서 내 얼굴 숨기기"}
+          active={hideSelf}
+          icon={
+            hideSelf ? (
+              <EyeOff size={18} aria-hidden="true" />
+            ) : (
+              <Eye size={18} aria-hidden="true" />
+            )
+          }
+          onClick={() => {
+            // 카메라 끄기와 헷갈리지 않게 켤 때 한 줄 안내(R30). 끌 땐 지운다.
+            setNotice(
+              hideSelf
+                ? null
+                : "내 화면에서만 숨겼어요. 친구들에겐 그대로 보여요.",
+            );
+            onToggleHideSelf();
+          }}
         />
 
         {/* 배경 — 끄기/흐림(강도)/이미지를 팝오버에서 고른다(MediaPipe, 브라우저 내 처리). 누구나 사용. */}

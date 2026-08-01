@@ -58,6 +58,8 @@ export function MeetRoom({
   const participants = useParticipants();
 
   const [panel, setPanel] = React.useState<PanelTab | null>(null);
+  // 내 얼굴 숨기기 — 내 화면에서만 내 타일을 감춘다(로컬 전용, 데이터 채널 전파 없음).
+  const [hideSelf, setHideSelf] = React.useState(false);
   const [chat, setChat] = React.useState<ChatEntry[]>([]);
   const [floats, setFloats] = React.useState<FloatingReaction[]>([]);
   const [hands, setHands] = React.useState<Set<string>>(new Set());
@@ -262,6 +264,7 @@ export function MeetRoom({
             onDraw={isPresenter ? sendAnnot : undefined}
             present={present}
             onChangePage={isPresenter ? changePage : undefined}
+            hideSelf={hideSelf}
           />
           <ReactionsLayer reactions={floats} />
         </div>
@@ -336,6 +339,8 @@ export function MeetRoom({
         onTogglePanel={() => setPanel((p) => (p ? null : "chat"))}
         onOpenPresent={() => setPanel("files")}
         onStopPresent={stopPresent}
+        hideSelf={hideSelf}
+        onToggleHideSelf={() => setHideSelf((v) => !v)}
       />
     </div>
   );

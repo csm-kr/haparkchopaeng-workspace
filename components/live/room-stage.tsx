@@ -12,6 +12,7 @@ import { Track } from "livekit-client";
 import {
   ChevronLeft,
   ChevronRight,
+  GripVertical,
   Hand,
   Maximize,
   Mic,
@@ -31,9 +32,11 @@ import type { LiveMember, PresentState } from "./types";
 
 // 룸 stage — LiveKit 컨텍스트 안에서 참가자 타일을 렌더한다.
 // 무대 우선순위: 발표자료 공유 > 화면공유 > 전원 그리드.
-//   공유(발표자료/화면)가 있으면: 공유 무대(왼쪽 크게, '발표 중' 라벨) + 얼굴 세로 스트립(오른쪽, 개수 −/+ 조절).
+//   공유(발표자료/화면)가 있으면: 공유 무대(왼쪽 크게, '발표 중' 라벨) + 얼굴 세로 스트립(오른쪽, 개수 0..N 조절).
+//   전체화면에선 스트립이 공유 화면 위에 뜨므로 손잡이로 위치를 옮길 수 있다(드래그·방향키, 화면 안 클램프).
 //   보이는 얼굴 우선순위: 말하는 사람 → 발표자 → 나머지. 개수는 state라 공유 소스가 바뀌어도 유지된다.
 // 발표자료 공유 = 업로드 PDF를 페이지 이미지로 무대에 띄우고 페이지를 동기화(OS 화면공유 아님).
+// '내 얼굴 숨기기'(hideSelf)는 내 화면에서만 내 타일을 뺀다 — 카메라는 계속 송출된다(로컬 뷰 설정).
 // CRITICAL: 발화·역할·손들기·발표 표시는 색에만 의존하지 않는다 — 아이콘 + 텍스트 병행(R29). 토큰만(R20).
 
 export interface RoomStageProps {
@@ -50,6 +53,8 @@ export interface RoomStageProps {
   present?: PresentState | null;
   /** 발표자가 페이지를 넘길 때 호출(없으면 시청자 — 따라가기만). */
   onChangePage?: (page: number) => void;
+  /** 내 화면에서만 내 타일을 숨긴다(로컬 뷰 설정) — 카메라는 계속 송출되어 상대에겐 그대로 보인다. */
+  hideSelf?: boolean;
 }
 
 interface StripParticipant {
@@ -73,6 +78,26 @@ export function orderParticipantsForStrip<P extends StripParticipant>(
     .map((x) => x.p);
 }
 
+/** 방향키 한 번에 움직이는 거리(px). */
+const MOVE_STEP = 24;
+
+/**
+ * 스트립 위치를 무대 컨테이너 안으로 제한한다.
+ * 컨테이너를 잴 수 없으면(폭·높이 0) 상한을 두지 않고 음수만 막는다 — 좌상단에 못 박히는 걸 피한다.
+ */
+export function clampStripPos(
+  pos: { x: number; y: number },
+  size: { width: number; height: number },
+  bounds: { width: number; height: number },
+): { x: number; y: number } {
+  const fit = (v: number, s: number, b: number) =>
+    b > 0 ? Math.min(Math.max(0, v), Math.max(0, b - s)) : Math.max(0, v);
+  return {
+    x: fit(pos.x, size.width, bounds.width),
+    y: fit(pos.y, size.height, bounds.height),
+  };
+}
+
 export function RoomStage({
   members,
   presenterId,
@@ -82,6 +107,7 @@ export function RoomStage({
   onDraw,
   present,
   onChangePage,
+  hideSelf,
 }: RoomStageProps) {
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
@@ -99,6 +125,11 @@ export function RoomStage({
 
   // 오른쪽 스트립에 보일 얼굴 수 — 공유 소스가 바뀌어도 유지(컴포넌트 state).
   const [visibleCount, setVisibleCount] = React.useState(2);
+  // 전체화면 오버레이 스트립의 위치(px, 무대 컨테이너 기준). null이면 기본 자리(우측 세로 중앙).
+  // StageShell은 공유 소스가 바뀌면 리마운트되므로 위치도 여기서 갖는다(visibleCount와 같은 이유).
+  const [stripPos, setStripPos] = React.useState<{ x: number; y: number } | null>(
+    null,
+  );
 
   // 발표자 키보드 내비 — 발표 중(onChangePage 보유=발표자)일 때 ←/→로 페이지를 넘긴다.
   // 채팅 등 입력 중일 땐 무시한다(폼 요소 타깃). 범위 클램프는 호출부(changePage)가 한다.
@@ -107,11 +138,14 @@ export function RoomStage({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       const t = e.target as HTMLElement | null;
+      // 스트립 이동 손잡이에 포커스가 있으면 방향키는 위치 이동용이다 — 페이지를 함께 넘기지 않는다.
+      // 타깃이 window/document면 closest가 없으므로 옵셔널 호출로 방어한다.
       if (
         t &&
         (t.tagName === "INPUT" ||
           t.tagName === "TEXTAREA" ||
-          t.isContentEditable)
+          t.isContentEditable ||
+          t.closest?.("[data-strip-handle]"))
       )
         return;
       e.preventDefault();
@@ -148,8 +182,13 @@ export function RoomStage({
     );
   };
 
-  const stripTiles = orderParticipantsForStrip(participants, presenterId)
-    .slice(0, Math.min(visibleCount, participants.length))
+  // 내 얼굴 숨기기 — 내 화면에서만 뺀다(상대에겐 그대로 보인다). 그리드·스트립·개수 한도에 모두 적용.
+  const visible = hideSelf
+    ? participants.filter((p) => p.identity !== currentMemberId)
+    : participants;
+
+  const stripTiles = orderParticipantsForStrip(visible, presenterId)
+    .slice(0, Math.min(visibleCount, visible.length))
     .map(renderTile);
 
   return (
@@ -165,8 +204,10 @@ export function RoomStage({
           annotations={annotations ?? []}
           onDraw={onDraw}
           count={visibleCount}
-          max={participants.length}
+          max={visible.length}
           onCountChange={setVisibleCount}
+          pos={stripPos}
+          onPosChange={setStripPos}
           main={<PresentImage present={present} />}
           topCenter={
             <PageNav
@@ -185,17 +226,24 @@ export function RoomStage({
           annotations={annotations ?? []}
           onDraw={onDraw}
           count={visibleCount}
-          max={participants.length}
+          max={visible.length}
           onCountChange={setVisibleCount}
+          pos={stripPos}
+          onPosChange={setStripPos}
           main={
             <VideoTrack trackRef={screenShare} className="size-full object-contain" />
           }
         >
           {stripTiles}
         </StageShell>
+      ) : hideSelf && visible.length === 0 ? (
+        // 나 혼자인데 내 얼굴을 숨긴 상태 — 빈 화면 대신 이유를 알려준다(R30).
+        <p className="rounded-lg border border-border-token bg-bg-subtle px-4 py-10 text-center text-[13px] text-fg-subtle">
+          내 얼굴을 숨겼어요. 친구들이 들어오면 여기에 보여요.
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {participants.map(renderTile)}
+          {visible.map(renderTile)}
         </div>
       )}
     </div>
@@ -217,6 +265,8 @@ function StageShell({
   count,
   max,
   onCountChange,
+  pos,
+  onPosChange,
   main,
   topCenter,
   children,
@@ -228,6 +278,9 @@ function StageShell({
   count: number;
   max: number;
   onCountChange: (n: number) => void;
+  /** 전체화면 오버레이 스트립의 위치(px). null이면 기본 자리. */
+  pos: { x: number; y: number } | null;
+  onPosChange: (p: { x: number; y: number }) => void;
   /** 무대 중앙 콘텐츠 — 화면공유 영상 또는 발표자료 페이지 이미지. */
   main: React.ReactNode;
   /** 무대 상단 중앙 오버레이(발표자료 페이지 네비 등). 없으면 미표시. */
@@ -291,6 +344,8 @@ function StageShell({
         max={max}
         onCountChange={onCountChange}
         floating={isFs}
+        pos={pos}
+        onPosChange={onPosChange}
       >
         {children}
       </FaceStrip>
@@ -397,12 +452,18 @@ function PresentingLabel({ name }: { name: string }) {
   );
 }
 
-/** 오른쪽 얼굴 스트립 + 표시 개수 −/+ 조절. 한도(max=참가자 수) 안에서 1..max. */
+/**
+ * 오른쪽 얼굴 스트립 + 표시 개수 −/+ 조절. 0..max(참가자 수). 0이면 헤더만 남는다.
+ * 전체화면(floating)일 땐 공유 화면 위에 떠서 슬라이드를 가리므로, 손잡이로 원하는 자리에 옮길 수 있다.
+ * 일반(옆 컬럼)일 땐 무대를 가리지 않으므로 이동이 필요 없다 — 손잡이도 없다.
+ */
 function FaceStrip({
   count,
   max,
   onCountChange,
   floating = false,
+  pos,
+  onPosChange,
   children,
 }: {
   count: number;
@@ -410,25 +471,123 @@ function FaceStrip({
   onCountChange: (n: number) => void;
   /** 전체화면일 때 공유 화면 위 우측 오버레이로 띄운다(가독성 위해 반투명 배경). */
   floating?: boolean;
+  /** 오버레이 위치(px, 컨테이너 기준). null이면 기본 자리(우측 세로 중앙). */
+  pos?: { x: number; y: number } | null;
+  onPosChange?: (p: { x: number; y: number }) => void;
   children: React.ReactNode;
 }) {
-  const clamped = Math.min(Math.max(1, count), Math.max(1, max));
+  const clamped = Math.min(Math.max(0, count), Math.max(0, max));
+  const ref = React.useRef<HTMLDivElement>(null);
+  const dragRef = React.useRef<{
+    startX: number;
+    startY: number;
+    origin: { x: number; y: number };
+  } | null>(null);
+  const movable = floating && !!onPosChange;
+
+  const parentOf = () => ref.current?.offsetParent as HTMLElement | null;
+
+  // 현재 위치(컨테이너 기준 px). pos가 없으면 기본 자리를 실측해 이동 시작점으로 쓴다.
+  function originOf(): { x: number; y: number } {
+    if (pos) return pos;
+    const el = ref.current;
+    const parent = parentOf();
+    if (!el || !parent) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    const pr = parent.getBoundingClientRect();
+    return { x: r.left - pr.left, y: r.top - pr.top };
+  }
+
+  function moveTo(x: number, y: number) {
+    const el = ref.current;
+    const parent = parentOf();
+    onPosChange?.(
+      clampStripPos(
+        { x, y },
+        { width: el?.offsetWidth ?? 0, height: el?.offsetHeight ?? 0 },
+        { width: parent?.clientWidth ?? 0, height: parent?.clientHeight ?? 0 },
+      ),
+    );
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    if (!movable) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origin: originOf(),
+    };
+    // 포인터 캡처가 없는 환경에서도 드래그 자체는 동작한다.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const d = dragRef.current;
+    if (!d) return;
+    moveTo(
+      d.origin.x + (e.clientX - d.startX),
+      d.origin.y + (e.clientY - d.startY),
+    );
+  }
+
+  function endDrag(e: React.PointerEvent<HTMLButtonElement>) {
+    dragRef.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  }
+
+  // 드래그만 지원하면 키보드 사용자가 못 옮긴다 — 방향키로도 같은 이동을 제공한다.
+  function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    const delta: Record<string, [number, number]> = {
+      ArrowLeft: [-MOVE_STEP, 0],
+      ArrowRight: [MOVE_STEP, 0],
+      ArrowUp: [0, -MOVE_STEP],
+      ArrowDown: [0, MOVE_STEP],
+    };
+    const d = delta[e.key];
+    if (!d || !movable) return;
+    e.preventDefault();
+    const o = originOf();
+    moveTo(o.x + d[0], o.y + d[1]);
+  }
+
   return (
     <div
+      ref={ref}
+      data-face-strip=""
       className={cn(
-        "flex w-40 shrink-0 flex-col gap-2 sm:w-44",
+        "flex shrink-0 flex-col gap-2",
+        // 0명이면 폭도 접는다 — 무대를 넓히는 게 접기의 목적이다.
+        clamped === 0 ? "w-auto" : "w-40 sm:w-44",
         floating &&
-          "absolute top-1/2 right-3 z-10 max-h-[calc(100vh-1.5rem)] -translate-y-1/2 rounded-lg bg-bg-elevated/85 p-2 backdrop-blur",
+          "absolute z-10 max-h-[calc(100vh-1.5rem)] rounded-lg bg-bg-elevated/85 p-2 backdrop-blur",
+        // 아직 옮기지 않았으면 기존 기본 자리(우측 세로 중앙).
+        floating && !pos && "top-1/2 right-3 -translate-y-1/2",
       )}
+      style={floating && pos ? { left: pos.x, top: pos.y } : undefined}
     >
-      <div className="flex items-center justify-between rounded-md bg-bg-subtle px-2 py-1">
+      <div className="flex items-center justify-between gap-1 rounded-md bg-bg-subtle px-2 py-1">
+        {movable && (
+          <button
+            type="button"
+            data-strip-handle=""
+            aria-label="얼굴 위치 옮기기(드래그 또는 방향키)"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onKeyDown={onKeyDown}
+            className="grid size-6 shrink-0 cursor-grab touch-none place-items-center rounded-sm text-fg-subtle hover:bg-bg-hover hover:text-fg"
+          >
+            <GripVertical size={13} aria-hidden="true" />
+          </button>
+        )}
         <span className="text-[11px] font-medium text-fg-subtle">
           얼굴 {clamped}
         </span>
         <span className="flex items-center gap-0.5">
           <StepButton
             label="얼굴 수 줄이기"
-            disabled={clamped <= 1}
+            disabled={clamped <= 0}
             onClick={() => onCountChange(clamped - 1)}
           >
             <Minus size={13} aria-hidden="true" />
@@ -442,9 +601,12 @@ function FaceStrip({
           </StepButton>
         </span>
       </div>
-      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
-        {children}
-      </div>
+      {/* 0명이면 목록 자체를 접는다 — 헤더(−/+)는 남겨야 다시 늘릴 수 있다. */}
+      {clamped > 0 && (
+        <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

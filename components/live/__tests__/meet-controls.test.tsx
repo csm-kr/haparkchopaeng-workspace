@@ -70,6 +70,8 @@ function renderControls(
       onTogglePanel={vi.fn()}
       onOpenPresent={vi.fn()}
       onStopPresent={vi.fn()}
+      hideSelf={false}
+      onToggleHideSelf={vi.fn()}
       {...overrides}
     />,
   );
@@ -151,6 +153,29 @@ describe("MeetControls", () => {
     expect(
       screen.queryByRole("button", { name: /발표자료 공유/ }),
     ).toBeNull();
+  });
+
+  it("'내 얼굴' 버튼 클릭 → onToggleHideSelf 호출", () => {
+    const onToggleHideSelf = vi.fn();
+    renderControls({ onToggleHideSelf });
+    fireEvent.click(
+      screen.getByRole("button", { name: "내 화면에서 내 얼굴 숨기기" }),
+    );
+    expect(onToggleHideSelf).toHaveBeenCalled();
+  });
+
+  it("숨김 상태면 버튼이 '다시 보기'로 바뀌고 aria-pressed=true", () => {
+    renderControls({ hideSelf: true });
+    const btn = screen.getByRole("button", { name: "내 얼굴 다시 보기" });
+    expect(btn).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("숨기기를 켤 때 상대에겐 계속 보인다고 안내한다(카메라 끄기와 구분)", () => {
+    renderControls({ hideSelf: false });
+    fireEvent.click(
+      screen.getByRole("button", { name: "내 화면에서 내 얼굴 숨기기" }),
+    );
+    expect(screen.getByText(/친구들에겐 그대로 보여요/)).toBeInTheDocument();
   });
 });
 
