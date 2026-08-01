@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 라이브 사용량 추정(ADR-023)을 prisma 인메모리 목으로 검증한다.
+// 라이브 사용량 추정(ADR-024)을 prisma 인메모리 목으로 검증한다.
 // 단위는 참가자-분 — 4명이 30분이면 120분(LiveKit 과금 개념과 동일).
 // CRITICAL: 월 경계는 KST 1일 00:00. 세션이 월을 걸치면 joinedAt이 속한 달에 전액 귀속한다.
 

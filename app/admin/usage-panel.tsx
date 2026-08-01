@@ -1,6 +1,6 @@
 import type { LiveUsage } from "@/lib/live-usage";
 
-// 라이브 사용량 표시(읽기 전용 서버 컴포넌트, ADR-023).
+// 라이브 사용량 표시(읽기 전용 서버 컴포넌트, ADR-024).
 // CRITICAL: "추정치" 표기를 빼지 마라 — 재참가 병합·leftAt 누락으로 실제 과금과 다를 수 있다.
 
 /** 한도 대비 소진 수준. 80% 이상 warn, 100% 이상 danger. */

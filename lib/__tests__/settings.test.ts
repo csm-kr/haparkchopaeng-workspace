@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 전역 앱 설정(ADR-023)의 우선순위 규칙을 prisma 인메모리 목으로 검증한다.
+// 전역 앱 설정(ADR-024)의 우선순위 규칙을 prisma 인메모리 목으로 검증한다.
 // CRITICAL: 우선순위는 DB > env > 코드 기본 2. row 부재는 "미설정"이지 0이 아니다.
 
 interface SettingRow {

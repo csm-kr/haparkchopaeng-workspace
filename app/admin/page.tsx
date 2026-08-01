@@ -6,7 +6,7 @@ import { maxTeams } from "@/lib/settings";
 import { MaxTeamsForm } from "./max-teams-form";
 import { UsagePanel } from "./usage-panel";
 
-// 관리자 콘솔(ADR-023). (app) 셸 밖의 전역 화면 — 활성 팀 컨텍스트와 무관하다(/teams 로비와 같은 층위).
+// 관리자 콘솔(ADR-024). (app) 셸 밖의 전역 화면 — 활성 팀 컨텍스트와 무관하다(/teams 로비와 같은 층위).
 // CRITICAL: 게이트는 ADMIN_EMAIL 일치. 실패는 403이 아니라 404 — 존재 자체를 숨긴다(R19).
 // 읽기는 서버에서(ADR-015). 쓰기는 actions.ts의 Server Action이 권한을 재강제한다.
 

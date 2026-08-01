@@ -113,7 +113,7 @@ vi.mock("@/lib/prisma", () => {
     prisma: {
       team,
       membership,
-      // 이 파일은 상한의 env 폴백 경로만 검증한다 — AppSetting row는 항상 없음(ADR-023).
+      // 이 파일은 상한의 env 폴백 경로만 검증한다 — AppSetting row는 항상 없음(ADR-024).
       // DB 우선 경로는 lib/__tests__/settings.test.ts가 담당한다.
       appSetting: { findUnique: vi.fn(async () => null) },
       // 트랜잭션 내 델리게이트는 동일 인메모리 store를 공유한다(부분 실패/재확인 검증용).
@@ -155,7 +155,7 @@ async function caught(p: Promise<unknown>): Promise<HttpError> {
   return e as HttpError;
 }
 
-// maxTeams() 자체의 우선순위(DB > env > 2) 검증은 lib/__tests__/settings.test.ts로 옮겼다(ADR-023).
+// maxTeams() 자체의 우선순위(DB > env > 2) 검증은 lib/__tests__/settings.test.ts로 옮겼다(ADR-024).
 // 여기서는 상한이 팀 생성에 어떻게 작용하는지만 본다.
 
 describe("canCreateTeam()", () => {
