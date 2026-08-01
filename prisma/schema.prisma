@@ -19,6 +19,16 @@ model Workspace {
   // CRITICAL: row는 단 하나만 존재 — 멀티테넌트 아님(ADR-007)
 }
 
+// 전역 앱 설정 (ADR-022). 관리자 콘솔(/admin)이 조절한다.
+// CRITICAL: row는 단 하나(id="singleton") — Workspace(ADR-007 레거시)와 섞지 않는다.
+// CRITICAL: row 부재 = 미설정 → env/코드 기본으로 폴백한다(ADR-006/R15 정신). 자동 생성 금지.
+model AppSetting {
+  id        String   @id @default("singleton")
+  maxTeams  Int? // null = env(MAX_TEAMS)/기본 2로 폴백
+  updatedAt DateTime @updatedAt
+  updatedBy String? // Member.id (감사용)
+}
+
 model Member {
   id            String   @id // "ha" | "bak" | "jo" | "paeng" …
   name          String

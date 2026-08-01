@@ -76,12 +76,19 @@ model AppSetting {
 }
 ```
 
-- [ ] **Step 2: 마이그레이션 생성**
+- [ ] **Step 2: Prisma Client 재생성 (DB 미변경)**
 
 개발 서버(`next dev`)가 떠 있으면 먼저 종료한다(Windows EPERM 회피).
 
-Run: `npx prisma migrate dev --name add_app_setting`
-Expected: `prisma/migrations/<타임스탬프>_add_app_setting/` 생성 + Prisma Client 재생성 성공
+Run: `npx prisma generate`
+Expected: 성공. `prisma.appSetting`이 타입에 생긴다. **DB는 건드리지 않는다.**
+
+> ⚠️ **`prisma migrate dev`를 쓰지 마라.** 이 프로젝트에는 `prisma/migrations/`가 없다 — 스키마 동기화는 `npx prisma db push`로 해왔다(CLAUDE.md 명령어 목록). 마이그레이션 히스토리가 없는 상태에서 `migrate dev`를 돌리면 드리프트로 판단해 **DB 리셋을 제안**할 수 있고, `.env`의 `DATABASE_URL`/`DIRECT_URL`은 **공유 운영 Supabase**를 가리킨다.
+
+- [ ] **Step 2b: 운영 DB에 테이블 반영 (사용자 승인 후)**
+
+Run: `npx prisma db push`
+Expected: `AppSetting` 테이블 생성. 신규 테이블 추가라 기존 데이터에 파괴적 변경이 없다(Prisma가 데이터 손실을 감지하면 `--accept-data-loss` 없이는 중단한다 — 그런 경고가 뜨면 **멈추고 사람에게 묻는다**).
 
 - [ ] **Step 3: 실패하는 테스트 작성**
 
