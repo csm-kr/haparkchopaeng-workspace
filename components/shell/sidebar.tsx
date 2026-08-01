@@ -157,8 +157,14 @@ export function Sidebar({
         </div>
       )}
 
-      {/* 푸터: 현재 사용자(설정) + 테마 토글 */}
-      <div className="flex items-center gap-2 border-t border-border-token px-3 py-3">
+      {/* 푸터: 현재 사용자(설정) + 테마 토글 —
+          헤더와 같은 이유로, 접히면 64px 폭에 아바타+토글이 안 들어가 겹치므로 세로로 쌓는다 */}
+      <div
+        className={cn(
+          "flex gap-2 border-t border-border-token px-3 py-3",
+          collapsed ? "flex-col items-center" : "items-center",
+        )}
+      >
         <Link
           href="/profile"
           title="설정"

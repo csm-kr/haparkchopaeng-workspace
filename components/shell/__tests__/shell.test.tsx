@@ -18,14 +18,14 @@ const CURRENT: ShellMember = {
   role: "관리자",
 };
 
-function renderSidebar(opts: { live?: boolean } = {}) {
+function renderSidebar(opts: { live?: boolean; collapsed?: boolean } = {}) {
   return render(
     <ThemeProvider initialTheme="light">
       <LiveProvider initialLive={opts.live ?? false}>
         <Sidebar
           members={[CURRENT]}
           currentUser={CURRENT}
-          collapsed={false}
+          collapsed={opts.collapsed ?? false}
           onToggleCollapse={() => {}}
         />
       </LiveProvider>
@@ -73,6 +73,25 @@ describe("LIVE 알약 (useLive 컨텍스트)", () => {
     expect(pill).toBeInTheDocument();
     // 색에만 의존하지 않는다 — 텍스트 병행(R29).
     expect(pill).toHaveTextContent("LIVE");
+  });
+});
+
+describe("접힘 상태 푸터 레이아웃", () => {
+  // jsdom은 레이아웃을 계산하지 않으므로 배치 클래스로 검증한다.
+  // 접힘 폭 64px - px-3 양쪽 = 40px 인데 아바타(20) + gap(8) + 토글(32) = 60px 라
+  // 가로 배치로는 넘쳐서 겹친다. 헤더(로고+접기 토글)와 같은 세로 스택 처리가 필요하다.
+  function footerOf() {
+    return screen.getByRole("button", { name: "다크 테마로 전환" }).parentElement;
+  }
+
+  it("접히면 푸터를 세로로 쌓는다", () => {
+    renderSidebar({ collapsed: true });
+    expect(footerOf()).toHaveClass("flex-col");
+  });
+
+  it("펼치면 푸터를 가로로 둔다", () => {
+    renderSidebar({ collapsed: false });
+    expect(footerOf()).not.toHaveClass("flex-col");
   });
 });
 
