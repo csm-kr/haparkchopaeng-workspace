@@ -248,6 +248,58 @@ describe("RoomStage 발표자료 공유", () => {
   });
 });
 
+describe("RoomStage 내 얼굴 숨기기", () => {
+  function renderHidden(extra?: {
+    present?: { presentationId: string; page: number; pageCount: number };
+  }) {
+    return render(
+      <RoomStage
+        members={members}
+        presenterId="jo"
+        currentMemberId="ha"
+        hands={new Set()}
+        hideSelf
+        present={extra?.present}
+      />,
+    );
+  }
+
+  it("그리드에서 내 타일만 빠지고 친구들은 그대로 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    const { container } = renderHidden();
+
+    expect(container.querySelector('[data-identity="ha"]')).toBeNull();
+    expect(container.querySelector('[data-identity="jo"]')).not.toBeNull();
+    expect(container.querySelector('[data-identity="bak"]')).not.toBeNull();
+  });
+
+  it("발표 중 얼굴 스트립 후보에서도 내가 빠진다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    const { container } = renderHidden({
+      present: { presentationId: "pres-1", page: 1, pageCount: 3 },
+    });
+
+    // 기본 2명: 숨기지 않았다면 jo(발표자)·ha 순서지만, 숨기면 jo·bak이 뜬다.
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(2);
+    expect(container.querySelector('[data-identity="ha"]')).toBeNull();
+    expect(container.querySelector('[data-identity="bak"]')).not.toBeNull();
+    // 개수 한도도 친구 수(2명) 기준 — 더 늘릴 수 없다.
+    expect(screen.getByRole("button", { name: "얼굴 수 늘리기" })).toBeDisabled();
+  });
+
+  it("혼자 있는 방에서 숨기면 따뜻한 안내를 보여준다", () => {
+    lk.participants = [{ identity: "ha" }];
+    renderHidden();
+    expect(screen.getByText(/내 얼굴을 숨겼어요/)).toBeInTheDocument();
+  });
+
+  it("숨기지 않으면 내 타일이 그대로 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }];
+    const { container } = renderStage(); // hideSelf 없음
+    expect(container.querySelector('[data-identity="ha"]')).not.toBeNull();
+  });
+});
+
 describe("RoomStage 전체화면", () => {
   // JSDOM은 Fullscreen API 미구현 — requestFullscreen이 호출되면 그 요소를
   // fullscreenElement로 두고 fullscreenchange를 디스패치해 실제 동작을 흉내낸다.

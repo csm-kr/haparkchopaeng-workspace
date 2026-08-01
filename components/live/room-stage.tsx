@@ -34,6 +34,7 @@ import type { LiveMember, PresentState } from "./types";
 //   공유(발표자료/화면)가 있으면: 공유 무대(왼쪽 크게, '발표 중' 라벨) + 얼굴 세로 스트립(오른쪽, 개수 −/+ 조절).
 //   보이는 얼굴 우선순위: 말하는 사람 → 발표자 → 나머지. 개수는 state라 공유 소스가 바뀌어도 유지된다.
 // 발표자료 공유 = 업로드 PDF를 페이지 이미지로 무대에 띄우고 페이지를 동기화(OS 화면공유 아님).
+// '내 얼굴 숨기기'(hideSelf)는 내 화면에서만 내 타일을 뺀다 — 카메라는 계속 송출된다(로컬 뷰 설정).
 // CRITICAL: 발화·역할·손들기·발표 표시는 색에만 의존하지 않는다 — 아이콘 + 텍스트 병행(R29). 토큰만(R20).
 
 export interface RoomStageProps {
@@ -50,6 +51,8 @@ export interface RoomStageProps {
   present?: PresentState | null;
   /** 발표자가 페이지를 넘길 때 호출(없으면 시청자 — 따라가기만). */
   onChangePage?: (page: number) => void;
+  /** 내 화면에서만 내 타일을 숨긴다(로컬 뷰 설정) — 카메라는 계속 송출되어 상대에겐 그대로 보인다. */
+  hideSelf?: boolean;
 }
 
 interface StripParticipant {
@@ -82,6 +85,7 @@ export function RoomStage({
   onDraw,
   present,
   onChangePage,
+  hideSelf,
 }: RoomStageProps) {
   const participants = useParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
@@ -148,8 +152,13 @@ export function RoomStage({
     );
   };
 
-  const stripTiles = orderParticipantsForStrip(participants, presenterId)
-    .slice(0, Math.min(visibleCount, participants.length))
+  // 내 얼굴 숨기기 — 내 화면에서만 뺀다(상대에겐 그대로 보인다). 그리드·스트립·개수 한도에 모두 적용.
+  const visible = hideSelf
+    ? participants.filter((p) => p.identity !== currentMemberId)
+    : participants;
+
+  const stripTiles = orderParticipantsForStrip(visible, presenterId)
+    .slice(0, Math.min(visibleCount, visible.length))
     .map(renderTile);
 
   return (
@@ -165,7 +174,7 @@ export function RoomStage({
           annotations={annotations ?? []}
           onDraw={onDraw}
           count={visibleCount}
-          max={participants.length}
+          max={visible.length}
           onCountChange={setVisibleCount}
           main={<PresentImage present={present} />}
           topCenter={
@@ -185,7 +194,7 @@ export function RoomStage({
           annotations={annotations ?? []}
           onDraw={onDraw}
           count={visibleCount}
-          max={participants.length}
+          max={visible.length}
           onCountChange={setVisibleCount}
           main={
             <VideoTrack trackRef={screenShare} className="size-full object-contain" />
@@ -193,9 +202,14 @@ export function RoomStage({
         >
           {stripTiles}
         </StageShell>
+      ) : hideSelf && visible.length === 0 ? (
+        // 나 혼자인데 내 얼굴을 숨긴 상태 — 빈 화면 대신 이유를 알려준다(R30).
+        <p className="rounded-lg border border-border-token bg-bg-subtle px-4 py-10 text-center text-[13px] text-fg-subtle">
+          내 얼굴을 숨겼어요. 친구들이 들어오면 여기에 보여요.
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {participants.map(renderTile)}
+          {visible.map(renderTile)}
         </div>
       )}
     </div>
