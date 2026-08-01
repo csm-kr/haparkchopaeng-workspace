@@ -5,7 +5,7 @@ import type { TeamRole } from "@/types";
 
 // 팀 생성 도메인 (서버 전용, ADR-018). 권한은 RLS 없이 앱레벨에서 강제(ADR-016/R19).
 // CRITICAL: 전역 팀 상한은 서버 전체 team.count() 기준(per-user 아님). creatorId는 호출부(세션)에서 취한다(R3).
-// CRITICAL: 상한값은 lib/settings.ts가 소유한다(DB > env > 2, ADR-022). 여기서 env를 직접 읽지 마라.
+// CRITICAL: 상한값은 lib/settings.ts가 소유한다(DB > env > 2, ADR-023). 여기서 env를 직접 읽지 마라.
 // 기존 lib/team.ts(단일 워크스페이스 조회)와는 별개 — 이건 멀티팀용이다.
 
 const SLUG_RE = /^[a-z][a-z0-9-]{1,23}$/;

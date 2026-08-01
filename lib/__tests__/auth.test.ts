@@ -86,7 +86,7 @@ describe("requireAuth / requireRole", () => {
   });
 });
 
-// 관리자 콘솔(/admin) 게이트 — Member.role이 아니라 ADMIN_EMAIL 일치로 판정한다(ADR-022).
+// 관리자 콘솔(/admin) 게이트 — Member.role이 아니라 ADMIN_EMAIL 일치로 판정한다(ADR-023).
 // CRITICAL: 실패는 403이 아니라 404 — 콘솔의 존재 자체를 숨긴다.
 describe("requireSuperAdmin()", () => {
   const ORIGINAL_ADMIN = process.env.ADMIN_EMAIL;

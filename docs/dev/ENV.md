@@ -26,6 +26,9 @@
 | `SUPABASE_STORAGE_BUCKET` | PDF·에셋·figure 스토리지 | 비공개 버킷 + 서명 URL(→ [`../security/SECURITY.md`](../security/SECURITY.md)) |
 | `LIVEKIT_URL` | 라이브 다자간 화상(LiveKit) WebSocket URL | 예: `wss://xxx.livekit.cloud`. ADR-019 |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit 입장 토큰 서명 | **비밀. 서버 전용.** ADR-019 |
+| `MAX_TEAMS` | 전역 팀 생성 상한 **폴백** | 기본 `2`. `AppSetting.maxTeams`가 있으면 그쪽이 이긴다(ADR-023) |
+| `ADMIN_EMAIL` | 관리자 콘솔(`/admin`) 접근 허용 이메일 | 기본 `de8167@gmail.com`. `Member.email`과 일치해야 통과 |
+| `LIVE_MINUTES_QUOTA` | 월 라이브 한도(분) 표시 기준 | 기본 `1000` (LiveKit 플랜 값). 조절 UI 없음 |
 
 ## 인증 (Google OAuth via Supabase Auth)
 

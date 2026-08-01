@@ -38,7 +38,7 @@
 | `app/admin/usage-panel.tsx` (신규) | 사용량 표시 전용 서버 컴포넌트(진행바·추이·팀별) |
 | `app/admin/max-teams-form.tsx` (신규) | 상한 조절 클라이언트 폼(인라인 결과) |
 | `app/admin/actions.ts` (신규) | `setMaxTeamsAction` Server Action |
-| `docs/agent/ADR.md` (수정) | ADR-021 개정 + ADR-022 신규 |
+| `docs/agent/ADR.md` (수정) | ADR-021 개정 + ADR-023 신규 |
 | `docs/agent/RULES.md` (수정) | R18의 `MAX_TEAMS` 서술 갱신 |
 | `docs/dev/ENV.md` (수정) | `MAX_TEAMS`·`ADMIN_EMAIL`·`LIVE_MINUTES_QUOTA` 문서화 |
 
@@ -65,7 +65,7 @@
 `prisma/schema.prisma`의 `model Workspace { ... }` 블록 **바로 아래**에 추가한다.
 
 ```prisma
-// 전역 앱 설정 (ADR-022). 관리자 콘솔(/admin)이 조절한다.
+// 전역 앱 설정 (ADR-023). 관리자 콘솔(/admin)이 조절한다.
 // CRITICAL: row는 단 하나(id="singleton") — Workspace(ADR-007 레거시)와 섞지 않는다.
 // CRITICAL: row 부재 = 미설정 → env/코드 기본으로 폴백한다(ADR-006/R15 정신). 자동 생성 금지.
 model AppSetting {
@@ -97,7 +97,7 @@ Create `lib/__tests__/settings.test.ts`:
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 전역 앱 설정(ADR-022)의 우선순위 규칙을 prisma 인메모리 목으로 검증한다.
+// 전역 앱 설정(ADR-023)의 우선순위 규칙을 prisma 인메모리 목으로 검증한다.
 // CRITICAL: 우선순위는 DB > env > 코드 기본 2. row 부재는 "미설정"이지 0이 아니다.
 
 interface SettingRow {
@@ -221,7 +221,7 @@ Create `lib/settings.ts`:
 ```ts
 import { prisma } from "@/lib/prisma";
 
-// 전역 앱 설정 (서버 전용, ADR-022). 관리자 콘솔(/admin)이 조절한다.
+// 전역 앱 설정 (서버 전용, ADR-023). 관리자 콘솔(/admin)이 조절한다.
 // CRITICAL: 우선순위는 DB(AppSetting) > env > 코드 기본. ADR-021 개정 —
 //   상한은 더 이상 "env로만" 설정하지 않는다. env는 DB row가 없을 때의 폴백으로 남는다.
 // CRITICAL: env는 호출 시점에 읽는다(R2). 범위 검증은 호출부(Server Action)의 책임이다.
@@ -317,7 +317,7 @@ import { maxTeams } from "@/lib/settings";
 파일 상단 주석(`lib/teams.ts:6` 부근)에 한 줄 덧붙인다:
 
 ```ts
-// CRITICAL: 전역 상한은 lib/settings.ts가 소유한다(DB > env > 2, ADR-022). 여기서 env를 직접 읽지 마라.
+// CRITICAL: 전역 상한은 lib/settings.ts가 소유한다(DB > env > 2, ADR-023). 여기서 env를 직접 읽지 마라.
 ```
 
 `canCreateTeam()`(현재 `lib/teams.ts:20-22`):
@@ -543,7 +543,7 @@ Create `lib/__tests__/live-usage.test.ts`:
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 라이브 사용량 추정(ADR-022)을 prisma 인메모리 목으로 검증한다.
+// 라이브 사용량 추정(ADR-023)을 prisma 인메모리 목으로 검증한다.
 // 단위는 참가자-분 — 4명이 30분이면 120분(LiveKit 과금 개념과 동일).
 // CRITICAL: 월 경계는 KST 1일 00:00. 세션이 월을 걸치면 joinedAt이 속한 달에 전액 귀속한다.
 
@@ -808,7 +808,7 @@ Create `lib/live-usage.ts`:
 ```ts
 import { prisma } from "@/lib/prisma";
 
-// 라이브 사용량 추정 (서버 전용, ADR-022). 관리자 콘솔(/admin)이 소비한다.
+// 라이브 사용량 추정 (서버 전용, ADR-023). 관리자 콘솔(/admin)이 소비한다.
 // 단위는 참가자-분 — LiveKit 과금 개념과 같다(4명 × 30분 = 120분).
 // CRITICAL: 이 값은 추정치다. UI에 반드시 "추정치"로 표기한다.
 //   ① 재참가가 Participant 행을 덮어써(leftAt=null) 이전 체류 구간이 소실된다 → 과소집계.
@@ -1275,7 +1275,7 @@ import { useState } from "react";
 import { Button, Input } from "@/components/ui";
 import { setMaxTeamsAction } from "./actions";
 
-// 전역 팀 상한 조절 폼(ADR-022). 서버가 최종 강제 — 여기 검증은 가시화일 뿐이다.
+// 전역 팀 상한 조절 폼(ADR-023). 서버가 최종 강제 — 여기 검증은 가시화일 뿐이다.
 // CRITICAL: 실패는 토스트가 아니라 인라인 메시지로(R30).
 
 type Feedback = { tone: "ok" | "error"; text: string } | null;
@@ -1337,7 +1337,7 @@ export function MaxTeamsForm({ current, teamCount }: { current: number; teamCoun
 ```tsx
 import type { LiveUsage } from "@/lib/live-usage";
 
-// 라이브 사용량 표시(읽기 전용 서버 컴포넌트, ADR-022).
+// 라이브 사용량 표시(읽기 전용 서버 컴포넌트, ADR-023).
 // CRITICAL: "추정치" 표기를 빼지 마라 — 재참가 병합·leftAt 누락으로 실제 과금과 다를 수 있다.
 
 /** 한도 대비 소진 수준. 80% 이상 warn, 100% 이상 danger. */
@@ -1447,7 +1447,7 @@ import { maxTeams } from "@/lib/settings";
 import { MaxTeamsForm } from "./max-teams-form";
 import { UsagePanel } from "./usage-panel";
 
-// 관리자 콘솔(ADR-022). (app) 셸 밖의 전역 화면 — 활성 팀 컨텍스트와 무관하다(/teams 로비와 같은 층위).
+// 관리자 콘솔(ADR-023). (app) 셸 밖의 전역 화면 — 활성 팀 컨텍스트와 무관하다(/teams 로비와 같은 층위).
 // CRITICAL: 게이트는 ADMIN_EMAIL 일치. 실패는 403이 아니라 404 — 존재 자체를 숨긴다(R19).
 // 읽기는 서버에서(ADR-015). 쓰기는 actions.ts의 Server Action이 권한을 재강제한다.
 
@@ -1520,15 +1520,15 @@ git commit -m "feat(admin): /admin 콘솔 — 라이브 사용량 패널 + 전�
 `docs/agent/ADR.md:193`의 "생성 상한 정책(유지 + 가시화)" 항목에 한 문장을 덧붙인다:
 
 ```markdown
-> **2026-08-01 개정(ADR-022):** "admin이 env(`MAX_TEAMS`)로만 설정" 조항은 폐기됐다. 상한은 이제 DB(`AppSetting.maxTeams`)에 저장되고 관리자 콘솔(`/admin`)에서 조절한다. env `MAX_TEAMS`는 DB row가 없을 때의 폴백으로만 남는다. **전역 상한이라는 성격(per-user 아님)은 그대로다.**
+> **2026-08-01 개정(ADR-023):** "admin이 env(`MAX_TEAMS`)로만 설정" 조항은 폐기됐다. 상한은 이제 DB(`AppSetting.maxTeams`)에 저장되고 관리자 콘솔(`/admin`)에서 조절한다. env `MAX_TEAMS`는 DB row가 없을 때의 폴백으로만 남는다. **전역 상한이라는 성격(per-user 아님)은 그대로다.**
 ```
 
-- [ ] **Step 2: ADR-022 추가**
+- [ ] **Step 2: ADR-023 추가**
 
 `docs/agent/ADR.md` 끝에 추가한다:
 
 ```markdown
-## ADR-022. 관리자 콘솔(`/admin`) — 전역 설정 + 라이브 사용량 가시화
+## ADR-023. 관리자 콘솔(`/admin`) — 전역 설정 + 라이브 사용량 가시화
 
 - 날짜: 2026-08-01
 - 상태: 채택
@@ -1553,7 +1553,7 @@ git commit -m "feat(admin): /admin 콘솔 — 라이브 사용량 패널 + 전�
 `docs/agent/RULES.md:45`에서 `전역 팀 상한 MAX_TEAMS(기본 2).` 부분을 아래로 바꾼다:
 
 ```markdown
-전역 팀 상한은 `AppSetting.maxTeams` > env `MAX_TEAMS` > 기본 2 순으로 정해지며 `/admin`에서 조절한다(ADR-022).
+전역 팀 상한은 `AppSetting.maxTeams` > env `MAX_TEAMS` > 기본 2 순으로 정해지며 `/admin`에서 조절한다(ADR-023).
 ```
 
 - [ ] **Step 4: ENV.md에 세 항목 추가**
@@ -1561,7 +1561,7 @@ git commit -m "feat(admin): /admin 콘솔 — 라이브 사용량 패널 + 전�
 `docs/dev/ENV.md`의 표에 행을 추가한다:
 
 ```markdown
-| `MAX_TEAMS` | 전역 팀 생성 상한 **폴백** | 기본 `2`. `AppSetting.maxTeams`가 있으면 그쪽이 이긴다(ADR-022) |
+| `MAX_TEAMS` | 전역 팀 생성 상한 **폴백** | 기본 `2`. `AppSetting.maxTeams`가 있으면 그쪽이 이긴다(ADR-023) |
 | `ADMIN_EMAIL` | 관리자 콘솔(`/admin`) 접근 허용 이메일 | 기본 `de8167@gmail.com`. `Member.email`과 일치해야 통과 |
 | `LIVE_MINUTES_QUOTA` | 월 라이브 한도(분) 표시 기준 | 기본 `1000` (LiveKit 플랜 값). 조절 UI 없음 |
 ```
@@ -1570,14 +1570,14 @@ git commit -m "feat(admin): /admin 콘솔 — 라이브 사용량 패널 + 전�
 
 ```bash
 git add docs/agent/ADR.md docs/agent/RULES.md docs/dev/ENV.md
-git commit -m "docs(admin): ADR-022 추가 + ADR-021 상한 정책 개정 + ENV 3항목 문서화"
+git commit -m "docs(admin): ADR-023 추가 + ADR-021 상한 정책 개정 + ENV 3항목 문서화"
 ```
 
 ---
 
 ## 배포 메모
 
-- Vercel 프로덕션에 `MAX_TEAMS=3`은 **이미 설정돼 있다**(2026-08-01). ADR-022 적용 후에도 DB row가 없으면 이 값이 폴백으로 쓰이므로 지울 필요 없다.
+- Vercel 프로덕션에 `MAX_TEAMS=3`은 **이미 설정돼 있다**(2026-08-01). ADR-023 적용 후에도 DB row가 없으면 이 값이 폴백으로 쓰이므로 지울 필요 없다.
 - `ADMIN_EMAIL`은 기본값이 `de8167@gmail.com`이라 **운영에 따로 넣지 않아도 동작한다**. 바꿀 때만 추가한다.
 - 배포 시 마이그레이션(`AppSetting` 테이블)이 프로덕션 DB에 적용돼야 한다.
 - env만 바꿀 때는 `vercel redeploy <직전 prod URL>`로 기존 소스를 재빌드하는 편이 안전하다(로컬 트리에 무관한 WIP이 있을 때 특히).

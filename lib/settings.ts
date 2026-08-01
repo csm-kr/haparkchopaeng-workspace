@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-// 전역 앱 설정 (서버 전용, ADR-022). 관리자 콘솔(/admin)이 조절한다.
+// 전역 앱 설정 (서버 전용, ADR-023). 관리자 콘솔(/admin)이 조절한다.
 // CRITICAL: 우선순위는 DB(AppSetting) > env > 코드 기본. ADR-021 개정 —
 //   상한은 더 이상 "env로만" 설정하지 않는다. env는 DB row가 없을 때의 폴백으로 남는다.
 // CRITICAL: env는 호출 시점에 읽는다(R2). 범위 검증은 호출부(Server Action)의 책임이다.

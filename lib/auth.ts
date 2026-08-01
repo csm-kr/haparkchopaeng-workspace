@@ -96,7 +96,7 @@ function adminEmail(): string {
 }
 
 /**
- * 관리자 콘솔(/admin) 가드. Member.email이 ADMIN_EMAIL과 같을 때만 통과한다(ADR-022).
+ * 관리자 콘솔(/admin) 가드. Member.email이 ADMIN_EMAIL과 같을 때만 통과한다(ADR-023).
  * CRITICAL: Member.role이 아니라 이메일로 판정한다 — role은 DB에서 승격될 수 있다.
  * CRITICAL: 실패는 403이 아니라 404다 — 콘솔의 존재 자체를 숨긴다.
  *   notFound() 호출은 여기가 아니라 페이지가 한다(라이브러리를 Next 렌더 API에 묶지 않는다).
