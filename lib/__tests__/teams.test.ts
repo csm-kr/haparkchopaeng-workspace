@@ -113,6 +113,9 @@ vi.mock("@/lib/prisma", () => {
     prisma: {
       team,
       membership,
+      // 이 파일은 상한의 env 폴백 경로만 검증한다 — AppSetting row는 항상 없음(ADR-022).
+      // DB 우선 경로는 lib/__tests__/settings.test.ts가 담당한다.
+      appSetting: { findUnique: vi.fn(async () => null) },
       // 트랜잭션 내 델리게이트는 동일 인메모리 store를 공유한다(부분 실패/재확인 검증용).
       $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({ team, membership })),
     },
@@ -128,7 +131,6 @@ import {
   isTeamMember,
   isTeamOwner,
   listMemberships,
-  maxTeams,
   resolveEntryTeam,
 } from "@/lib/teams";
 
@@ -153,24 +155,8 @@ async function caught(p: Promise<unknown>): Promise<HttpError> {
   return e as HttpError;
 }
 
-describe("maxTeams()", () => {
-  it("미설정이면 기본 2", () => {
-    delete process.env.MAX_TEAMS;
-    expect(maxTeams()).toBe(2);
-  });
-
-  it("호출 시점에 env를 읽는다", () => {
-    process.env.MAX_TEAMS = "5";
-    expect(maxTeams()).toBe(5);
-    process.env.MAX_TEAMS = "3";
-    expect(maxTeams()).toBe(3);
-  });
-
-  it("잘못된 값이면 기본 2로 폴백", () => {
-    process.env.MAX_TEAMS = "abc";
-    expect(maxTeams()).toBe(2);
-  });
-});
+// maxTeams() 자체의 우선순위(DB > env > 2) 검증은 lib/__tests__/settings.test.ts로 옮겼다(ADR-022).
+// 여기서는 상한이 팀 생성에 어떻게 작용하는지만 본다.
 
 describe("canCreateTeam()", () => {
   it("전역 count가 상한 미만이면 true", async () => {

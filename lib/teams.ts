@@ -1,24 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
+import { maxTeams } from "@/lib/settings";
 import type { TeamRole } from "@/types";
 
 // 팀 생성 도메인 (서버 전용, ADR-018). 권한은 RLS 없이 앱레벨에서 강제(ADR-016/R19).
 // CRITICAL: 전역 팀 상한은 서버 전체 team.count() 기준(per-user 아님). creatorId는 호출부(세션)에서 취한다(R3).
+// CRITICAL: 상한값은 lib/settings.ts가 소유한다(DB > env > 2, ADR-022). 여기서 env를 직접 읽지 마라.
 // 기존 lib/team.ts(단일 워크스페이스 조회)와는 별개 — 이건 멀티팀용이다.
 
 const SLUG_RE = /^[a-z][a-z0-9-]{1,23}$/;
 
-/** 전역 팀 상한. 호출 시점에 env를 읽고(R2 패턴), 미설정/오류면 기본 2(ADR-018). */
-export function maxTeams(): number {
-  const raw = process.env.MAX_TEAMS;
-  if (raw === undefined || raw === "") return 2;
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : 2;
-}
-
 /** 전역 팀 생성 가능 여부 — 서버 전체 team.count()가 maxTeams() 미만이면 true. (per-user 아님, ADR-021) */
 export async function canCreateTeam(): Promise<boolean> {
-  return (await prisma.team.count()) < maxTeams();
+  return (await prisma.team.count()) < (await maxTeams());
 }
 
 /** 이름 → slug 후보. 영문 소문자/숫자만 남기고 그 외는 하이픈으로. 형식에 못 맞으면 "team" 폴백. */
@@ -61,7 +55,7 @@ export async function createTeam(input: {
   }
 
   // 전역 상한(서버 전체) — 1차 확인. 트랜잭션 안에서 count→insert race를 재확인한다.
-  if ((await prisma.team.count()) >= maxTeams()) {
+  if ((await prisma.team.count()) >= (await maxTeams())) {
     throw new HttpError(403, "TEAM_LIMIT", "최대 팀 수를 초과했어요.");
   }
 
@@ -79,7 +73,7 @@ export async function createTeam(input: {
   }
 
   return prisma.$transaction(async (tx) => {
-    if ((await tx.team.count()) >= maxTeams()) {
+    if ((await tx.team.count()) >= (await maxTeams())) {
       throw new HttpError(403, "TEAM_LIMIT", "최대 팀 수를 초과했어요.");
     }
     const team = await tx.team.create({
