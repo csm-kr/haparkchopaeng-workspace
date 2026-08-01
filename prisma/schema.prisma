@@ -19,6 +19,16 @@ model Workspace {
   // CRITICAL: row는 단 하나만 존재 — 멀티테넌트 아님(ADR-007)
 }
 
+// 전역 앱 설정 (ADR-024). 관리자 콘솔(/admin)이 조절한다.
+// CRITICAL: row는 단 하나(id="singleton") — Workspace(ADR-007 레거시)와 섞지 않는다.
+// CRITICAL: row 부재 = 미설정 → env/코드 기본으로 폴백한다(ADR-006/R15 정신). 자동 생성 금지.
+model AppSetting {
+  id        String   @id @default("singleton")
+  maxTeams  Int? // null = env(MAX_TEAMS)/기본 2로 폴백
+  updatedAt DateTime @updatedAt
+  updatedBy String? // Member.id (감사용)
+}
+
 model Member {
   id            String   @id // "ha" | "bak" | "jo" | "paeng" …
   name          String
@@ -213,7 +223,7 @@ model Reaction {
   @@unique([commentId, memberId, emoji])
 }
 
-// NEWS 출판 실적 쇼케이스 (ADR-022). 우리 팀이 발표한 논문 = 실적. Paper(분석 대상)와 의미 분리.
+// NEWS 출판 실적 쇼케이스 (ADR-024). 우리 팀이 발표한 논문 = 실적. Paper(분석 대상)와 의미 분리.
 model Publication {
   id          String   @id @default(cuid())
   teamId      String   @default("") // Team.id — 활성 팀 스코핑(ADR-020/R37). default ""는 컨벤션 일치 sentinel — 쓰기 시 명시 주입.
@@ -226,7 +236,7 @@ model Publication {
   links       Json // [{ label, url }] — arXiv/PDF/코드/프로젝트
   createdBy   String // Member.id — CRITICAL: 작성자는 세션에서 주입(R3)
   createdAt   DateTime @default(now())
-  // CRITICAL: NEWS는 분석 대상이 아니다 — analyses/figures/notes를 붙이지 마라(Paper와 의미 분리, ADR-022).
+  // CRITICAL: NEWS는 분석 대상이 아니다 — analyses/figures/notes를 붙이지 마라(Paper와 의미 분리, ADR-024).
   // CRITICAL: 모든 조회·변이는 활성 팀(teamId)으로 스코핑(ADR-020, R37). 쓰기 teamId·createdBy는 서버 주입.
   // CRITICAL: 신규 테이블 — 운영 db push는 harness가 아니라 사람이 검토 후 수동(ADR-020 정신).
 

@@ -85,3 +85,33 @@ export async function requireRole(...roles: Role[]): Promise<Session> {
   }
   return session;
 }
+
+const DEFAULT_ADMIN_EMAIL = "de8167@gmail.com";
+
+/** 콘솔 접근이 허용된 관리자 이메일(정규화됨). 호출 시점에 env를 읽는다(R2). */
+function adminEmail(): string {
+  const raw = process.env.ADMIN_EMAIL;
+  const value = raw === undefined || raw === "" ? DEFAULT_ADMIN_EMAIL : raw;
+  return value.trim().toLowerCase();
+}
+
+/**
+ * 관리자 콘솔(/admin) 가드. Member.email이 ADMIN_EMAIL과 같을 때만 통과한다(ADR-024).
+ * CRITICAL: Member.role이 아니라 이메일로 판정한다 — role은 DB에서 승격될 수 있다.
+ * CRITICAL: 실패는 403이 아니라 404다 — 콘솔의 존재 자체를 숨긴다.
+ *   notFound() 호출은 여기가 아니라 페이지가 한다(라이브러리를 Next 렌더 API에 묶지 않는다).
+ */
+export async function requireSuperAdmin(): Promise<Session> {
+  const hidden = () => new HttpError(404, "NOT_FOUND", "페이지를 찾을 수 없어요.");
+
+  const session = await getSession();
+  if (!session) throw hidden();
+
+  const member = await prisma.member.findUnique({
+    where: { id: session.memberId },
+    select: { email: true },
+  });
+  if (member?.email.trim().toLowerCase() !== adminEmail()) throw hidden();
+
+  return session;
+}
