@@ -153,6 +153,19 @@ describe("MeetRoom", () => {
     expect(floats).toHaveLength(1);
     expect(floats[0].textContent).toBe("🎉");
   });
+
+  it("컨트롤바에서 '내 얼굴'을 누르면 무대에서 내 타일이 사라진다", () => {
+    lk.participants = [{ identity: "ha" }, { identity: "jo" }];
+    const { container } = renderRoom({ currentMemberId: "jo" });
+    expect(container.querySelector('[data-identity="jo"]')).not.toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "내 화면에서 내 얼굴 숨기기" }),
+    );
+
+    expect(container.querySelector('[data-identity="jo"]')).toBeNull();
+    expect(container.querySelector('[data-identity="ha"]')).not.toBeNull();
+  });
 });
 
 describe("MeetRoom 발표자료 공유", () => {
