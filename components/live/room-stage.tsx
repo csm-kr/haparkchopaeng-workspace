@@ -397,7 +397,7 @@ function PresentingLabel({ name }: { name: string }) {
   );
 }
 
-/** 오른쪽 얼굴 스트립 + 표시 개수 −/+ 조절. 한도(max=참가자 수) 안에서 1..max. */
+/** 오른쪽 얼굴 스트립 + 표시 개수 −/+ 조절. 0..max(참가자 수). 0이면 헤더만 남는다. */
 function FaceStrip({
   count,
   max,
@@ -412,11 +412,13 @@ function FaceStrip({
   floating?: boolean;
   children: React.ReactNode;
 }) {
-  const clamped = Math.min(Math.max(1, count), Math.max(1, max));
+  const clamped = Math.min(Math.max(0, count), Math.max(0, max));
   return (
     <div
       className={cn(
-        "flex w-40 shrink-0 flex-col gap-2 sm:w-44",
+        "flex shrink-0 flex-col gap-2",
+        // 0명이면 폭도 접는다 — 무대를 넓히는 게 접기의 목적이다.
+        clamped === 0 ? "w-auto" : "w-40 sm:w-44",
         floating &&
           "absolute top-1/2 right-3 z-10 max-h-[calc(100vh-1.5rem)] -translate-y-1/2 rounded-lg bg-bg-elevated/85 p-2 backdrop-blur",
       )}
@@ -428,7 +430,7 @@ function FaceStrip({
         <span className="flex items-center gap-0.5">
           <StepButton
             label="얼굴 수 줄이기"
-            disabled={clamped <= 1}
+            disabled={clamped <= 0}
             onClick={() => onCountChange(clamped - 1)}
           >
             <Minus size={13} aria-hidden="true" />
@@ -442,9 +444,12 @@ function FaceStrip({
           </StepButton>
         </span>
       </div>
-      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
-        {children}
-      </div>
+      {/* 0명이면 목록 자체를 접는다 — 헤더(−/+)는 남겨야 다시 늘릴 수 있다. */}
+      {clamped > 0 && (
+        <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

@@ -97,6 +97,35 @@ describe("RoomStage 화면공유", () => {
     expect(container.querySelectorAll("[data-identity]")).toHaveLength(1);
   });
 
+  it("'−'로 0명까지 접으면 얼굴이 사라지고 헤더만 남는다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    lk.tracks = [share()];
+    const { container } = renderStage();
+
+    const minus = screen.getByRole("button", { name: "얼굴 수 줄이기" });
+    fireEvent.click(minus); // 2 → 1
+    fireEvent.click(minus); // 1 → 0
+
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(0);
+    // 헤더는 남아 있어야 다시 늘릴 수 있다.
+    expect(screen.getByText(/얼굴 0/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "얼굴 수 줄이기" })).toBeDisabled();
+  });
+
+  it("0명에서 '+'를 누르면 다시 1명이 보인다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    lk.tracks = [share()];
+    const { container } = renderStage();
+
+    const minus = screen.getByRole("button", { name: "얼굴 수 줄이기" });
+    fireEvent.click(minus);
+    fireEvent.click(minus);
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "얼굴 수 늘리기" }));
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(1);
+  });
+
   it("공유 소스가 바뀌어도 선택한 얼굴 수가 유지된다(따라다님)", () => {
     lk.participants = [
       { identity: "jo" },
