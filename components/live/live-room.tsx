@@ -9,13 +9,16 @@ import { MeetHeader } from "./meet-header";
 import { MeetRoom } from "./meet-room";
 import type { LiveMember, SharablePresentation } from "./types";
 
-// 오디오 캡처 기본값 — autoGainControl만 끈다(음량 자동보정 해제 = 목소리 다이내믹 압축 해제).
+// 오디오 캡처 기본값 — 셋 다 켠다(브라우저 기본값).
+// CRITICAL: autoGainControl을 끄지 않는다. 끄면 마이크에서 멀거나 입력 레벨이 낮은 참가자의
+//   목소리가 그대로 작게 나가 "안 들린다"는 말이 나온다. 자동 게인이 그걸 끌어올려 준다.
+//   (다이내믹 압축이 싫어 껐던 적이 있으나, 세미나에선 또렷하게 들리는 쪽이 훨씬 중요하다.)
 // echo/noise는 LiveKit 기본과 동일(true). 브라우저 내장 한계라 강한 노이즈캔슬은 아니다(Krisp는 별도·Cloud).
 const AUDIO_CAPTURE_OPTIONS = {
   audioCaptureDefaults: {
     echoCancellation: true,
     noiseSuppression: true,
-    autoGainControl: false,
+    autoGainControl: true,
   },
 } as const;
 
