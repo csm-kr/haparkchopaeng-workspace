@@ -13,6 +13,8 @@ export interface ChatEntry {
   id: string;
   identity: string;
   text: string;
+  /** 첨부 이미지의 blob URL. 룸 안에서만 유효하고 저장되지 않는다(R21). */
+  imageUrl?: string;
   at: number;
 }
 

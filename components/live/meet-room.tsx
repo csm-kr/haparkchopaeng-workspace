@@ -35,6 +35,9 @@ import type {
 // CRITICAL: 발표 상태(present)는 발표자 identity가 보낸 것만 신뢰한다(R3) — 시청자 위조 무시.
 
 const DATA_TOPIC = "live";
+// 채팅 이미지 전용 바이트 스트림 토픽 — 데이터 채널(작은 JSON)과 분리한다.
+// CRITICAL: 이미지는 서버/스토리지를 거치지 않는다(R21) — 룸 참가자에게 직접 가고 룸을 떠나면 사라진다.
+const IMAGE_TOPIC = "live-image";
 
 export interface MeetRoomProps {
   members: LiveMember[];
@@ -166,6 +169,81 @@ export function MeetRoom({
       addAnnot(a);
     },
     [publish, addAnnot],
+  );
+
+  // 만든 blob URL을 모아 두고 룸을 떠날 때 한 번에 해제한다 — 오래 켜 두면 그대로 쌓인다.
+  const objectUrlsRef = React.useRef<string[]>([]);
+  const trackUrl = React.useCallback((url: string) => {
+    objectUrlsRef.current.push(url);
+    return url;
+  }, []);
+  React.useEffect(
+    () => () => {
+      for (const url of objectUrlsRef.current) URL.revokeObjectURL(url);
+      objectUrlsRef.current = [];
+    },
+    [],
+  );
+
+  // 이미지 수신 — 보낸 사람은 스트림의 identity로 판별한다(R3). 실패한 스트림은 조용히 버린다.
+  React.useEffect(() => {
+    if (typeof room?.registerByteStreamHandler !== "function") return;
+    room.registerByteStreamHandler(IMAGE_TOPIC, (reader, participantInfo) => {
+      void (async () => {
+        try {
+          const chunks = await reader.readAll();
+          // TS 5.7부터 Uint8Array가 제네릭(ArrayBufferLike)이라 BlobPart로 바로 안 받는다 — 런타임은 그대로다.
+          const blob = new Blob(chunks as unknown as BlobPart[], {
+            type: reader.info?.mimeType || "image/png",
+          });
+          const url = trackUrl(URL.createObjectURL(blob));
+          const at = Date.now();
+          setChat((c) => [
+            ...c,
+            {
+              id: `${participantInfo.identity}-img-${at}-${c.length}`,
+              identity: participantInfo.identity,
+              text: "",
+              imageUrl: url,
+              at,
+            },
+          ]);
+        } catch {
+          // 중간에 끊긴 스트림 — 반쪽 이미지를 그리지 않는다(graceful)
+        }
+      })();
+    });
+    return () => {
+      try {
+        room.unregisterByteStreamHandler?.(IMAGE_TOPIC);
+      } catch {
+        // 이미 정리된 룸 — 무시
+      }
+    };
+  }, [room, trackUrl]);
+
+  // 이미지 송신 — 스트림은 본인에게 돌아오지 않으므로 내 화면엔 낙관적으로 먼저 그린다.
+  const sendImage = React.useCallback(
+    async (file: File) => {
+      const at = Date.now();
+      const url = trackUrl(URL.createObjectURL(file));
+      setChat((c) => [
+        ...c,
+        {
+          id: `me-img-${at}-${c.length}`,
+          identity: currentMemberId,
+          text: "",
+          imageUrl: url,
+          at,
+        },
+      ]);
+      try {
+        await room?.localParticipant?.sendFile(file, { topic: IMAGE_TOPIC });
+      } catch {
+        // 전송 실패 — 내 미리보기는 남는다(graceful, R30)
+      }
+    },
+    [room, currentMemberId, trackUrl],
   );
 
   function sendChat(text: string) {
@@ -304,7 +382,12 @@ export function MeetRoom({
 
             <div className="flex min-h-0 flex-1 flex-col" style={{ height: 320 }}>
               {panel === "chat" && (
-                <ChatPanel messages={chat} members={members} onSend={sendChat} />
+                <ChatPanel
+                  messages={chat}
+                  members={members}
+                  onSend={sendChat}
+                  onSendImage={sendImage}
+                />
               )}
               {panel === "people" && (
                 <PeoplePanel
