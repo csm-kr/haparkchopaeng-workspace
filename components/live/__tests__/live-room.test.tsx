@@ -407,7 +407,7 @@ describe("LiveRoom", () => {
     expect(sendBeacon).not.toHaveBeenCalled();
   });
 
-  it("룸 진입 시 오디오 캡처는 autoGainControl=false로 캡처(디컴프레션, 나머지는 유지)", async () => {
+  it("룸 진입 시 오디오 캡처는 autoGainControl=true — 마이크가 작아도 또렷하게 들린다", async () => {
     vi.stubGlobal(
       "fetch",
       route((url, method) => {
@@ -431,11 +431,12 @@ describe("LiveRoom", () => {
     fireEvent.click(screen.getByRole("button", { name: /라이브 시작/ }));
     expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
 
-    // autoGainControl만 끈다(음량 자동보정 해제 = 다이내믹 압축 해제). echo/noise는 기본 유지.
+    // 자동 게인을 끄면 마이크에서 멀거나 입력이 작은 사람의 목소리가 그대로 작게 나간다
+    // — 세미나에서 "안 들린다"는 말이 나온 원인이라 브라우저 기본값(켜짐)으로 되돌린다.
     expect(lk.roomOptions?.audioCaptureDefaults).toMatchObject({
       echoCancellation: true,
       noiseSuppression: true,
-      autoGainControl: false,
+      autoGainControl: true,
     });
   });
 

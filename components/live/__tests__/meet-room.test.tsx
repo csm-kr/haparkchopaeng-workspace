@@ -19,6 +19,9 @@ const lk = vi.hoisted(() => ({
   tracks: [] as unknown[],
   onMessage: undefined as undefined | ((m: Received) => void),
   publishData: vi.fn(),
+  sendFile: vi.fn(),
+  registerByteStreamHandler: vi.fn(),
+  unregisterByteStreamHandler: vi.fn(),
   local: {
     setMicrophoneEnabled: vi.fn(),
     setCameraEnabled: vi.fn(),
@@ -35,7 +38,11 @@ vi.mock("@livekit/components-react", () => ({
   VideoTrack: () => null,
   useParticipants: () => lk.participants,
   useTracks: () => lk.tracks,
-  useRoomContext: () => ({ localParticipant: { publishData: lk.publishData } }),
+  useRoomContext: () => ({
+    localParticipant: { publishData: lk.publishData, sendFile: lk.sendFile },
+    registerByteStreamHandler: lk.registerByteStreamHandler,
+    unregisterByteStreamHandler: lk.unregisterByteStreamHandler,
+  }),
   useLocalParticipant: () => ({
     isMicrophoneEnabled: false,
     isCameraEnabled: false,
@@ -270,5 +277,106 @@ describe("MeetRoom 발표자료 공유", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "발표자료 공유" })).toBeNull();
+  });
+});
+
+// ── 채팅 이미지(휘발) ────────────────────────────────────────────────
+// CRITICAL: 이미지는 서버를 거치지 않는다(R21) — LiveKit 바이트 스트림으로 룸 참가자에게 직접 간다.
+// CRITICAL: 보낸 사람은 스트림의 participantInfo.identity로 판별한다 — 페이로드 미신뢰(R3).
+// CRITICAL: blob URL은 룸을 떠날 때 해제한다 — 오래 켜 두면 그대로 쌓인다.
+
+const IMAGE_TOPIC = "live-image";
+
+/** 등록된 바이트 스트림 핸들러를 꺼낸다(해당 토픽만). */
+function byteHandler() {
+  const call = lk.registerByteStreamHandler.mock.calls.find(
+    (c) => c[0] === IMAGE_TOPIC,
+  );
+  return call?.[1] as
+    | ((
+        reader: {
+          readAll: () => Promise<Uint8Array[]>;
+          info: { mimeType: string };
+        },
+        info: { identity: string },
+      ) => void)
+    | undefined;
+}
+
+function attachImage(file: File) {
+  const input = screen.getByLabelText("이미지 첨부") as HTMLInputElement;
+  fireEvent.change(input, { target: { files: [file] } });
+}
+
+describe("MeetRoom 채팅 이미지", () => {
+  beforeEach(() => {
+    let n = 0;
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => `blob:img-${++n}`),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+
+  it("이미지를 첨부하면 바이트 스트림으로 보낸다(서버 경유 없음)", async () => {
+    renderRoom();
+    openChat();
+    const file = new File(["bytes"], "shot.png", { type: "image/png" });
+    attachImage(file);
+
+    await waitFor(() =>
+      expect(lk.sendFile).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({ topic: IMAGE_TOPIC }),
+      ),
+    );
+  });
+
+  it("내가 보낸 이미지는 내 화면에도 바로 보인다(스트림은 본인에게 안 돌아온다)", async () => {
+    renderRoom({ currentMemberId: "jo" });
+    openChat();
+    attachImage(new File(["bytes"], "shot.png", { type: "image/png" }));
+
+    expect(await screen.findByAltText("조성민 님이 보낸 이미지")).toBeInTheDocument();
+  });
+
+  it("다른 참가자가 보낸 이미지를 받아 채팅에 그린다 — 작성자는 identity로 판별(R3)", async () => {
+    renderRoom({ currentMemberId: "jo" });
+    openChat();
+
+    const handler = byteHandler();
+    expect(handler).toBeTypeOf("function");
+
+    await act(async () => {
+      handler!(
+        {
+          readAll: async () => [new Uint8Array([1, 2, 3])],
+          info: { mimeType: "image/png" },
+        },
+        { identity: "ha" },
+      );
+    });
+
+    expect(await screen.findByAltText("하수현 님이 보낸 이미지")).toBeInTheDocument();
+  });
+
+  it("이미지가 아닌 파일은 스트림을 열지 않는다", () => {
+    renderRoom();
+    openChat();
+    attachImage(new File(["x"], "paper.pdf", { type: "application/pdf" }));
+    expect(lk.sendFile).not.toHaveBeenCalled();
+  });
+
+  it("룸을 떠나면 핸들러를 풀고 만든 blob URL을 해제한다", async () => {
+    const { unmount } = renderRoom({ currentMemberId: "jo" });
+    openChat();
+    attachImage(new File(["bytes"], "shot.png", { type: "image/png" }));
+    await screen.findByAltText("조성민 님이 보낸 이미지");
+
+    const revoke = (globalThis.URL as unknown as { revokeObjectURL: ReturnType<typeof vi.fn> })
+      .revokeObjectURL;
+    unmount();
+
+    expect(lk.unregisterByteStreamHandler).toHaveBeenCalledWith(IMAGE_TOPIC);
+    expect(revoke).toHaveBeenCalledWith("blob:img-1");
   });
 });
