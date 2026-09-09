@@ -58,11 +58,15 @@ npx playwright test # 9 passed
 
 > 비밀 키는 `.env`/Vercel 환경변수에만. **커밋 금지**(`.gitignore`). `NEXT_PUBLIC_`은 anon·URL 같은 공개값에만 — service role·API 토큰·시크릿에 붙이지 마라(R2).
 
-## 팀 스코핑 마이그레이션 (ADR-020) — 검토 후 수동 실행
+## 팀 스코핑 마이그레이션 (ADR-020) — 완료됨
 
-> `8-team-scoping` phase가 코드/스키마에 도메인 엔티티 팀 스코핑(`teamId`)을 도입했다(ADR-020/R37). `schema.prisma`는 6개 모델(Paper · Presentation · ScheduleMonth · FineConfig · MemberLedger · LiveSession)에 `teamId`를 **이미** 갖고 있으나, **운영 Supabase에는 아직 push되지 않았다.** 아래 절차를 사람이 검토 후 실행하기 전까지 prod 스키마는 `teamId` 미반영 상태다(그동안 운영 앱은 phase 8 이전 코드로 배포된 상태를 유지한다 — 팀 스코핑 코드와 prod 스키마를 동시에 올린다).
+> **이 마이그레이션은 운영에 이미 적용됐다.** 6개 모델(Paper · Presentation · ScheduleMonth · FineConfig · MemberLedger · LiveSession)이 운영 Supabase에서 `teamId`를 갖고 있고 백필도 끝났다 — 빈 `teamId`(sentinel `""`) 행은 남아 있지 않다. 멀티팀은 실제로 동작 중이다.
 >
-> **CRITICAL: 자동/헤드리스로 실행하지 마라.** 공유 운영 DB이며 제약/PK 변경이 포함된다(ADR-020). 순서를 지킨다: **컬럼 추가 → 백필 → (필요 시) 제약 확정.** 데이터가 있는 테이블에 non-null + 제약을 한 번에 적용하면 기존 행 때문에 실패할 수 있다.
+> 확인(2026-09-09): 팀 4개가 각자 데이터를 보유한다 — Paper 11 · Presentation 6 · ScheduleMonth 2 · FineConfig 1 · MemberLedger 4 · LiveSession 42행이 모두 실재하는 팀에 매핑돼 있고, 어느 모델에도 빈 `teamId`가 없다.
+>
+> 아래 절차는 **이력**으로 남긴다 — 새 환경에 같은 스코핑을 적용하거나 유사한 마이그레이션을 설계할 때 참고한다.
+>
+> **CRITICAL: 새 환경에서 다시 실행할 때도 자동/헤드리스로 돌리지 마라.** 공유 운영 DB이며 제약/PK 변경이 포함된다(ADR-020). 순서를 지킨다: **컬럼 추가 → 백필 → (필요 시) 제약 확정.** 데이터가 있는 테이블에 non-null + 제약을 한 번에 적용하면 기존 행 때문에 실패할 수 있다.
 
 ### 절차
 
