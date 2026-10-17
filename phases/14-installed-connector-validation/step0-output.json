@@ -1,0 +1,16 @@
+{
+  "mode": "verification",
+  "step": 0,
+  "checks": [
+    {
+      "argv": [
+        "node",
+        "--test",
+        "connector/test/lifetime.test.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "✔ first plain installed-app start opens the web connection flow (0.8843ms)\n✔ a received link keeps its connection or failure screen after the launch queue drains (0.1337ms)\n✔ development, an already opened first browser and an active attempt do not auto-open a web page (0.1324ms)\n✔ default off exits after hidden window loses web authorization, visible reconnect UI stays (0.7964ms)\n✔ only explicitly selected autostart or pet retains background state (0.1659ms)\n✔ exit waits until active CLI cancellation and metadata cleanup have settled (7.9405ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 103.5689\n",
+      "stderr": ""
+    }
+  ]
+}

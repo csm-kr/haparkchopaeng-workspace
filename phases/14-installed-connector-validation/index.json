@@ -1,0 +1,74 @@
+{
+  "project": "hapark",
+  "phase": "14-installed-connector-validation",
+  "execution": "Collaborative TDD; disposable OS runners only; no production SQL or real inference.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "preserve-cold-launch-errors",
+      "status": "completed",
+      "paths": [
+        "connector/core/lifetime.mjs",
+        "connector/test/lifetime.test.mjs",
+        "connector/desktop/main.mjs"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/lifetime.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-17T22:10:20+0900",
+      "completed_at": "2026-10-17T22:10:20+0900",
+      "summary": "처음 받은 URI의 성공·오류 화면이 최초 웹 자동 열기로 덮이지 않도록 early macOS open-url·argv·second-instance를 추적했다. 실패 테스트 뒤 lifetime 6개를 통과했고 공통 repo도 같은 정책으로 67개를 통과했다. 실제 설치 앱의 회귀는 step2에서 검증한다."
+    },
+    {
+      "step": 1,
+      "name": "installed-package-smoke",
+      "status": "completed",
+      "paths": [
+        "connector/scripts/ci-installed-smoke.mjs",
+        "connector/test/installed-smoke.test.mjs",
+        ".github/workflows/local-agent.yml"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/installed-smoke.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-17T22:14:52+0900",
+      "summary": "일회용 hosted runner 전용 macOS DMG·Ubuntu deb 설치 검증기를 구현했다. 경로·기존 설치·프로필·core SHA·sandbox·OS URI·소유 제거를 검사하며 packaged QA 우회는 없다. 가드 9개 RED→GREEN, 전체 연결기 55개와 Node 5파일·YAML·Linux shell 구문, harness pytest 60개를 통과했다. 실제 OS 결과는 아직 미검증이다.",
+      "completed_at": "2026-10-17T22:21:16+0900"
+    },
+    {
+      "step": 2,
+      "name": "native-evidence-and-common-repo",
+      "status": "pending",
+      "paths": [
+        "connector/VALIDATION.md",
+        "docs/dev/LOCAL_AGENT_RELEASE.md"
+      ],
+      "checks": [
+        [
+          "python",
+          "-X",
+          "utf8",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ]
+      ]
+    }
+  ],
+  "overallGoalComplete": false,
+  "remainingExternalGates": [
+    "운영 SQL 사람 검토·수동 적용",
+    "게시자 서명과 macOS 공증",
+    "운영 사이트·최종 설치본 파일럿"
+  ],
+  "created_at": "2026-10-17T22:10:20+0900"
+}

@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldExitWithoutWeb, stopBeforeExit } from '../core/lifetime.mjs';
+import { shouldExitWithoutWeb, shouldOpenFirstWeb, stopBeforeExit } from '../core/lifetime.mjs';
+
+const firstInstall = { packaged: true, launchRequested: false, hasAttempt: false, firstBrowserOpened: false, suppressAutoOpen: false };
+
+test('first plain installed-app start opens the web connection flow', () => {
+  assert.equal(shouldOpenFirstWeb(firstInstall), true);
+});
+
+test('a received link keeps its connection or failure screen after the launch queue drains', () => {
+  assert.equal(shouldOpenFirstWeb({ ...firstInstall, launchRequested: true }), false);
+  assert.equal(shouldOpenFirstWeb({ ...firstInstall, launchRequested: true, hasAttempt: true }), false);
+});
+
+test('development, an already opened first browser and an active attempt do not auto-open a web page', () => {
+  for (const override of [{ packaged: false }, { firstBrowserOpened: true }, { suppressAutoOpen: true }, { hasAttempt: true }]) {
+    assert.equal(shouldOpenFirstWeb({ ...firstInstall, ...override }), false);
+  }
+});
 
 test('default off exits after hidden window loses web authorization, visible reconnect UI stays', () => {
   assert.equal(shouldExitWithoutWeb({ authorized: false, windowVisible: false, autoStart: false, pet: false }),true);

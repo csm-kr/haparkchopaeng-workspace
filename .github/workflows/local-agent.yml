@@ -154,7 +154,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11 fonts-noto-cjk
+          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11 fonts-noto-cjk xdg-utils desktop-file-utils shared-mime-info libglib2.0-bin xdotool x11-utils scrot openbox
       - name: Prepare official Linux Electron sandbox
         if: runner.os == 'Linux'
         shell: bash
@@ -247,6 +247,32 @@ jobs:
           dpkg-deb --field "${packages[0]}" Package Version Architecture
           grep -E '^(Exec|MimeType)=' "${desktop}"
           printf '%s\n' 'Debian archive verified: official sandbox setup and URI handler; no sandbox bypass. Installation was not performed.'
+      - name: macOS installed DMG and LaunchServices protocol
+        if: runner.os == 'macOS'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+        run: node connector/scripts/ci-installed-smoke.mjs
+      - name: Ubuntu installed Debian package and desktop protocol
+        if: runner.os == 'Linux'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+          XDG_CURRENT_DESKTOP: GNOME
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          dbus-run-session -- xvfb-run -a bash -euc '
+            printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
+            openbox --sm-disable >"${RUNNER_TEMP}/connector-installed-openbox.log" 2>&1 &
+            connector_wm_pid=$!
+            trap '\''kill "${connector_wm_pid}" 2>/dev/null || true'\'' EXIT
+            node connector/scripts/ci-installed-smoke.mjs
+          '
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && runner.os != 'Windows' && inputs.upload_artifacts == true
+        with:
+          name: installed-package-evidence-${{ matrix.platform }}
+          path: connector/artifacts/ci-installed-*/**
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Windows install, protocol registration and uninstall
         if: matrix.platform == 'win'
         run: npm --prefix connector run qa:install
@@ -267,3 +293,19 @@ jobs:
             connector/dist/*.deb
           if-no-files-found: error
           retention-days: 14
+      - name: Record candidate package hashes
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const directory = 'connector/dist';
+          const packages = fs.existsSync(directory) ? fs.readdirSync(directory).filter(name => /\.(exe|dmg|deb)$/.test(name)).map(name => {
+            const bytes = fs.readFileSync(`${directory}/${name}`);
+            return { name, bytes: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+          }) : [];
+          const summary = JSON.stringify({ packages, signedReleasePublished: false, artifactStorage: 'opt-in; not retained by default' }, null, 2);
+          console.log(summary);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n\`\`\`json\n${summary}\n\`\`\`\n`);
+          NODE

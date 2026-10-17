@@ -2,6 +2,10 @@ export function shouldExitWithoutWeb({ authorized, windowVisible, autoStart, pet
   return !authorized && !windowVisible && !autoStart && !pet;
 }
 
+export function shouldOpenFirstWeb({ packaged, launchRequested, hasAttempt, firstBrowserOpened, suppressAutoOpen }) {
+  return packaged && !launchRequested && !hasAttempt && !firstBrowserOpened && !suppressAutoOpen;
+}
+
 export async function stopBeforeExit({ runtime, stopMonitoring, exit, timeoutMs = 6000 }) {
   runtime?.stop();
   const cleanup = stopMonitoring?.();

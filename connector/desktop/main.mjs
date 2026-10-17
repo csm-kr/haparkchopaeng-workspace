@@ -5,13 +5,13 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pendingUrls = [];
-let readyForLaunches = false;
+let readyForLaunches = false, launchRequested = false;
 // Register synchronously: macOS may deliver a cold-start URL during asynchronous imports.
-app.on('open-url', (event, url) => { event.preventDefault(); pendingUrls.push(url); if (readyForLaunches) void consumeLaunches(); });
+app.on('open-url', (event, url) => { event.preventDefault(); launchRequested = true; pendingUrls.push(url); if (readyForLaunches) void consumeLaunches(); });
 const configuredDataDirectory = !app.isPackaged ? process.argv.find(value => value.startsWith('--connector-data-dir='))?.slice('--connector-data-dir='.length) : null;
 if (configuredDataDirectory) app.setPath('userData', configuredDataDirectory);
 const coreRoot = app.isPackaged ? join(process.resourcesPath, 'core') : join(directory, '..', 'core');
-const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiClient }, { createCredentialStore }, { createProviderAdapter }, { ConnectorSession }, { desktopAckInput, desktopPairInput }, { shouldExitWithoutWeb, stopBeforeExit }] = await Promise.all(['security', 'api', 'storage', 'adapters', 'runtime', 'protocol', 'lifetime'].map(name => import(pathToFileURL(join(coreRoot, `${name}.mjs`)).href)));
+const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiClient }, { createCredentialStore }, { createProviderAdapter }, { ConnectorSession }, { desktopAckInput, desktopPairInput }, { shouldExitWithoutWeb, shouldOpenFirstWeb, stopBeforeExit }] = await Promise.all(['security', 'api', 'storage', 'adapters', 'runtime', 'protocol', 'lifetime'].map(name => import(pathToFileURL(join(coreRoot, `${name}.mjs`)).href)));
 const development = !app.isPackaged && process.argv.includes('--connector-dev');
 const suppressAutoOpen = !app.isPackaged && process.argv.includes('--no-auto-open');
 const quietQa = !app.isPackaged && process.argv.includes('--connector-qa');
@@ -21,7 +21,7 @@ let quitting = false, qaWindowHidden = false;
 let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform };
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', (_event, argv) => { pendingUrls.push(...argv.filter(value => /^[a-z][a-z0-9+.-]*:\/\//i.test(value))); showWindow(); if (store) void consumeLaunches(); });
+  app.on('second-instance', (_event, argv) => { const urls = argv.filter(value => /^[a-z][a-z0-9+.-]*:\/\//i.test(value)); launchRequested ||= urls.length > 0; pendingUrls.push(...urls); showWindow(); if (store) void consumeLaunches(); });
   app.on('activate', () => showWindow());
   app.on('window-all-closed', () => { if (shouldExitWithoutWeb({ authorized: runtime && ['connected','recovering'].includes(runtime.getState().status), windowVisible: false, autoStart: preferences.autoStart, pet: preferences.pet })) void shutdown(); });
   app.on('before-quit', event => { if (!quitting) { event.preventDefault(); void shutdown(); } });
@@ -47,9 +47,11 @@ else {
       if (!quietQa) app.setAsDefaultProtocolClient(application.scheme, ...(app.isPackaged ? [] : [process.execPath, [directory, '--connector-dev', '--no-auto-open']]));
     }
     installIpc(); showWindow(); readyForLaunches = true;
-    pendingUrls.push(...process.argv.filter(value => applications.some(application => value.startsWith(`${application.scheme}://`))));
+    const commandLineUrls = process.argv.filter(value => applications.some(application => value.startsWith(`${application.scheme}://`)));
+    launchRequested ||= commandLineUrls.length > 0;
+    pendingUrls.push(...commandLineUrls);
     await consumeLaunches();
-    if (!pendingUrls.length && !attempt && !preferences.firstBrowserOpened && !suppressAutoOpen && app.isPackaged) {
+    if (shouldOpenFirstWeb({ packaged: app.isPackaged, launchRequested, hasAttempt: !!attempt, firstBrowserOpened: preferences.firstBrowserOpened, suppressAutoOpen })) {
       preferences.firstBrowserOpened = true; await savePreferences();
       state = { ...state, stage: 'idle', title: '브라우저에서 연결을 이어 주세요', description: '로그인한 웹에서 연결 요청을 확인하고 이 앱으로 돌아와요.' }; publish(); await openWeb();
     }

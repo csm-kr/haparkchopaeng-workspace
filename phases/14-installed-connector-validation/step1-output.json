@@ -1,0 +1,16 @@
+{
+  "mode": "verification",
+  "step": 1,
+  "checks": [
+    {
+      "argv": [
+        "node",
+        "--test",
+        "connector/test/installed-smoke.test.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "✔ installed package mutations require an explicit disposable hosted runner (3.0455ms)\n✔ a runner temp outside a normal absolute path or inside the workspace is rejected (5.4145ms)\n✔ configuration has no fallback app and cannot escape an installation filename (4.1334ms)\n✔ only the exact current architecture DMG or one Debian file can be selected (1.0325ms)\n✔ packaged QA uses the real portable production profile and refuses development metadata (24.3429ms)\n✔ only a marked owned directory can be recursively cleaned and an altered marker is retained (12.1149ms)\n✔ installed core must contain the exact source modules and bytes (15.2995ms)\n✔ an installed core directory cannot alias the source tree through a symlink (4.9272ms)\n✔ diagnostics retain failure type and phase without copying URI, stderr or a path (0.6173ms)\nℹ tests 9\nℹ suites 0\nℹ pass 9\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 183.4693\n",
+      "stderr": ""
+    }
+  ]
+}
