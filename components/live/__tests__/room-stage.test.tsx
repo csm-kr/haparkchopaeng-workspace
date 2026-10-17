@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 // RoomStage — 화면공유 시 얼굴을 오른쪽 세로 스트립으로 + 표시 개수 조절(−/+).
 // 보이는 얼굴 우선순위: 말하는 사람 → 발표자 → 나머지. 공유 화면엔 '발표 중' 라벨.
@@ -61,6 +61,158 @@ beforeEach(() => {
   lk.tracks = [];
 });
 afterEach(() => cleanup());
+
+describe("발표 중 참가자 얼굴 창", () => {
+  let frame: HTMLIFrameElement;
+  let pipWindow: Window;
+  let requestWindow: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    frame = document.createElement("iframe");
+    document.body.appendChild(frame);
+    pipWindow = frame.contentWindow!;
+    vi.spyOn(pipWindow, "close").mockImplementation(() => {});
+    requestWindow = vi.fn().mockResolvedValue(pipWindow);
+    Object.defineProperty(window, "documentPictureInPicture", {
+      configurable: true,
+      value: { requestWindow },
+    });
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    lk.tracks = [share()];
+  });
+
+  afterEach(() => {
+    delete (window as Window & { documentPictureInPicture?: unknown }).documentPictureInPicture;
+    frame?.remove();
+  });
+
+  const presenterStage = () => (
+    <RoomStage members={members} presenterId="jo" currentMemberId="jo" hands={new Set()} />
+  );
+
+  it("발표자가 공유 중 얼굴 띄우기를 누르면 다른 참가자들을 별도 창에 보여준다", async () => {
+    const pipDocument = pipWindow.document;
+    render(presenterStage());
+    expect(requestWindow).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+
+    expect(await within(pipDocument.body).findByText("하수현")).toBeInTheDocument();
+    expect(within(pipDocument.body).getByText("박진희")).toBeInTheDocument();
+    expect(pipDocument.querySelector('[data-identity="jo"]')).toBeNull();
+  });
+
+  it("공유 중지 시 얼굴 창도 닫고 기본 그리드로 돌아온다", async () => {
+    const ownShare = share();
+    lk.tracks = [ownShare];
+    const { container } = render(presenterStage());
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+    await within(pipWindow.document.body).findByText("하수현");
+
+    ownShare.publication.track.mediaStreamTrack.readyState = "ended";
+    fireEvent(ownShare.publication.track.mediaStreamTrack, new Event("ended"));
+
+    expect(pipWindow.close).toHaveBeenCalledOnce();
+    expect(pipWindow.document.querySelector("[data-identity]")).toBeNull();
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(3);
+  });
+
+  it("얼굴 창에 참가자의 입장·퇴장과 손들기를 계속 반영한다", async () => {
+    const { rerender } = render(presenterStage());
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+    await within(pipWindow.document.body).findByText("하수현");
+
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "paeng" }];
+    rerender(
+      <RoomStage members={members} presenterId="jo" currentMemberId="jo" hands={new Set(["paeng"])} />,
+    );
+
+    const popup = within(pipWindow.document.body);
+    expect(popup.queryByText("박진희")).toBeNull();
+    expect(popup.getByText("팽수")).toBeInTheDocument();
+    expect(popup.getByText("손")).toBeInTheDocument();
+    expect(requestWindow).toHaveBeenCalledOnce();
+  });
+
+  it("사용자가 창을 닫으면 다시 열 수 있고 룸은 유지된다", async () => {
+    render(presenterStage());
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+    await within(pipWindow.document.body).findByText("하수현");
+
+    fireEvent(pipWindow, new Event("pagehide"));
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+
+    await within(pipWindow.document.body).findByText("하수현");
+    expect(requestWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText("전체화면")).toBeInTheDocument();
+  });
+
+  it("창을 여는 도중 룸을 떠나도 뒤늦게 열린 얼굴 창을 닫는다", async () => {
+    let resolveWindow!: (value: Window) => void;
+    requestWindow.mockImplementation(() => new Promise<Window>((resolve) => { resolveWindow = resolve; }));
+    const { unmount } = render(presenterStage());
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+    unmount();
+
+    await act(async () => resolveWindow(pipWindow));
+
+    expect(pipWindow.close).toHaveBeenCalledOnce();
+    expect(pipWindow.document.querySelector("[data-identity]")).toBeNull();
+  });
+
+  it("열기가 거부되면 안내하고 재시도할 수 있다", async () => {
+    requestWindow.mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"));
+    render(presenterStage());
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("얼굴 창을 열지 못했어요");
+
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+
+    await within(pipWindow.document.body).findByText("하수현");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("미지원 브라우저에서는 비활성 버튼과 사용 가능한 환경을 안내한다", () => {
+    delete (window as Window & { documentPictureInPicture?: unknown }).documentPictureInPicture;
+    render(presenterStage());
+
+    expect(screen.getByRole("button", { name: "참가자 얼굴 띄우기" })).toBeDisabled();
+    expect(screen.getByText(/데스크톱 Chrome·Edge/)).toBeInTheDocument();
+  });
+
+  it("시청자에게는 발표자의 얼굴 창 버튼이 보이지 않는다", () => {
+    renderStage();
+    expect(screen.queryByRole("button", { name: "참가자 얼굴 띄우기" })).toBeNull();
+  });
+
+  it("얼굴 스트립을 0명으로 접어도 다른 참가자들을 별도 창에 띄울 수 있다", async () => {
+    render(presenterStage());
+    fireEvent.click(screen.getByRole("button", { name: "얼굴 수 줄이기" }));
+    fireEvent.click(screen.getByRole("button", { name: "얼굴 수 줄이기" }));
+    expect(screen.getByText("얼굴 0")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+
+    expect(await within(pipWindow.document.body).findByText("하수현")).toBeInTheDocument();
+    expect(within(pipWindow.document.body).getByText("박진희")).toBeInTheDocument();
+  });
+
+  it("PDF 발표 중에도 얼굴 창을 사용할 수 있고 발표 중지 시 닫힌다", async () => {
+    lk.tracks = [];
+    const { rerender } = render(
+      <RoomStage
+        members={members} presenterId="jo" currentMemberId="jo" hands={new Set()}
+        present={{ presentationId: "pdf-1", page: 1, pageCount: 5 }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "참가자 얼굴 띄우기" }));
+    await within(pipWindow.document.body).findByText("하수현");
+
+    rerender(presenterStage());
+
+    expect(pipWindow.close).toHaveBeenCalledOnce();
+  });
+});
 
 describe("orderParticipantsForStrip", () => {
   it("말하는 사람 → 발표자 → 나머지(원래 순서)로 정렬한다", () => {
