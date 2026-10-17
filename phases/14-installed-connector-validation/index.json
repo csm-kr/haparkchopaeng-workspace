@@ -68,10 +68,12 @@
     {
       "step": 2,
       "name": "native-evidence-and-common-repo",
-      "status": "pending",
+      "status": "completed",
       "paths": [
         "connector/VALIDATION.md",
-        "docs/dev/LOCAL_AGENT_RELEASE.md"
+        "docs/dev/LOCAL_AGENT_RELEASE.md",
+        "connector/README.md",
+        "docs/reports/local-agent-implementation-2026-10-17.html"
       ],
       "checks": [
         [
@@ -83,7 +85,10 @@
           "scripts/test_execute.py",
           "-q"
         ]
-      ]
+      ],
+      "started_at": "2026-10-18T00:03:00+0900",
+      "completed_at": "2026-10-18T00:03:03+0900",
+      "summary": "제품 c808e926의 CI39042877981 전체 5개 작업과 공통 1e309c3f의 CI39042868288 전체 3개 작업이 성공했다. 실제 설치 앱의 OS URI·cold/warm 실행·정상 종료·제거를 Mac arm64 9개, Windows 사전 2개/전체 5개, Ubuntu X11 8개로 각각 검증했다. 웹 946개·Chromium 8개·PostgreSQL 16의 13개 및 schema drift 0을 확인했고, 하네스 AC 60개도 통과했다. 두 저장소의 설치 검증과 공통 Mac 이름/프로필 보존을 동기화했다. 운영 SQL 수동 검토·서명/공증·정식 다운로드·운영 파일럿은 미완료다."
     }
   ],
   "overallGoalComplete": false,
@@ -92,5 +97,100 @@
     "게시자 서명과 macOS 공증",
     "운영 사이트·최종 설치본 파일럿"
   ],
-  "created_at": "2026-10-17T22:10:20+0900"
+  "created_at": "2026-10-17T22:10:20+0900",
+  "completed_at": "2026-10-18T00:03:03+0900",
+  "nativeCiEvidence": {
+    "product": {
+      "head": "c808e926301a6937b78383ebf064bb97cf20d909",
+      "testedPrMerge": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+      "runId": 39042877981,
+      "allJobsPassed": true,
+      "web": {
+        "jobId": 117425731031,
+        "vitestTests": 946,
+        "chromiumTests": 8,
+        "realHttpCookieLossContractPassed": true
+      },
+      "postgres": {
+        "jobId": 117425731030,
+        "version": 16,
+        "tests": 13,
+        "schemaDrift": 0
+      },
+      "installedPackages": {
+        "macos": {
+          "jobId": 117425730893,
+          "passed": true,
+          "nativeCheckCount": 9,
+          "source": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "f6bc8c4cb0d939a6dc4615ce37d8689ae1db46faafb792dc8506befef6a46f8e"
+        },
+        "win32": {
+          "jobId": 117425731090,
+          "passed": true,
+          "nativeCheckCount": 5,
+          "source": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "6160687ccde8df8790bb2521f2e5c215b393ba5f3a91ea407417df44c1da370e",
+          "preflightCheckCount": 2,
+          "uninstalledAndProtocolAbsent": true,
+          "installerBytes": 111584109,
+          "packageSha256": "66089d657386c5cdf30ca07bd90c81e6a609686c0910208e8329a510945e908f"
+        },
+        "linux": {
+          "jobId": 117425731139,
+          "passed": true,
+          "nativeCheckCount": 8,
+          "source": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "66cb6a25b42601766031d2f9b0b74befcb31f4c8a80ab403288bff49e485e35b",
+          "packageSha256": "856af88ed0f0a2ecfa8d9b1ce62b836fd8c3cc628d0b20fef53b0d8ce3148875"
+        }
+      }
+    },
+    "common": {
+      "head": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+      "runId": 39042868288,
+      "allJobsPassed": true,
+      "installedPackages": {
+        "macos": {
+          "jobId": 117425703623,
+          "passed": true,
+          "nativeCheckCount": 9,
+          "source": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "53674404aafff55b7e422763d6a5514ab90aad42f34be467c117e1cdeb407059"
+        },
+        "win32": {
+          "jobId": 117425703364,
+          "passed": true,
+          "nativeCheckCount": 5,
+          "source": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "9cbc4a07b0e8ac77f75c4ee07f1b1147b6210477ad6151e4ff649088bacbbac0",
+          "preflightCheckCount": 2,
+          "uninstalledAndProtocolAbsent": true,
+          "installerBytes": 110619701,
+          "packageSha256": "bc0f2ccecc8fc0b4e1b37d6e1dbd85ca5e62f027b99d57086286787b599f147d"
+        },
+        "linux": {
+          "jobId": 117425703586,
+          "passed": true,
+          "nativeCheckCount": 8,
+          "source": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "2e0e9e309063aab253c01889e90ce5b22604e02dd8240162fcb0e82f2dd624e9",
+          "packageSha256": "ea133e8f7d98843749f06b882ffc0e637ff9c0d0f0c406d267bd618e564a7ff9"
+        }
+      }
+    },
+    "scope": "Unsigned disposable hosted-runner packages only. Windows preflight 2 is separate from full 5; Mac x64 is build-only; Ubuntu uses X11, D-Bus and keyring. No real pairing, inference, reboot, signed update, Gatekeeper approval or production deployment is proven by these smokes."
+  }
 }

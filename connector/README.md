@@ -60,7 +60,7 @@ CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop ru
 CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop run package:linux
 ```
 
-각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. 제품 `9eeccee` CI에서 Windows 실제 설치·cold/warm URI·정상 종료·제거, Mac arm64 설치 9 checks와 Ubuntu 격리 X11 설치 8 checks가 통과했다. Windows는 unsigned QA artifact이며 서명 완료를 검증하지 않았다. Mac은 ad hoc 서명으로 Developer ID·notarization·Gatekeeper 승인은 미완료다. 실사용자의 설치 승인과 정식 배포도 별도다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 갱신하는 절차도 검증해야 한다. 실행별 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
+각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. 제품 `c808e926` CI에서 Windows 실제 설치·cold/warm URI·정상 종료·제거, Mac arm64 설치 9 checks와 Ubuntu 격리 X11 설치 8 checks가 통과했다. Windows는 unsigned QA artifact이며 서명 완료를 검증하지 않았다. Mac은 ad hoc 서명으로 Developer ID·notarization·Gatekeeper 승인은 미완료다. 실사용자의 설치 승인과 정식 배포도 별도다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 갱신하는 절차도 검증해야 한다. 실행별 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
 
 Electron의 Node 런타임을 앱에 포함한다. `desktop/node_modules`, `dist`, `artifacts`, 실제 환경의 `desktop/apps.generated.json`은 Git에 포함하지 않는다. CLI 로그인 토큰이나 OS 보안 저장소의 기기 키를 빌드·로그·저장소에 복사하지 않는다.
 
@@ -99,15 +99,19 @@ Ubuntu는 GUI 세션, 활성 Secret Service/keyring, 한국어 표시 글꼴, �
 
 이전 제품 소스 `730ad8d`의 [CI 39041064640](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640)는 Web·PostgreSQL·Windows·Linux job 성공, Mac 실패로 종료됐다. 웹 946개·별도 PG 13개·Chromium 8개·HTTP wire·pytest 60개·lint/build가 통과했다. 설치 영수증의 CI merge 소스는 `c926f9965458c089a2b38b4d0c4ceda631aea54c`다. `4c74a19`/CI 39039821379와 함께 당시 기록으로 보존하며 새 후보의 실제 결과와 구분한다.
 
-새 제품 소스 `9eeccee5aa75ed4ef3c14ae9cd95344a49134ef2`의 [CI 39042209763](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763)는 **completed/success, 5개 job 모두 성공**이다. 웹 946개·Chromium 8개(24.4초)·HTTP wire·lint/build·하네스 guards와 별도 PostgreSQL 16의 13개·schema difference 없음, Windows 설치·Mac 설치 9 checks·Ubuntu 설치 8 checks를 통과했다. Mac CFBundleName·Helper 이름을 ASCII로 맞추면서 한글 표시·ASAR 런타임 메타데이터와 기존 한글 프로필 경로 생성을 실제 확인했다. 기존 기기 키 이전은 검증하지 않았다. 로컬 pure 137/137·실제 builder 구현 회귀 5/5는 별도이며 웹 테스트 수와 합산하지 않는다.
+새 제품 소스 `c808e926301a6937b78383ebf064bb97cf20d909`의 [CI 39042877981](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042877981)는 **completed/success, 5개 job 모두 성공**이다. 웹 946개·Chromium 8개·HTTP wire·lint/build·하네스 guards와 별도 PostgreSQL 16의 13개·schema difference 없음, Windows 설치·Mac 설치 9 checks·Ubuntu 설치 8 checks를 통과했다. Mac CFBundleName·Helper 이름을 ASCII로 맞추면서 한글 표시·ASAR 런타임 메타데이터와 기존 한글 프로필 경로 생성을 실제 확인했다. 기존 기기 키 이전은 검증하지 않았다. 로컬 pure 139/139·실제 builder 구현 회귀 5/5는 별도이며 웹 테스트 수와 합산하지 않는다.
 
-별도 공통 저장소의 `e5e6a612` [CI 39041845705](https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705)는 Windows·Mac·Ubuntu 3개 job 모두 성공했다. Research Notebook 설정의 실제 설치·OS URI 검증이며 제품 Mac의 통과를 뜻하지 않는다. 실행별 5/9/8 checks와 해시는 [공통 검증 기록](https://github.com/csm-kr/local-agent-connector/blob/main/connector/VALIDATION.md)을 따른다.
+별도 공통 저장소의 `1e309c3f` [CI 39042868288](https://github.com/csm-kr/local-agent-connector/actions/runs/39042868288)는 Windows·Mac·Ubuntu 3개 job 모두 성공했다. Research Notebook 설정의 실제 설치·OS URI 검증이며 제품 Mac의 통과를 뜻하지 않는다. 실행별 5/9/8 checks와 해시는 [공통 검증 기록](https://github.com/csm-kr/local-agent-connector/blob/main/connector/VALIDATION.md)을 따른다.
+
+전체 Node 회귀는 제품 **139개**·공통 **165개**, 실제 Mac builder 구현 회귀는 각 **5개**로 별도 통과했다. 설치된 코어 파일 9/10개, 웹 946개, installed-package 5/9/8 checks와 합산하지 않는다. 직전 제품 `9eeccee`/CI 39042209763과 공통 `e5e6a612`/CI 39041845705의 성공·해시는 각 VALIDATION 문서의 당시 기록으로 보존한다.
+
+phase14 하네스 step2 검증은 60개 PASS·3 steps completed다. 개발·설치 검증 구간 완료와 `overallGoalComplete=false`·운영 외부 gate 3개 유지를 구분한다.
 
 | 환경 | 확인된 범위 | 남은 확인 |
 | --- | --- | --- |
-| 제품 Ubuntu 24.04 x64 | `9eeccee` [job 117423808860](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423808860) 성공. 실제 .deb 설치·코어 9개 SHA 대조·번들 Node·기본 URI handler·cold/warm 링크·가시 창·정상 닫기/quit IPC·purge/프로필/handler/AppArmor 정리 8조건 통과 | 격리 X11 CI 범위. 실사용자 GUI·인증 페어링·브라우저 승인·Wayland·재부팅·업데이트·정식 배포 |
-| 제품 macOS arm64 | `9eeccee` [job 117423809065](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809065) 성공. DMG 복사·코어 9개 SHA·번들 Node·ASCII 번들/Helper 4개·한글 표시/런타임/프로필 위치·cold/warm·정상 IPC 두 회차·제거 9 checks | ad hoc 서명·strict verify exit1 unknown·Gatekeeper 미통과. 기존 기기 키 이전, Finder·Developer ID·공증·운영 연결·Intel native 미검증 |
-| 제품 Windows x64 | `9eeccee` [job 117423809100](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809100) 성공. 실제 NSIS 설치·등록·코어 9개 SHA·번들 Node·cold/warm URI·가시 창/WM_CLOSE·같은 PID·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 | unsigned QA artifact. 서명·실제 브라우저 승인·인증 페어링·실사용자 재부팅/업데이트·운영 연결은 미검증 |
+| 제품 Ubuntu 24.04 x64 | `c808e926` [job 117425731139](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042877981/job/117425731139) 성공. 실제 .deb 설치·코어 9개 SHA 대조·번들 Node·기본 URI handler·cold/warm 링크·가시 창·정상 닫기/quit IPC·purge/프로필/handler/AppArmor 정리 8조건 통과 | 격리 X11 CI 범위. 실사용자 GUI·인증 페어링·브라우저 승인·Wayland·재부팅·업데이트·정식 배포 |
+| 제품 macOS arm64 | `c808e926` [job 117425730893](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042877981/job/117425730893) 성공. DMG 복사·코어 9개 SHA·번들 Node·ASCII 번들/Helper 4개·한글 표시/런타임/프로필 위치·cold/warm·정상 IPC 두 회차·제거 9 checks | ad hoc 서명·strict verify exit1 unknown·Gatekeeper 미통과. 기존 기기 키 이전, Finder·Developer ID·공증·운영 연결·Intel native 미검증 |
+| 제품 Windows x64 | `c808e926` [job 117425731090](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042877981/job/117425731090) 성공. 실제 NSIS 설치·등록·코어 9개 SHA·번들 Node·cold/warm URI·가시 창/WM_CLOSE·같은 PID·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 | unsigned QA artifact. 서명·실제 브라우저 승인·인증 페어링·실사용자 재부팅/업데이트·운영 연결은 미검증 |
 
 Ubuntu 설치본의 sandbox는 설치기가 선택한 root:root/0755·앱별 AppArmor loaded 상태이며 QA가 mode를 바꾸지 않았다. cold URI는 정확한 합성 process-title-token을 관측했으며 원래 argv는 미증명이다. 별도 직접 CDP 기동에서 browser/renderer native PID를 OS 실행 파일·UID·부모 트리와 대조하고 renderer Seccomp=2·NoNewPrivs=1을 확인했다. CLI·추론은 0회다. API ACK 이전 parser 경계로 해당 실행을 배제했으며 main-process 네트워크를 독립 측정한 것은 아니다. 설치본 8조건은 인증 페어링·OS 키 암호화를 다시 검증하지 않는다.
 
