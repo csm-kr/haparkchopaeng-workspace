@@ -5,8 +5,9 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import {
   run, until, reserveDebugPort, connectInstalledApp, fileHash,
-  verifyInstalledCore, createOwnedDirectory, assertInside,
+  verifyInstalledCore, createOwnedDirectory,
 } from './installed-smoke-support.mjs';
+import { assertMacPathInside, canonicalMacPath, classifyOwnedMacProcess, resolveMacProcessIdentity, sameMacPath } from './installed-macos-identity.mjs';
 
 // NSWorkspace delivers an actual open-url AppleEvent, including on a cold launch.
 // Supplying the URL only in --args would test argv rather than that OS boundary.
@@ -81,15 +82,17 @@ function publicMetadata(value) {
 export async function verifyMacInstallation({ configuration, context, qaRoot, evidence }) {
   assert.equal(process.platform, 'darwin', 'Installed DMG verification requires macOS.');
   assert.ok(['arm64', 'x64'].includes(process.arch), 'Unsupported native macOS architecture.');
-  const { appId, productName, scheme, packageVersion, connectorRoot } = configuration;
+  const { appId, productName, macBundleName, scheme, packageVersion, connectorRoot } = configuration;
   const profileRelativePath = configuration.profileRelativePath ?? [];
   assert.ok(Array.isArray(profileRelativePath));
   if (profileRelativePath.length) assert.deepEqual(profileRelativePath, [appId, 'production'],
     'Only the configured production profile may be inspected or removed.');
   assert.match(scheme, /^[a-z][a-z0-9+.-]*$/);
   assert.equal(basename(productName), productName, 'Product name must be one path segment.');
-  await assertInside(qaRoot, context.runnerTemp);
-  await assertInside(connectorRoot, context.workspace);
+  assert.ok(typeof macBundleName === 'string' && macBundleName.trim() && basename(macBundleName) === macBundleName
+    && !['.', '..'].includes(macBundleName), 'The configured macOS bundle filename is required.');
+  await assertMacPathInside(qaRoot, context.runnerTemp);
+  await assertMacPathInside(connectorRoot, context.workspace);
   evidence.checks ??= [];
   evidence.cleanup ??= {};
   evidence.limits = [...new Set([...(evidence.limits ?? []),
@@ -102,7 +105,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     mode: 'production-packaged-invalid-uri', apiExclusion: 'parser-rejected-before-ack', mainProcessNetworkMeasured: false };
   const metadata = result.metadata = {
     configured: { appId: publicMetadata(appId), productName: publicMetadata(productName),
-      packageVersion: publicMetadata(packageVersion), scheme: publicMetadata(scheme) },
+      macBundleName: publicMetadata(macBundleName), packageVersion: publicMetadata(packageVersion), scheme: publicMetadata(scheme) },
     mount: {}, bundle: {},
     profile: { mode: profileRelativePath.length ? 'app-id-production' : 'bundle-name',
       relativePath: profileRelativePath.map(publicMetadata) },
@@ -112,7 +115,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   const coldUri = `${scheme}://wrong-host?attemptId=ci&launchToken=x`;
   const warmUri = `${scheme}://connect?extra=1`;
   const lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
-  let helperDirectory, mountDirectory, mountPoint, installDirectory, installedApp, userData, resources, profileContainer;
+  let helperDirectory, mountDirectory, mountPoint, installDirectory, installedApp, userData, resources, profileContainer, profileRoot;
   let profileContainerAbsent = false;
   let mounted = false, registered = false, profileAbsent = false, swiftReady = false, connection, failure;
   const owned = new Map();
@@ -120,26 +123,63 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   const checked = description => evidence.checks.push(description);
   const swift = async (...args) => JSON.parse((await run(join(helperDirectory.path, 'workspace'), args)).stdout.trim());
   const comparablePath = value => typeof value === 'string' ? resolve(value).normalize('NFC') : null;
-  const handler = async () => comparablePath((await swift('resolve', coldUri)).path);
+  const handler = async () => {
+    const value = (await swift('resolve', coldUri)).path;
+    return typeof value === 'string' ? comparablePath(await canonicalMacPath(value)) : null;
+  };
   const plist = async (file, key, format = 'raw') => (await run('/usr/bin/plutil', ['-extract', key, format, '-o', '-', file])).stdout.trim();
+  const identityDiagnostics = metadata.processIdentity = { attempts: 0, rejected: {}, recent: [] };
 
-  async function processIdentity(pid) {
-    const response = await run('/bin/ps', ['-ww', '-p', String(pid), '-o', 'lstart=', '-o', 'comm='],
+  async function processIdentity(pid, { main = false } = {}) {
+    // lstart is ASCII and independent of executable spelling. NSRunningApplication
+    // supplies the main path; ps comm is only a strictly contained helper fallback.
+    const response = await run('/bin/ps', ['-ww', '-p', String(pid), '-o', 'lstart='],
       { allowFailure: true, env: { LC_ALL: 'C' } });
-    if (response.code !== 0 || !response.stdout.trim()) return null;
-    const match = /^(.+?\d{2}:\d{2}:\d{2}\s+\d{4})\s+(.+)$/.exec(response.stdout.trim());
-    if (!match) return null;
-    const executable = await realpath(match[2]).catch(() => null);
-    if (!executable) return null;
-    try { await assertInside(executable, installedApp); } catch { return null; }
-    return { pid, born: match[1], executable };
+    const application = (await swift('identity', String(pid))).application;
+    const command = !main && !application?.executable
+      ? await run('/bin/ps', ['-ww', '-p', String(pid), '-o', 'comm='], { allowFailure: true, env: { LC_ALL: 'en_US.UTF-8' } }) : null;
+    const result = await resolveMacProcessIdentity({ pid, main, ownedBundle: installedApp,
+      psExitCode: response.code || command?.code || 0, psStart: response.stdout,
+      application, command: command?.stdout });
+    identityDiagnostics.attempts += 1;
+    if (result.reason) identityDiagnostics.rejected[result.reason] = (identityDiagnostics.rejected[result.reason] ?? 0) + 1;
+    const sample = {
+      main, reason: result.reason, psExitCode: response.code, psOutputPresent: !!response.stdout.trim(),
+      applicationPresent: !!application, executableFromApplication: typeof application?.executable === 'string',
+      commandFallbackUsed: !!command,
+    };
+    if (result.reason && !identityDiagnostics.firstRejection) identityDiagnostics.firstRejection = sample;
+    identityDiagnostics.recent = [...identityDiagnostics.recent.slice(-7), sample];
+    return result.identity;
   }
-  async function sameProcess(identity) {
-    const current = await processIdentity(identity.pid);
-    return !!current && current.born === identity.born && current.executable === identity.executable;
+  async function ownedProcessState(identity) {
+    // NSRunningApplication can unregister during quit before the kernel process
+    // exits. Already admitted PIDs still require their exact executable and birth.
+    const response = await run('/bin/ps', ['-ww', '-p', String(identity.pid), '-o', 'lstart='],
+      { allowFailure: true, env: { LC_ALL: 'C' } });
+    let missing = false, signalProbe = 'not-needed';
+    if (response.code !== 0 || !response.stdout.trim()) {
+      // Signal zero only probes existence; it never terminates an unknown PID.
+      try { process.kill(identity.pid, 0); signalProbe = 'alive'; }
+      catch (error) {
+        missing = error.code === 'ESRCH';
+        signalProbe = missing ? 'missing' : error.code === 'EPERM' ? 'denied' : 'failed';
+      }
+    }
+    let current = null, executableObservationFailed = false;
+    if (!missing && response.code === 0 && response.stdout.trim()) {
+      try { current = await processIdentity(identity.pid); }
+      catch { executableObservationFailed = true; }
+    }
+    const state = classifyOwnedMacProcess(identity, { current, missing, psExitCode: response.code, psStart: response.stdout });
+    const liveness = metadata.processLiveness ??= { owned: 0, gone: 0, unresolved: 0, recent: [] };
+    liveness[state] += 1;
+    liveness.recent = [...liveness.recent.slice(-7), { state, psExitCode: response.code,
+      psOutputPresent: !!response.stdout.trim(), signalProbe, executableObserved: !!current, executableObservationFailed }];
+    return state;
   }
   async function captureProcesses(mainPid) {
-    const main = await processIdentity(mainPid);
+    const main = await until(() => processIdentity(mainPid, { main: true }), 'installed main executable and ps start identity', 10_000);
     assert.ok(main, 'LaunchServices did not run the copied installed executable.');
     owned.set(mainPid, main);
     const rows = (await run('/bin/ps', ['-axo', 'pid=,ppid=,uid='])).stdout.trim().split('\n')
@@ -152,23 +192,27 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       }
     }
     for (const pid of descendants) {
+      if (pid === mainPid) continue;
       const identity = await processIdentity(pid);
       if (identity) owned.set(pid, identity);
     }
   }
   async function allStopped() {
-    return (await Promise.all([...owned.values()].map(sameProcess))).every(value => !value);
+    return (await Promise.all([...owned.values()].map(ownedProcessState))).every(state => state === 'gone');
   }
   async function captureRemainingProcesses() {
     if (!installedApp || !(await exists(installedApp))) return;
     // Helpers may be reparented after a main-process crash. Read executable names,
     // never arbitrary process arguments, and accept only this unique owned bundle.
-    const processes = await run('/bin/ps', ['-ww', '-U', String(process.getuid()), '-o', 'pid=', '-o', 'comm=']);
+    const processes = await run('/bin/ps', ['-ww', '-U', String(process.getuid()), '-o', 'pid=', '-o', 'comm='], { env: { LC_ALL: 'en_US.UTF-8' } });
     const prefix = `${comparablePath(installedApp)}/`;
     for (const line of processes.stdout.trim().split('\n')) {
       const match = /^(\d+)\s+(.+)$/.exec(line.trim());
-      if (!match || !comparablePath(match[2])?.startsWith(prefix)) continue;
-      const identity = await processIdentity(Number(match[1]));
+      if (!match || !match[2].startsWith('/')) continue;
+      const executable = await canonicalMacPath(match[2]).catch(() => null);
+      if (!executable || !comparablePath(executable)?.startsWith(prefix)) continue;
+      const pid = Number(match[1]);
+      const identity = await processIdentity(pid, { main: owned.get(pid)?.main === true });
       if (identity) owned.set(identity.pid, identity);
     }
   }
@@ -203,23 +247,24 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     assert.deepEqual((await swift('running', appId)).applications, [], 'An existing app with this bundle ID is running.');
     assert.equal(await handler(), null, 'A protocol handler already exists; refusing to replace it.');
     for (const parent of ['/Applications', join(homedir(), 'Applications')]) {
-      assert.equal(await exists(join(parent, `${productName}.app`)), false, 'An existing installation must be preserved.');
+      assert.equal(await exists(join(parent, `${macBundleName}.app`)), false, 'An existing installation must be preserved.');
     }
     const dist = join(connectorRoot, 'dist');
-    await assertInside(dist, connectorRoot);
+    await assertMacPathInside(dist, connectorRoot);
     const suffix = `-${packageVersion}-mac-${process.arch}.dmg`;
     const images = (await readdir(dist)).filter(name => name.endsWith(suffix));
     assert.equal(images.length, 1, 'Expected exactly one DMG for this package version and native architecture.');
     const image = join(dist, images[0]);
     const imageStat = await lstat(image);
     assert.ok(imageStat.isFile() && !imageStat.isSymbolicLink(), 'DMG must be a regular, non-symlink file.');
-    await assertInside(await realpath(image), dist);
+    await assertMacPathInside(image, dist);
     result.dmg = { filename: basename(image), sha256: await fileHash(image), bytes: imageStat.size };
 
     evidence.phase = 'macos_dmg_mount_directory';
     mountDirectory = await createOwnedDirectory(qaRoot, 'mac-volume-');
     // Leave the directory's ownership marker outside the actual empty mountpoint.
     mountPoint = join(mountDirectory.path, 'volume'); await mkdir(mountPoint);
+    mountPoint = await canonicalMacPath(mountPoint);
     // Record attachment ownership even if a later plist check fails.
     mounted = true; cleanup.mountDetached = false;
     evidence.phase = 'macos_dmg_attach';
@@ -233,14 +278,20 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     const entities = JSON.parse(await plist(attachmentFile, 'system-entities', 'json'));
     metadata.mount.entitiesAreArray = Array.isArray(entities);
     metadata.mount.entityCount = Array.isArray(entities) ? entities.length : null;
-    if (Array.isArray(entities)) metadata.mount.entities = entities.slice(0, 16).map(entry => ({
+    assert.ok(Array.isArray(entities), 'Mounted device entities must be an array.');
+    const canonicalMatches = await Promise.all(entities.map(async entry => typeof entry?.['mount-point'] === 'string'
+      && await sameMacPath(entry['mount-point'], mountPoint).catch(() => false)));
+    metadata.mount.entities = entities.slice(0, 16).map((entry, index) => ({
       hasMountPoint: typeof entry?.['mount-point'] === 'string',
       mountPointMatched: entry?.['mount-point'] === mountPoint,
       normalizedMountPointMatched: typeof entry?.['mount-point'] === 'string'
         && comparablePath(entry['mount-point']) === comparablePath(mountPoint),
+      canonicalMountPointMatched: canonicalMatches[index],
       devEntryValid: /^\/dev\/disk\d+(?:s\d+)*$/.test(entry?.['dev-entry'] ?? ''),
     }));
-    const volume = entities.find(entry => entry['mount-point'] === mountPoint);
+    const volumes = entities.filter((_entry, index) => canonicalMatches[index]);
+    assert.equal(volumes.length, 1, 'Exactly one owned mountpoint must match the attached image.');
+    const volume = volumes[0];
     metadata.mount.mountPointMatched = !!volume;
     metadata.mount.devEntryValid = !!volume && /^\/dev\/disk\d+(?:s\d+)*$/.test(volume['dev-entry']);
     evidence.phase = 'macos_mount_device_assert';
@@ -250,9 +301,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     metadata.mount.appNameCount = appNames.length;
     metadata.mount.appNames = appNames.slice(0, 10).map(publicMetadata);
     metadata.mount.appNamesAscii = appNames.slice(0, 10).map(name => /^[\x20-\x7e]+$/.test(name));
-    metadata.mount.configuredAppName = publicMetadata(`${productName}.app`);
+    metadata.mount.configuredAppName = publicMetadata(`${macBundleName}.app`);
     metadata.mount.appNamesNormalized = appNames.slice(0, 10).map(name => publicMetadata(name.normalize('NFC')));
-    assert.deepEqual(appNames.map(name => name.normalize('NFC')), [`${productName}.app`.normalize('NFC')],
+    assert.deepEqual(appNames.map(name => name.normalize('NFC')), [`${macBundleName}.app`.normalize('NFC')],
       'DMG app name differs from the configured product.');
     evidence.phase = 'macos_dmg_app_directory';
     const sourceApp = join(mountPoint, appNames[0]);
@@ -260,7 +311,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     metadata.mount.appIsDirectory = sourceAppStat.isDirectory();
     metadata.mount.appIsSymlink = sourceAppStat.isSymbolicLink();
     assert.ok(sourceAppStat.isDirectory(), 'DMG app is not a real directory.');
-    await assertInside(await realpath(sourceApp), mountPoint);
+    await assertMacPathInside(sourceApp, mountPoint);
     const info = join(sourceApp, 'Contents', 'Info.plist');
     evidence.phase = 'macos_bundle_identifier';
     const observedAppId = await plist(info, 'CFBundleIdentifier');
@@ -279,10 +330,12 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     const bundleName = await plist(info, 'CFBundleName');
     metadata.bundle.bundleName = publicMetadata(bundleName);
     assert.ok(bundleName && basename(bundleName) === bundleName, 'Invalid app profile directory name.');
+    assert.equal(bundleName.normalize('NFC'), productName.normalize('NFC'), 'Bundle display name differs from the configured product.');
     evidence.phase = 'macos_profile_path';
-    const profileParent = join(homedir(), 'Library', 'Application Support');
+    const profileParent = await canonicalMacPath(join(homedir(), 'Library', 'Application Support'));
+    profileRoot = profileParent;
     userData = profileRelativePath.length ? join(profileParent, ...profileRelativePath) : join(profileParent, bundleName);
-    await assertInside(userData, profileParent);
+    await assertMacPathInside(userData, profileParent, { allowMissing: true });
     metadata.profile.insideAppData = true;
     if (profileRelativePath.length) {
       evidence.phase = 'macos_profile_parent';
@@ -294,9 +347,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
         metadata.profile.parentIsDirectory = parentStat.isDirectory();
         metadata.profile.parentIsSymlink = parentStat.isSymbolicLink();
         assert.ok(parentStat.isDirectory() && !parentStat.isSymbolicLink(), 'Production profile parent must be a real directory.');
-        const actualProfileParent = comparablePath(await realpath(profileContainer));
-        metadata.profile.parentRealpathMatched = actualProfileParent === comparablePath(profileContainer);
-        assert.equal(actualProfileParent, comparablePath(profileContainer));
+        await assertMacPathInside(profileContainer, profileParent);
+        metadata.profile.parentRealpathMatched = await sameMacPath(profileContainer, await realpath(profileContainer));
+        assert.equal(metadata.profile.parentRealpathMatched, true);
       }
     }
     evidence.phase = 'macos_profile_absence';
@@ -307,8 +360,8 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
 
     evidence.phase = 'macos_copy';
     installDirectory = await createOwnedDirectory('/Applications', 'connector-ci-mac-');
-    installedApp = join(installDirectory.path, `${productName}.app`);
-    await assertInside(installedApp, installDirectory.path);
+    installedApp = join(installDirectory.path, `${macBundleName}.app`);
+    await assertMacPathInside(installedApp, installDirectory.path, { allowMissing: true });
     const sourceAsarPath = join(sourceApp, 'Contents', 'Resources', 'app.asar');
     const asarStat = await lstat(sourceAsarPath);
     assert.ok(asarStat.isFile() && !asarStat.isSymbolicLink(), 'DMG app.asar must be a regular file.');
@@ -322,7 +375,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     assert.equal(basename(executableName), executableName, 'Invalid bundle executable name.');
     const executable = join(installedApp, 'Contents', 'MacOS', executableName);
     assert.ok((await lstat(executable)).isFile(), 'Installed executable is missing.');
-    await assertInside(await realpath(executable), installedApp);
+    await assertMacPathInside(executable, installedApp);
     const bundledNode = JSON.parse((await run(executable, ['-e', 'process.stdout.write(JSON.stringify({node:process.versions.node,arch:process.arch}))'], { env: { ELECTRON_RUN_AS_NODE: '1' } })).stdout);
     assert.equal(bundledNode.arch, process.arch); assert.ok(Number(bundledNode.node.split('.')[0]) >= 22);
     result.bundledNode = bundledNode;
@@ -355,8 +408,8 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       const port = await reserveDebugPort();
       const launched = (await swift('launch', coldUri, `--remote-debugging-port=${port}`)).application;
       assert.ok(launched && Number.isSafeInteger(launched.pid) && launched.pid > 1, 'LaunchServices could not launch the installed app.');
-      assert.equal(await realpath(launched.path), installedApp, 'A source or translocated bundle was launched.');
-      await assertInside(await realpath(launched.executable), installedApp);
+      assert.equal(await sameMacPath(launched.path, installedApp), true, 'A source or translocated bundle was launched.');
+      await assertMacPathInside(launched.executable, installedApp);
       result.mainPids.push(launched.pid);
       await captureProcesses(launched.pid);
       evidence.phase = sequence === 1 ? 'macos_cold_cdp_attach' : 'macos_restarted_cdp_attach';
@@ -395,7 +448,11 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       await quitNormally();
       checked('Installed macOS app and captured helpers exited through normal connector quit IPC.');
     }
-  } catch (error) { failure = error; }
+  } catch (error) {
+    failure = error;
+    result.failureIdentity = { attempts: identityDiagnostics.attempts, rejected: { ...identityDiagnostics.rejected },
+      recent: identityDiagnostics.recent.map(sample => ({ ...sample })) };
+  }
   finally {
     async function clean(label, action) {
       try { await action(); }
@@ -417,7 +474,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       await captureRemainingProcesses();
       if (!(await allStopped())) {
         for (const signal of ['SIGTERM', 'SIGKILL']) {
-          for (const identity of [...owned.values()].reverse()) if (await sameProcess(identity)) {
+          for (const identity of [...owned.values()].reverse()) if (await ownedProcessState(identity) === 'owned') {
             process.kill(identity.pid, signal);
           }
           try { await until(allStopped, 'owned installed macOS process cleanup', 5_000); break; } catch {}
@@ -435,12 +492,12 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       if (registered) await until(async () => (await handler()) === null, 'absent URI handler baseline restored');
     });
     if (cleanup.processesStopped && profileAbsent && userData && result.mainPids.length > 0) await clean('profile-remove', async () => {
+      assert.equal(comparablePath(await canonicalMacPath(profileRoot)), comparablePath(profileRoot), 'The captured app-data root changed.');
       if (await exists(userData)) {
         const stat = await lstat(userData);
         assert.ok(stat.isDirectory() && !stat.isSymbolicLink() && stat.uid === process.getuid()
           && stat.birthtimeMs >= startedAt - 2_000, 'The app profile is not a newly owned directory.');
-        assert.equal(comparablePath(await realpath(userData)), comparablePath(userData));
-        await assertInside(userData, join(homedir(), 'Library', 'Application Support'));
+        await assertMacPathInside(userData, profileRoot);
         await rm(userData, { recursive: true });
       }
       cleanup.profileRemoved = !(await exists(userData));
@@ -450,7 +507,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
         const parentStat = await lstat(profileContainer);
         assert.ok(parentStat.isDirectory() && !parentStat.isSymbolicLink() && parentStat.uid === process.getuid()
           && parentStat.birthtimeMs >= startedAt - 2_000, 'App profile parent is not newly owned.');
-        assert.equal(comparablePath(await realpath(profileContainer)), comparablePath(profileContainer));
+        await assertMacPathInside(profileContainer, profileRoot);
         await rmdir(profileContainer);
       }
     });

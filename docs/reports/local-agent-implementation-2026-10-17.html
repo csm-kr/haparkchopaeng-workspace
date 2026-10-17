@@ -22,7 +22,7 @@
         <p class="eyebrow">LOCAL AGENT CONNECTION · IMPLEMENTED UX</p>
         <h1>처음엔 한 번 설치.<br>다음엔 웹에서 AI 연결.</h1>
         <p class="lead">하박조팽 웹·서버와 데스크톱 연결기를 구현했습니다. 사용자는 웹의 <strong>AI 연결</strong>에서 시작하고, 필요한 설치·번호 입력·모델 선택만 안내받습니다. Windows x64·macOS arm64·Ubuntu x64의 네이티브 CI를 확인했으며, 정식 서명 배포와 사용자 환경의 설치 검증은 별도로 남아 있습니다.</p>
-        <div class="hero-meta"><span class="tag good">3OS native · 각 13항목 통과</span><span class="tag good">웹 852 · 실제 PostgreSQL 8 통과</span><span class="tag good">공통 repo 분리 · Windows 검증</span><span class="tag wait">분석 대체·채팅 구현 중</span><span class="tag">기준일 2026-10-17</span></div>
+        <div class="hero-meta"><span class="tag good">3OS native · 각 13항목 통과</span><span class="tag good">웹 852 · 실제 PostgreSQL 8 통과</span><span class="tag good">공통 repo 분리 · Windows 검증</span><span class="tag wait">분석·채팅 구현 · 운영 대기</span><span class="tag">기준일 2026-10-17</span></div>
         <div class="summary"><article><strong>연결 진입은 하나</strong><p>상단 AI 연결과 설정 카드가 같은 상태·연결창을 사용합니다.</p></article><article><strong>상시 실행은 선택</strong><p>사용 중 연결기는 실행됩니다. 종료한 앱은 웹 버튼으로 다시 엽니다.</p></article><article><strong>처음 모델은 무선택</strong><p>이 PC에서 감지한 모델만 고르고, 실제 제공된 사용 한도만 표시합니다.</p></article></div>
       </div>
 
@@ -132,13 +132,13 @@
       </section>
 
       <section id="research-chat">
-          <h2>?? ?? API ??? AI ??</h2>
-          <p class="intro">???? PDF ??? ????, ???? ??? PC?Codex/Claude Code??? ??? ??? ????? ?????. ?? <strong>AI ??</strong> ???? ? ?? 1~3?? ??? ???????? ?????? ??? ?????.</p>
-          <div class="notice"><strong>phase 13 ?? ?? ?? ??</strong><br>?? <code>3f16685</code>? <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260">CI 39033348260</a>?? ? 946???? PostgreSQL 13??Chromium 8??HTTP ?? ???3OS native/??? 5 jobs? ?? ??????. ?? ?? 2? PDF? Codex ??? ?? ?? ?? 2? ? ??? ??? ???? ? ????? ?? 1? ??????. ?? ????API fallback??? DB ??? 0???.</div>
-          <p class="small">??? ??????? ?? ???Figure???? ??? ?? ? ??, ????? ?? ? ?? ?? ??? ??? ??? ??? ??? ?????. ?? ???? ?? ????? ?? ???????? ?? ??? ??????. Figure? ?????? ???? ?? ??? ????? ?? ??? ???? ????.</p>
-          <p><a class="tool" href="local-ai-research-chat-2026-10-17.html">? ????? ??? ?? ?? HTML ?? ?</a></p>
-          <p class="small">?? ?? 852??PostgreSQL 8? ??? ??? ???? d54a1fd ??? ?????. ? ??? 946??13? ??? ?????. ?? SQL ?? ?????/????? ??????? ??? ?? ?? ????.</p>
-        </section>
+        <h2>논문 요약 API 대체와 AI 채팅</h2>
+        <p class="intro">업로드는 PDF 본문만 준비합니다. 사용자가 연결한 PC와 Codex·Claude Code 모델을 고르면 로컬 CLI가 논문을 분석합니다. 새 <strong>AI 채팅</strong> 탭에서는 팀 논문 1~3편을 선택해 질문하고 답변을 이어갑니다.</p>
+        <div class="notice"><strong>phase 13 구현·회귀 검증 완료, 운영 반영 대기</strong><br>제품 소스 <code>3f16685</code> 이후 <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39034761673">CI 39034761673</a>에서 웹 946개·별도 PostgreSQL 13개·Chromium 8개·HTTP 쿠키 유실 회귀와 3OS native·패키징의 5 jobs가 통과했습니다. 합성 2쪽 PDF의 실제 Codex 검증은 출력 형식 실패 2회 후 명시한 스키마를 보강해 1회 성공했습니다. 실제 논문 전송·API fallback·운영 DB 변경은 수행하지 않았습니다.</div>
+        <p class="small">분석은 두 관점과 공통 Figure를 검증해 저장하며, 재분석 중에도 이전 결과와 팀 노트를 유지합니다. 채팅에는 선택한 팀 논문의 본문과 완료된 대화만 전달하고, 팀·소유자·웹 세션과 작업 취소를 서버에서 검사합니다. 모델은 자동 선택하지 않습니다.</p>
+        <p><a class="tool" href="local-ai-research-chat-2026-10-17.html">실제 화면이 포함된 AI 분석·채팅 HTML 보고서 열기</a></p>
+        <p class="small">이 보고서 앞부분의 웹 852개·PostgreSQL 8개 결과는 연결기 기준 <code>d54a1fd</code>의 과거 기록입니다. 위 946개·13개는 후속 기능의 근거입니다. phase 14의 설치 앱·OS 링크 검증은 진행 중이며, 서명·공증·운영 SQL과 실제 운영 파일럿은 별도로 남아 있습니다.</p>
+      </section>
 
       <section id="release">
         <h2>제품 배포와 재사용을 위한 남은 일</h2>
@@ -148,7 +148,7 @@
           <tr><td>설치 파일 배포</td><td><span data-evidence="downloads" class="result"></span></td><td>검증한 파일 게시·서명 상태·OS별 다운로드 manifest 설정. 미서명 설치 회귀와 CI 빌드는 완료됐으나 정식 게시·운영 GUI 콜백은 미검증.</td></tr>
           <tr><td>macOS · Ubuntu</td><td><span class="result" data-state="pass">원본 3OS native·패키징 CI PASS</span></td><td>Mac Intel native·Finder 설치·서명/공증, Ubuntu 사용자 .deb 설치·X11/Wayland·브라우저 링크·제거는 별도 검증. AppImage 제외 유지.</td></tr>
           <tr><td>공통 repo · UI/UX 우선 스킬</td><td><span data-evidence="extraction" class="result"></span></td><td>분리·두 번째 호스트 Windows·소비자 설계와 공통 3OS CI 검증 완료. 새 호스트의 운영 접합·실제 배포는 별도로 확인.</td></tr>
-          <tr><td>분석 API 대체·채팅</td><td><span class="result" data-state="pending">phase 13 구현 중</span></td><td>새 기능의 인수 기준·전체 회귀·운영 검증을 연결기 기준과 분리해 기록.</td></tr>
+          <tr><td>분석 API 대체·채팅</td><td><span class="result" data-state="pending">구현·CI 완료 / 운영 대기</span></td><td>논문 분석과 개인 AI 채팅을 구현하고 웹·DB·브라우저 회귀를 통과했습니다. 운영 SQL 검토·반영과 실제 운영 파일럿은 남아 있습니다.</td></tr>
         </tbody></table></div>
         <h3 style="font-size:16px;margin:24px 0 10px">Windows에서 개발하고 Mac 배포는 macOS CI에서</h3>
         <p class="small">공통 UI·Node 코어와 Windows 설치본은 Windows에서 개발·검증할 수 있습니다. Mac DMG 패키징은 확인한 macOS CI 경로를 사용하며, 정식 Mac 배포의 Developer ID 서명·공증도 macOS 환경에서 진행합니다. Mac 로컬 장비 구입 여부와 별개로 해당 CI 환경·인증서 접근 권한을 준비해야 합니다.</p>
@@ -633,7 +633,7 @@
   <!-- 오케스트레이터 갱신용: 실제 실행한 최신 CI 결과만 아래 JSON에 반영한다. -->
   <script id="verification-data" type="application/json">
 {
-  "updatedAt": "2026-10-17 ? ??? d54a1fd ??? ?? ? phase13 3f16685: ?946?PG13?????8?3OS CI PASS",
+  "updatedAt": "2026-10-17 · 연결기 d54a1fd의 과거 근거 보존 · phase 13 소스 3f16685: 웹 946·PG 13·Chromium 8 및 5 jobs 통과 · phase 14 설치 검증 진행",
   "checks": {
     "e2e": {
       "state": "pass",
@@ -802,7 +802,7 @@
     "scope": "Local paper analysis provider replacement and private research chat",
     "state": "verified_candidate",
     "sourceCommit": "3f16685312e297d93461cba762ef6bc0fcdade75",
-    "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260",
+    "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39034761673",
     "jobsPassed": 5,
     "webTestsPassed": 946,
     "postgresTestsPassed": 13,
@@ -812,7 +812,8 @@
     "liveCodexFormatFailures": 2,
     "automaticRetries": 0,
     "report": "local-ai-research-chat-2026-10-17.html",
-    "productionVerified": false
+    "productionVerified": false,
+    "finalValidationCommit": "7b70ca7dfa4604a5eddc53dc54eb25c3f87158cc"
   }
 }
   </script>

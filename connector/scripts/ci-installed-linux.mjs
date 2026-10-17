@@ -6,6 +6,9 @@ import {
   assertInside, connectInstalledApp, createOwnedDirectory, fileHash,
   reserveDebugPort, run, start, until, verifyInstalledCore,
 } from './installed-smoke-support.mjs';
+import { createLinuxProcessTracker, inspectInstalledProcessTree, inspectLinuxCommandLine, readLinuxProcessStat } from './linux-process-observation.mjs';
+
+const processTracker = createLinuxProcessTracker();
 
 async function exists(path) {
   try { await lstat(path); return true; }
@@ -29,11 +32,27 @@ async function installedProcess(pid, installation) {
     const status = await readFile(`/proc/${pid}/status`, 'utf8');
     if (Number(/^Uid:\s+(\d+)/m.exec(status)?.[1]) !== process.getuid()) return null;
     const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
-    const startTime = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/)[19];
-    const argv = (await readFile(`/proc/${pid}/cmdline`, 'utf8')).split('\0').filter(Boolean);
-    return { pid: Number(pid), executable, startTime, argv, status };
+    const { parentPid, startTime } = readLinuxProcessStat(stat);
+    if (processTracker.reused(pid, startTime)) return null;
+    // Executable path, UID and start ticks now establish ownership. A later
+    // cmdline/status/exe read denial must not turn this PID into an exit proof.
+    processTracker.remember(pid, startTime);
+    const commandLine = inspectLinuxCommandLine(await readFile(`/proc/${pid}/cmdline`));
+    return { pid: Number(pid), parentPid, executable, startTime, argv: commandLine.argv, commandLine, status };
   } catch (error) {
-    if (['ENOENT', 'ESRCH', 'EACCES', 'EPERM'].includes(error.code)) return null;
+    if (['ENOENT', 'ESRCH'].includes(error.code)) { processTracker.forget(pid); return null; }
+    if (['EACCES', 'EPERM'].includes(error.code)) {
+      if (processTracker.has(pid)) {
+        try {
+          const current = readLinuxProcessStat(await readFile(`/proc/${pid}/stat`, 'utf8'));
+          if (processTracker.reused(pid, current.startTime)) return null;
+        } catch (statError) {
+          if (['ENOENT', 'ESRCH'].includes(statError.code)) { processTracker.forget(pid); return null; }
+          // An unreadable/invalid stat cannot establish PID reuse or exit.
+        }
+      }
+      return processTracker.readDenied(pid);
+    }
     throw error;
   }
 }
@@ -44,13 +63,11 @@ async function processes(installation) {
 }
 
 function mainProcesses(entries, executable) {
-  return entries.filter(entry => entry.executable === executable && !entry.argv.some(arg => arg.startsWith('--type=')));
+  return inspectInstalledProcessTree(entries, executable).mains;
 }
 
 function processCounts(entries, executable) {
-  const main = mainProcesses(entries, executable).length;
-  return { total: entries.length, main, helper: entries.length - main,
-    renderer: entries.filter(entry => entry.argv.includes('--type=renderer')).length };
+  return inspectInstalledProcessTree(entries, executable).diagnostics;
 }
 
 // Classify in memory. Never persist stderr, argv, URLs, filesystem paths or tokens.
@@ -129,6 +146,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
   evidence.cleanup ??= {};
   evidence.limits ??= [];
   evidence.limits.push('Linux cold URI: installed PID/argv/window/screenshot observed; cold renderer state is not inspected by CDP.',
+    'Process observations cover matched installed executables/UIDs and the readable /proc scope, not every sandbox descendant; loss of access to a previously confirmed owned PID defers cleanup to runner disposal.',
     'Production API and CLI inference are excluded by invalid-URI parser control flow before credentials/ACK/adapters; independent network-wire measurement is not performed.',
     'Packaged URI tests do not verify real pairing, credential encryption, AI inference or Wayland.');
   try {
@@ -202,10 +220,13 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
       processExitObserved: false, mainExitCodeObserved: false, peakMainProcesses: 0 };
     coldOpener = start('xdg-open', [coldUri]); openers.push(coldOpener);
     const cold = await until(async () => {
-      const entries = await processes(installation), mains = mainProcesses(entries, executable);
-      details.cold.lastProcessCounts = processCounts(entries, executable);
+      const entries = await processes(installation), observed = inspectInstalledProcessTree(entries, executable);
+      const mains = observed.mains;
+      details.cold.lastProcessCounts = observed.diagnostics;
+      details.cold.lastProcessCounts.exactUriArgumentProcesses = entries.filter(entry => entry.argv.includes(coldUri)).length;
       details.cold.peakMainProcesses = Math.max(details.cold.peakMainProcesses, mains.length);
-      return mains.length === 1 && mains[0].argv.includes(coldUri) ? mains[0] : false;
+      return mains.length === 1 && observed.diagnostics.disconnectedSameExecutable === 0
+        && observed.diagnostics.cycleProcesses === 0 && mains[0].argv.includes(coldUri) ? mains[0] : false;
     }, 'cold xdg-open to launch the installed binary');
     details.cold.installedBinary = true; details.cold.uriArgumentObserved = true;
     evidence.phase = 'linux_cold_visible_window';
@@ -220,7 +241,16 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     await run('scrot', ['--overwrite', join(qaRoot, 'linux-installed-cold.png')]);
     details.cold.screenshot = 'linux-installed-cold.png';
     evidence.phase = 'linux_cold_close_window';
-    await run('xdotool', ['windowclose', windowId]);
+    const numericWindowId = BigInt(windowId);
+    assert.ok(numericWindowId > 0n && numericWindowId <= 0xffffffffn, 'Invalid owned X11 window ID');
+    const windowOwner = (await run('xdotool', ['getwindowpid', windowId])).stdout.trim();
+    assert.equal(windowOwner, String(cold.pid), 'The cold window changed process ownership');
+    const currentCold = await installedProcess(cold.pid, installation);
+    assert.ok(currentCold && currentCold.startTime === cold.startTime && currentCold.executable === executable,
+      'The installed cold process changed before its window close request');
+    // Ask the window manager to close normally. XDestroyWindow (xdotool
+    // windowclose) bypasses the application's close/window-all-closed boundary.
+    await run('wmctrl', ['-ic', `0x${numericWindowId.toString(16)}`]);
     details.cold.closeRequested = true;
     evidence.phase = 'linux_cold_process_exit';
     await until(async () => !(await processes(installation)).length, 'cold application window close to exit all installed processes');
@@ -228,6 +258,9 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     evidence.phase = 'linux_cold_opener_exit';
     await until(() => coldOpener.closed, 'cold desktop opener to exit');
     details.cold.opener = await processDiagnostic(coldOpener);
+    const openerExit = await coldOpener.done;
+    assert.equal(openerExit.code, 0, 'Cold desktop URI opener failed');
+    assert.equal(openerExit.signal, null, 'Cold desktop URI opener was terminated');
     evidence.checks.push('linux_unmodified_desktop_cold_uri_binary_argv_window_and_close');
 
     evidence.phase = 'linux_packaged_cdp';
@@ -237,9 +270,13 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     const rejected = '연결 링크에 허용되지 않은 정보가 있어요.';
     await until(async () => { const state = await client.state(); return state.stage === 'error' && state.description === rejected; }, 'packaged cold URI rejection');
     assertRejected(await client.state(), rejected);
-    const originalMain = mainProcesses(await processes(installation), executable);
+    const directObservation = inspectInstalledProcessTree(await processes(installation), executable);
+    const originalMain = directObservation.mains;
+    details.sandbox.processObservation = directObservation.diagnostics;
     assert.equal(originalMain.length, 1); assert.equal(originalMain[0].pid, launched.pid);
-    const renderers = (await processes(installation)).filter(entry => entry.argv.includes('--type=renderer'));
+    assert.equal(directObservation.diagnostics.disconnectedSameExecutable, 0);
+    assert.equal(directObservation.diagnostics.cycleProcesses, 0);
+    const renderers = directObservation.renderers;
     assert.ok(renderers.length > 0);
     details.sandbox.renderers = renderers.map(entry => {
       assert.equal(/^Seccomp:\s+(\d+)/m.exec(entry.status)?.[1], '2');
@@ -287,6 +324,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
   try {
     evidence.phase = 'linux_cleanup';
     client?.close();
+    if (failure?.code === 'OWNED_PROC_UNOBSERVABLE') throw failure;
     if (installAttempted && !installed) {
       // A failed/timeout apt command can have unpacked files. Do not claim a
       // clean uninstall or purge a package whose successful ownership is unknown.
@@ -319,7 +357,13 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
       }
       evidence.cleanup.linuxFreshProfilesRemoved = true;
     }
-  } catch (error) { failure ??= error; failedPhase ??= evidence.phase; }
+  } catch (error) {
+    if (error.code === 'OWNED_PROC_UNOBSERVABLE') {
+      evidence.cleanup.linuxObservedProcessCleanupDeferred = true;
+      evidence.cleanup.linuxRetainedForRunnerDisposal = true;
+    }
+    failure ??= error; failedPhase ??= evidence.phase;
+  }
   finally {
     try {
       for (const opener of openers) {

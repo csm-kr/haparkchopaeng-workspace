@@ -32,11 +32,11 @@ test('a runner temp outside a normal absolute path or inside the workspace is re
   assert.equal(assertInside('/work/owned/file', '/work/owned'), '/work/owned/file');
 });
 
-const build = { appId: 'org.example.connector', productName: '연구 연결기', packageVersion: '0.1.0', scheme: 'research-connect' };
+const build = { appId: 'org.example.connector', productName: '연구 연결기', macBundleName: '연구 연결기', packageVersion: '0.1.0', scheme: 'research-connect' };
 
 test('configuration has no fallback app and cannot escape an installation filename', () => {
   assert.deepEqual(validateConfiguration(build), build);
-  for (const override of [{ appId: '' }, { productName: '../Escape' }, { productName: '.' }, { productName: 'a\\b' }, { scheme: 'https' }, { scheme: 'file' }, { scheme: 'x:../' }, { packageVersion: '' }]) {
+  for (const override of [{ appId: '' }, { productName: '../Escape' }, { productName: '.' }, { productName: 'a\\b' }, { macBundleName: '' }, { macBundleName: '../Escape' }, { macBundleName: 'a\\b' }, { scheme: 'https' }, { scheme: 'file' }, { scheme: 'x:../' }, { packageVersion: '' }]) {
     assert.throws(() => validateConfiguration({ ...build, ...override }));
   }
 });
@@ -69,6 +69,27 @@ test('packaged QA uses the real portable production profile and refuses developm
     assert.equal((await loadConfiguration(parent)).packageName, 'second-host-desktop');
     await save('apps.generated.json', { ...runtime, development: true });
     await assert.rejects(loadConfiguration(parent));
+  } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
+});
+
+test('installed macOS bundle identity follows the builder executable name while keeping the display brand', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'connector-config-mac-'));
+  try {
+    const desktop = join(parent, 'desktop'); await mkdir(desktop);
+    const save = (name, value) => writeFile(join(desktop, name), JSON.stringify(value));
+    await save('package.json', { name: 'fixture-desktop', version: '0.1.0' });
+    await save('apps.generated.json', { development: false, applications: [{ scheme: build.scheme }] });
+    const generated = { appId: build.appId, productName: build.productName, executableName: 'research-notebook-connector' };
+    await save('builder.generated.json', generated);
+    const global = await loadConfiguration(parent);
+    assert.equal(global.macBundleName, 'research-notebook-connector');
+    assert.equal(global.productName, build.productName);
+    await save('builder.generated.json', { ...generated, mac: { executableName: 'native-mac-connector' } });
+    assert.equal((await loadConfiguration(parent)).macBundleName, 'native-mac-connector');
+    await save('builder.generated.json', { ...generated, mac: { executableName: '../another-app' } });
+    await assert.rejects(loadConfiguration(parent));
+    await save('builder.generated.json', { ...generated, executableName: undefined });
+    assert.equal((await loadConfiguration(parent)).macBundleName, build.productName);
   } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
 });
 

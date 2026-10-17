@@ -34,6 +34,8 @@ export function validateConfiguration(value) {
   assert.ok(value && /^[a-zA-Z][a-zA-Z0-9_.-]{3,199}$/.test(value.appId ?? ''));
   assert.ok(typeof value.productName === 'string' && value.productName.length <= 100 && value.productName.trim()
     && !/[<>:"/\\|?*\u0000-\u001f]/.test(value.productName) && !['.', '..'].includes(value.productName));
+  assert.ok(typeof value.macBundleName === 'string' && value.macBundleName.length <= 100 && value.macBundleName.trim()
+    && !/[<>:"/\\|?*\u0000-\u001f]/.test(value.macBundleName) && !['.', '..'].includes(value.macBundleName));
   assert.ok(/^[a-z][a-z0-9+.-]{2,63}$/.test(value.scheme ?? '') && !['http', 'https', 'file', 'data', 'javascript'].includes(value.scheme));
   assert.ok(/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.+-]+)?$/.test(value.packageVersion ?? ''));
   return value;
@@ -58,7 +60,9 @@ export async function loadConfiguration(connectorRoot) {
   const runtime = JSON.parse(await readFile(path.join(desktop, 'apps.generated.json'), 'utf8'));
   assert.equal(runtime.development, false, 'Installed smoke requires the production build configuration');
   assert.equal(runtime.applications?.length, 1);
-  return validateConfiguration({ appId: build.appId, productName: build.productName ?? pkg.productName,
+  const productName = build.productName ?? pkg.productName;
+  return validateConfiguration({ appId: build.appId, productName,
+    macBundleName: build.mac?.executableName ?? build.executableName ?? productName,
     scheme: runtime.applications[0].scheme, packageVersion: build.extraMetadata?.version ?? pkg.version, connectorRoot,
     packageName: build.deb?.packageName ?? build.extraMetadata?.name ?? pkg.name,
     profileRelativePath: portableProfile ? [build.appId, 'production'] : [] });
