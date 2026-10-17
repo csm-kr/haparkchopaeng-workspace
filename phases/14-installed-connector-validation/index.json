@@ -89,6 +89,29 @@
       "started_at": "2026-10-18T00:03:00+0900",
       "completed_at": "2026-10-18T00:03:03+0900",
       "summary": "제품 c808e926의 CI39042877981 전체 5개 작업과 공통 1e309c3f의 CI39042868288 전체 3개 작업이 성공했다. 실제 설치 앱의 OS URI·cold/warm 실행·정상 종료·제거를 Mac arm64 9개, Windows 사전 2개/전체 5개, Ubuntu X11 8개로 각각 검증했다. 웹 946개·Chromium 8개·PostgreSQL 16의 13개 및 schema drift 0을 확인했고, 하네스 AC 60개도 통과했다. 두 저장소의 설치 검증과 공통 Mac 이름/프로필 보존을 동기화했다. 운영 SQL 수동 검토·서명/공증·정식 다운로드·운영 파일럿은 미완료다."
+    },
+    {
+      "step": 3,
+      "name": "native-intel-mac-validation",
+      "status": "pending",
+      "paths": [
+        ".github/workflows/local-agent.yml",
+        "connector/README.md",
+        "connector/VALIDATION.md",
+        "docs/dev/LOCAL_AGENT_RELEASE.md",
+        "docs/reports/local-agent-implementation-2026-10-17.html"
+      ],
+      "checks": [
+        [
+          "python",
+          "-X",
+          "utf8",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ]
+      ]
     }
   ],
   "overallGoalComplete": false,
@@ -98,7 +121,11 @@
     "운영 사이트·최종 설치본 파일럿"
   ],
   "created_at": "2026-10-17T22:10:20+0900",
-  "completed_at": "2026-10-18T00:03:03+0900",
+  "previousCompletion": {
+    "stepCount": 3,
+    "completedAt": "2026-10-18T00:03:03+0900",
+    "scope": "Windows x64, macOS arm64 and Ubuntu X11; Intel Mac was build-only."
+  },
   "nativeCiEvidence": {
     "product": {
       "head": "c808e926301a6937b78383ebf064bb97cf20d909",

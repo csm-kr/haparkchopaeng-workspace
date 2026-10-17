@@ -126,10 +126,16 @@ jobs:
         include:
           - os: windows-latest
             platform: win
+            architecture: x64
           - os: macos-15
             platform: mac
+            architecture: arm64
+          - os: macos-15-intel
+            platform: mac
+            architecture: x64
           - os: ubuntu-24.04
             platform: linux
+            architecture: x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -140,6 +146,21 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
+          architecture: ${{ matrix.architecture }}
+      - name: Verify runtime and runner architecture
+        shell: bash
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const expected = process.env.EXPECTED_ARCHITECTURE;
+          const runnerArchitecture = { x64: 'X64', arm64: 'ARM64' }[expected];
+          assert.ok(runnerArchitecture, 'An explicit supported matrix architecture is required.');
+          assert.equal(process.arch, expected, 'Node architecture differs from the matrix.');
+          assert.equal(process.env.RUNNER_ARCH, runnerArchitecture, 'Runner architecture differs from the matrix.');
+          console.log(JSON.stringify({ architecture: process.arch, runnerArchitecture: process.env.RUNNER_ARCH }));
+          NODE
       - name: Connector contracts and process cancellation
         run: npm --prefix connector test
       - run: npm --prefix connector/desktop ci
@@ -198,7 +219,7 @@ jobs:
       - uses: actions/upload-artifact@v7.0.2
         if: always() && inputs.upload_artifacts == true
         with:
-          name: native-smoke-${{ matrix.platform }}
+          name: native-smoke-${{ matrix.platform }}-${{ matrix.architecture }}
           path: |
             connector/artifacts/ci-desktop-*/**
           if-no-files-found: ignore
@@ -271,7 +292,7 @@ jobs:
       - uses: actions/upload-artifact@v7.0.2
         if: always() && runner.os != 'Windows' && inputs.upload_artifacts == true
         with:
-          name: installed-package-evidence-${{ matrix.platform }}
+          name: installed-package-evidence-${{ matrix.platform }}-${{ matrix.architecture }}
           path: connector/artifacts/ci-installed-*/**
           if-no-files-found: ignore
           retention-days: 14
@@ -292,7 +313,7 @@ jobs:
       - uses: actions/upload-artifact@v7.0.2
         if: inputs.upload_artifacts == true
         with:
-          name: connector-${{ matrix.platform }}-unsigned
+          name: connector-${{ matrix.platform }}-${{ matrix.architecture }}-unsigned
           path: |
             connector/dist/*.exe
             connector/dist/*.dmg

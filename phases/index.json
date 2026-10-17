@@ -70,9 +70,9 @@
     },
     {
       "dir": "14-installed-connector-validation",
-      "status": "completed",
+      "status": "pending",
       "failed_at": "2026-10-17T22:50:33+0900",
-      "completed_at": "2026-10-18T00:03:03+0900"
+      "previous_completed_at": "2026-10-18T00:03:03+0900"
     }
   ]
 }
