@@ -2,7 +2,7 @@
 
 ## 검증 범위
 
-Windows x64(build 10.0.26200), 개발 Node 24.15.0, Electron 44.9.0, electron-builder 26.15.3에서 확인했다. 인증 파일·로그인 토큰·이메일·조직 정보·CLI 응답 원문은 기록하지 않았다. 설치본, QA JSON/PNG, 환경별 manifest는 Git에서 제외하며 이 문서의 결과만 검토 근거로 남긴다.
+로컬 Windows x64(build 10.0.26200), 개발 Node 24.15.0, Electron 44.9.0, electron-builder 26.15.3에서 확인했다. 별도로 [Actions 실행 39028900156](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156)에서 Windows x64·macOS 15 arm64·Ubuntu 24.04 x64의 실제 Electron과 OS 암호화 저장소를 검증했다. 인증 파일·로그인 토큰·이메일·조직 정보·CLI 응답 원문은 기록하지 않았다. 설치본, QA JSON/PNG, 환경별 manifest는 Git에서 제외하며 이 문서의 결과만 검토 근거로 남긴다.
 
 | 항목 | 결과 | 근거 |
 | --- | --- | --- |
@@ -14,9 +14,27 @@ Windows x64(build 10.0.26200), 개발 Node 24.15.0, Electron 44.9.0, electron-bu
 | Claude 실제 추론 | 3회 실패 | 마지막 진단에서 assistant.error=rate_limit, RATE_LIMITED로 분류 |
 | 격리 Electron UI | 통과 | 실제 renderer·CLI 메타데이터, fixture 작업 claim=null, 추론 0회 |
 | Windows 패키징 | NSIS x64 | HTTPS 운영 manifest 포함, 서명 없는 개발 설치본 |
-| macOS·Ubuntu | 실기기 미검증 | 경로·프로토콜·빌드 설정과 테스트 fixture만 구현 |
+| Windows CI | 네이티브 13조건·NSIS 설치/제거 통과 | 실제 OS 암호화, 번들 Node·코어 9개, URI 등록과 제거 원복 |
+| macOS CI | arm64 네이티브 13조건 통과 | 실제 OS 암호화, arm64/x64 DMG 생성. 설치·Finder/URI 실행은 미검증 |
+| Ubuntu CI | x64 네이티브 13조건 통과 | 실제 Secret Service 환경, .deb 생성. 설치·Wayland는 미검증, AppImage 빌드·배포 제외 |
 
 코어 회귀는 URI·origin·기기 키·API 오류·엄격한 ACK DTO, JSONL Unicode, 셸 없는 실행, CLI 제한 플래그, OAuth 종류, 실제 기간별 quota, 별도 quota 관측 시각, 재전송 복구, 취소·lease·종료 순서를 검증한다. 테스트는 모델을 호출하지 않는다.
+
+### 3 OS 네이티브 CI에서 확인한 범위
+
+위 실행의 `native-smoke-win`, `native-smoke-mac`, `native-smoke-linux` artifact를 직접 읽었다. 세 결과 모두 `passed=true`, `mode=real-electron-real-os-encryption-mock-api`, `build=unpackaged-ci`다. Electron·renderer·OS 암호화 저장소는 실제이며 `mockKeychain=false`, `basicTextAllowed=false`다. 서버 API만 loopback fixture이고 로그인한 운영 웹이나 실제 CLI 추론을 대체 검증한 것은 아니다. 세 runner의 Codex·Claude는 설치되지 않은 상태로 안내됐다.
+
+각 OS에서 빈 6자리·5자리 제출 차단·오답·정답 연결, 평문 키 없는 암호화 저장, 정상 앱 종료 후 같은 프로필/기기 키 복호화와 번호 없는 재개를 확인했다. 자기 임시 암호문 1비트 손상 후에는 빈 입력·새 기기 키·새 6자리 확인을 요구했고, 원본 바이트가 같은 백업 1개를 유지했다. 13조건 모두 통과했고 Electron 세 기동은 종료 코드 0, 소유 프로세스와 loopback은 정리됐다. `cliInferenceJobsOffered=0`, `browserActionsInvoked=0`, `protocolRegistrationRequested=false`이므로 브라우저 전용 링크 실행이나 모델 동작 검증으로 확대하지 않는다. 재개는 `graceful-app-quit`이며 전원 차단·강제 종료 후 재개를 실증한 것은 아니다.
+
+Ubuntu는 Xvfb·D-Bus·GNOME Secret Service 세션을 준비했다. 앞선 실제 CI는 Electron이 샌드박스 오류/SIGTRAP으로 renderer 전에 종료됐다. 공식 Electron `install.js`로 받은 정확한 `dist/chrome-sandbox`를 root:root/4755로 준비한 뒤 통과했다. CI는 일반 파일·비심볼릭링크·고정 경로·실행 권한·SUID·SHA256 불변·`nosuid` mount 아님을 검사한다. 샌드박스 비활성화나 AppArmor 전역 해제를 사용하지 않았다. 이 준비는 CI의 unpackaged Electron을 위한 것이며, 일반 사용자에게 같은 수동 명령을 요구하는 설치 UX를 검증한 것이 아니다.
+
+현재 Ubuntu artifact의 한글은 runner에 CJK 글꼴이 없어 네모로 보인다. 따라서 동작 13조건 통과와 한국어 화면 가독성은 구분한다. 실제 GUI Ubuntu에는 활성 키링과 한국어 표시가 가능한 글꼴이 필요하며, 다음 CI에서 `fonts-noto-cjk`를 준비해 다시 캡처한다. 일반 Ubuntu 기본 설치에 해당 글꼴이 있다고 가정하지 않는다.
+
+위 CI에서 Windows NSIS x64, macOS DMG arm64/x64, Ubuntu .deb amd64·AppImage x86_64 생성은 통과했다. 이어 설치된 electron-builder 26.15.3의 실제 `AppImageTarget.desktopEntry` 경로를 호출해 `AppRun --no-sandbox %U`를 관측했고 샌드박스 유지 검사가 실패했다. 기본 AppRun에도 user namespace 실패 시 같은 인수를 추가하는 경로가 있다. 이에 AppImage를 빌드·배포 대상에서 제외하고 Linux 대상과 artifact를 .deb만으로 제한했다. 이미 생성된 AppImage는 Git에서 제외한 개발 산출물로 보류하며 다운로드에 등록하지 않는다. 안전한 AppImage 대안을 만드는 일은 이번 범위에 포함하지 않는다.
+
+Ubuntu는 .deb를 우선 검증 대상으로 둔다. CI는 빌드된 실제 .deb를 task-owned 임시 경로에 읽기 추출해 maintainer scripts·.desktop의 샌드박스 비활성화 인수 부재, 공식 postinst의 user namespace 검사와 4755/0755 분기, `x-scheme-handler/hapark-connect`와 설치 경로의 `%U` 전달을 검사한다. 이는 설치 스크립트의 내용 검사이며 설치·URI 실행 성공을 의미하지 않는다. unpackaged CI의 안전한 샌드박스 성공을 설치본 실행 보장으로 확대하지 않는다.
+
+실행 39028900156의 실제 `hapark-connector-0.1.0-linux-amd64.deb`는 **99,366,616 bytes**, SHA256 `a1faa9e4ebd0a6dded634099a315746e5e62cd3d54ce1430407cec0be2d7beb9`다. 해당 아카이브를 설치하지 않고 읽어 `Exec="/opt/하박조팽 연결기/hapark-connector-desktop" %U`, 프로토콜 MIME, postinst의 4755/0755 분기, root:root 소유 0755의 공식 sandbox ELF(15,232 bytes)를 확인했다. 동일 검사부는 실제 아카이브 내용에서 통과하고, 우회 인수를 추가한 launcher·maintainer script와 읽기 오류 fixture에서는 실패했다. 전체 `dpkg-deb` CI step은 다음 실행에서 별도로 판정한다.
 
 ## 실제 CLI 확인
 
@@ -98,9 +116,9 @@ UI 회귀가 만든 이전 임시 프로필 7개를 추가로 삭제하려던 �
 
 ## 남은 검증
 
-macOS arm64/x64의 실제 설치·Keychain·Finder 실행, Ubuntu GUI에서 Secret Service/keyring·프로토콜·Wayland 펫 동작, 운영 사이트와 서명된 설치본의 첫 실행 콜백, 공개 다운로드 게시·OS 서명/notarization은 아직 검증하지 않았다. Windows UI 회귀는 개발 Electron에서 수행했고 NSIS 설치 회귀는 실제 패키지를 별도로 검증한다. 지속 실행 시 CPU·메모리·배터리 영향은 측정하지 않았다.
+macOS arm64의 CI Keychain 사용과 Ubuntu의 CI Secret Service 사용은 통과했다. macOS x64에서의 네이티브 실행, 두 OS의 실제 패키지 설치·앱 이동/업데이트·제거·Finder/데스크톱 런처·브라우저 URI 연결·재부팅 후 실행은 아직 검증하지 않았다. Ubuntu Wayland의 펫·항상 위 표시, 한국어 글꼴을 준비한 화면 캡처도 남아 있다. AppImage는 빌드·배포 대상에서 제외했다. 운영 사이트와 서명된 설치본의 첫 실행 콜백, 공개 다운로드 게시·OS 서명/notarization은 미검증이다. Windows UI 회귀는 개발 Electron에서 수행했고 NSIS 설치 회귀는 실제 패키지를 별도로 검증한다. 지속 실행 시 CPU·메모리·배터리 영향은 측정하지 않았다.
 
-3 OS CI에는 코어 테스트와 각 OS 패키징을 사용할 수 있다. Windows CI는 `qa:install`도 실행할 수 있다. `qa:desktop`은 현재 Windows의 실제 WM_CLOSE 및 로그인한 CLI 메타데이터를 확인하는 회귀이므로 무인 3 OS 공통 UI 검증으로 주장하지 않는다.
+3 OS CI의 공통 네이티브 회귀는 `node connector/scripts/ci-desktop-smoke.mjs`이며, Linux는 workflow의 샌드박스·키링·가상 디스플레이 준비 후 실행한다. Windows CI는 패키징 뒤 `qa:install`도 통과했다. `qa:desktop`은 Windows의 실제 WM_CLOSE 및 로그인한 CLI 메타데이터를 확인하는 별도 로컬 회귀다. 공통 CI에 없는 실제 CLI·설치·브라우저 흐름까지 검증했다고 주장하지 않는다.
 
 ## 첫 실제 3 OS CI에서 발견한 패키징 차이
 
@@ -114,5 +132,5 @@ macOS arm64/x64의 실제 설치·Keychain·Finder 실행, Ubuntu GUI에서 Secr
 
 2026-10-17의 [Actions 실행 39026669946](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946)에서 코어 37개는 세 OS 모두 통과했다. macOS arm64/x64 DMG도 생성됐다. 네이티브 사용자 UI와 OS 보안 저장소의 실기기 검증 범위는 위의 제한을 그대로 따른다.
 
-- [Ubuntu job 117378896196](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896196): AppImage 생성 뒤 .deb builder가 project homepage와 author.email 또는 명시적 maintainer 누락으로 실패했다. 설치된 electron-builder 26.15.3의 실제 `FpmTarget.computeFpmMetaInfoOptions` 호출에서도 동일 오류를 로컬 재현했다. `homepage=https://hapark.vercel.app`, `linux.maintainer=Hapark maintainers` 보강 후 같은 builder 경로가 URL과 maintainer를 반환해 통과했다. 개인 이메일을 추가하지 않았다. 실제 Ubuntu .deb 재빌드 결과는 다음 CI에서 확인한다.
-- [Windows job 117378896415](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896415): NSIS 생성은 성공했고 설치 회귀의 PowerShell에서 `Get-FileHash`를 찾지 못해 설치 전에 실패했다. SHA256을 .NET 파일 스트림으로 계산해 셸 모듈 의존을 없앴다. `Get-FileHash`를 사용하면 `CommandNotFoundException`이 나도록 한 환경에서 실제 설치·프로토콜·번들 Node·코어 해시·제거 원복을 전부 다시 통과했다. 해시는 앞선 독립 계산값과 같고 추론·GUI·브라우저 호출은 0회다. 실제 Windows runner 재실행 결과는 다음 CI에서 확인한다.
+- [Ubuntu job 117378896196](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896196): AppImage 생성 뒤 .deb builder가 project homepage와 author.email 또는 명시적 maintainer 누락으로 실패했다. 설치된 electron-builder 26.15.3의 실제 `FpmTarget.computeFpmMetaInfoOptions` 호출에서도 동일 오류를 로컬 재현했다. `homepage=https://hapark.vercel.app`, `linux.maintainer=Hapark maintainers` 보강 후 같은 builder 경로가 URL과 maintainer를 반환해 통과했다. 개인 이메일을 추가하지 않았다. 이후 [Ubuntu job 117385267461](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156/job/117385267461)에서 실제 .deb 생성·artifact 게시까지 통과했다.
+- [Windows job 117378896415](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896415): NSIS 생성은 성공했고 설치 회귀의 PowerShell에서 `Get-FileHash`를 찾지 못해 설치 전에 실패했다. SHA256을 .NET 파일 스트림으로 계산해 셸 모듈 의존을 없앴다. `Get-FileHash`를 사용하면 `CommandNotFoundException`이 나도록 한 환경에서 실제 설치·프로토콜·번들 Node·코어 해시·제거 원복을 전부 다시 통과했다. 해시는 앞선 독립 계산값과 같고 추론·GUI·브라우저 호출은 0회다. 이후 [Windows job 117385267654](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156/job/117385267654)에서도 실제 설치·코어 9개·URI 등록·제거 원복을 통과했다.

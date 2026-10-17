@@ -14,7 +14,7 @@
     "configure": "node ../scripts/configure-desktop.mjs",
     "package:win": "npm run configure && electron-builder --win nsis --x64",
     "package:mac": "npm run configure && electron-builder --mac dmg --arm64 --x64",
-    "package:linux": "npm run configure && electron-builder --linux deb AppImage --x64",
+    "package:linux": "npm run configure && electron-builder --linux deb --x64",
     "package:dir": "npm run configure && electron-builder --dir"
   },
   "devDependencies": {
@@ -32,7 +32,7 @@
     "win": { "target": ["nsis"], "icon": "assets/icon.ico", "signExecutable": false },
     "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "deleteAppDataOnUninstall": false, "shortcutName": "하박조팽 연결기", "include": "installer.nsh" },
     "mac": { "target": ["dmg"], "icon": "assets/icon.png", "category": "public.app-category.productivity", "hardenedRuntime": true, "gatekeeperAssess": false },
-    "linux": { "target": ["deb", "AppImage"], "maintainer": "Hapark maintainers", "icon": "assets/icon.png", "category": "Utility", "mimeTypes": ["x-scheme-handler/hapark-connect"], "desktop": { "entry": { "Name": "하박조팽 연결기", "Comment": "웹과 내 PC의 AI 연결", "Terminal": "false" } } },
+    "linux": { "target": ["deb"], "maintainer": "Hapark maintainers", "icon": "assets/icon.png", "category": "Utility", "mimeTypes": ["x-scheme-handler/hapark-connect"], "desktop": { "entry": { "Name": "하박조팽 연결기", "Comment": "웹과 내 PC의 AI 연결", "Terminal": "false" } } },
     "publish": null
   }
 }

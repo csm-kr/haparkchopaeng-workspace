@@ -29,3 +29,6 @@ phases/**/step*-output.json
 
 # 운영 마이그레이션 로컬 백업(운영 데이터 — 커밋 금지)
 .migration-backup/
+
+# 하네스 검증 중 생성되는 Python 캐시
+/scripts/__pycache__/

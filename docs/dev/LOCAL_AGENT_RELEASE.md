@@ -26,9 +26,13 @@
 | Windows x64 | 실제 OS 암호화·정상 재개·암호문 손상 후 새 번호 복구, NSIS 설치·프로토콜 등록·제거 | 게시자 서명, 최종 서명본으로 다운로드부터 재설치/업데이트까지 확인 |
 | macOS arm64 | CI의 실제 네이티브 암호화·재개·손상 복구, arm64 DMG 생성 | Developer ID 서명·공증, 최종 설치본과 실제 브라우저의 전용 링크·권한 창·업데이트/제거 |
 | macOS x64 | x64 DMG 생성 | x64 네이티브 실행·암호화·재개 및 최종 설치 흐름 |
-| Ubuntu GUI x64 | 코어·패키징 경로 구현, Linux 기동 진단 중 | 네이티브 기동, Secret Service, deb/AppImage 설치·전용 링크·재실행·제거 |
+| Ubuntu GUI x64 | Ubuntu 24.04 CI에서 실제 Electron·Secret Service 암호화·정상 재개·손상 복구 13조건 통과, .deb 생성 | 한글 글꼴을 준비한 가독성, .deb 실제 설치·전용 링크·재실행·업데이트·제거·Wayland |
 
-Ubuntu는 GUI와 안전한 키링이 필요하다. `basic_text` 저장소는 차단한다. X11/Wayland의 펫 위치·항상 위 제약, headless 미지원도 안내한다. 각 OS의 완료 근거가 확보된 아키텍처만 다운로드 목록에 등록한다.
+위 네이티브 CI 근거는 [실행 39028900156](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156)이다. 실제 Electron·OS 암호화 저장소를 사용했으며 서버 API만 loopback fixture다. 실제 모델 추론·운영 웹·브라우저 URI 실행은 하지 않았다. macOS의 네이티브 실행은 arm64이며 x64는 DMG 생성과 구분한다.
+
+Ubuntu는 GUI와 안전한 키링, 한국어 표시가 가능한 글꼴이 필요하다. `basic_text` 저장소는 차단한다. 해당 CI는 공식 sandbox의 root:root/4755 준비를 검증했지만, CJK 글꼴이 없어 캡처 한글은 네모로 표시돼 가독성 재확인이 남았다. X11/Wayland의 펫 위치·항상 위 제약, headless 미지원도 안내한다. 각 OS의 완료 근거가 확보된 아키텍처만 다운로드 목록에 등록한다.
+
+Ubuntu 배포 후보는 .deb만이다. builder의 기본 AppImage launcher에서 샌드박스 비활성화 경로를 확인해 AppImage를 빌드·배포 대상에서 제외했다. 이전 CI가 만든 AppImage는 Git에서 제외한 개발 산출물로 보류하고 `LOCAL_AGENT_RELEASES`에 등록하지 않는다. 안전한 AppImage 대안 개발은 이번 배포 범위 밖이다.
 
 현재 로컬 Windows QA 파일은 `hapark-connector-0.1.0-win-x64.exe`, 111,583,838바이트, SHA256 `9E12B8206ECB8A365C799B978A73B0396E68FC0AA32D184A3DAC82F046D6ABD8`, Authenticode `NotSigned`다. 재빌드하면 해시를 다시 계산한다. 이 파일과 CI의 unsigned artifact는 개발 검토용으로 표시한다. 미서명 파일을 먼저 사용할 경우 운영자가 비공개 개발 파일럿 범위를 명시적으로 선택한다.
 
@@ -51,9 +55,9 @@ Get-FileHash -LiteralPath 'connector/dist/hapark-connector-0.1.0-win-x64.exe' -A
 npm --prefix connector run qa:install
 ```
 
-macOS는 해당 OS에서 `package:mac`을 실행하며 Developer ID 서명과 notarization을 활성화한다. CI의 `CSC_IDENTITY_AUTO_DISCOVERY=false` 설정은 unsigned 검증용이므로 정식 서명 환경을 따로 구성한다. 최종 앱에서 `codesign --verify --deep --strict`, `spctl --assess --type execute`, `xcrun stapler validate`를 확인한다. 두 아키텍처 DMG 생성과 각 아키텍처의 실제 실행 결과를 구분한다.
+macOS는 해당 OS에서 `package:mac`을 실행하며 [Developer ID 서명](https://developer.apple.com/developer-id/)과 [notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)을 활성화한다. 일반 Apple ID 로그인과 Apple Developer Program 가입·Developer ID 서명 자격은 구분하며 실제 서명 단계에서 사용할 자격과 인증서를 확인한다. 현재 서명 자격 보유 여부를 확정한 것은 아니다. CI의 `CSC_IDENTITY_AUTO_DISCOVERY=false` 설정은 unsigned 검증용이므로 정식 서명 환경을 따로 구성한다. 최종 앱에서 `codesign --verify --deep --strict`, `spctl --assess --type execute`, `xcrun stapler validate`를 확인한다. 두 아키텍처 DMG 생성과 각 아키텍처의 실제 실행 결과를 구분한다.
 
-Ubuntu는 네이티브 기동 진단을 끝낸 뒤 해당 GUI 환경에서 `package:linux` 결과를 설치한다. 안전한 키링에서 첫 연결·재개·복구를 검증하고 배포 파일의 SHA256을 기록한다. 자동 업데이트는 구현되지 않았으므로 새 설치 파일로 갱신하는 절차도 확인한다.
+Ubuntu는 CI 네이티브 기동·암호화 검증 뒤 해당 GUI 환경에서 `package:linux`의 .deb를 설치한다. CI의 실제 .deb 읽기 검사는 maintainer scripts·.desktop에 샌드박스 비활성화 인수가 없고 공식 sandbox 설정·URI MIME이 포함됐는지 확인하는 단계다. 실제 설치 성공과 구분한다. 안전한 키링과 한국어 글꼴을 갖춘 데스크톱에서 첫 연결·재개·복구·URI·제거를 검증하고 SHA256을 기록한다. 자동 업데이트는 구현되지 않았으므로 새 설치 파일로 갱신하는 절차도 확인한다. AppImage는 게시하지 않는다.
 
 ## 3. 운영 DB 읽기 전용 사전 확인
 

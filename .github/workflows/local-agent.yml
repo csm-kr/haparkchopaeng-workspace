@@ -116,7 +116,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11
+          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11 fonts-noto-cjk
       - name: Prepare official Linux Electron sandbox
         if: runner.os == 'Linux'
         shell: bash
@@ -169,6 +169,46 @@ jobs:
           retention-days: 14
       - name: Native installer build (unsigned validation artifact)
         run: npm --prefix connector/desktop run package:${{ matrix.platform }}
+      - name: Verify Debian sandbox and protocol contents
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$(realpath -e "${GITHUB_WORKSPACE}")"
+          packages=("${workspace}"/connector/dist/*.deb)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          test ! -L "${packages[0]}"
+          inspection="$(mktemp -d "${RUNNER_TEMP%/}/hapark-deb-inspection.XXXXXX")"
+          case "${inspection}" in
+            "${RUNNER_TEMP%/}"/hapark-deb-inspection.*) ;;
+            *) echo '::error::Debian inspection directory is outside the owned runner temp'; exit 1 ;;
+          esac
+          trap 'rm -rf -- "${inspection}"' EXIT
+          dpkg-deb --control "${packages[0]}" "${inspection}/control"
+          dpkg-deb --extract "${packages[0]}" "${inspection}/data"
+          mapfile -t desktop_files < <(find "${inspection}/data/usr/share/applications" -maxdepth 1 -type f -name '*.desktop' -print)
+          test "${#desktop_files[@]}" -eq 1
+          desktop="${desktop_files[0]}"
+          postinst="${inspection}/control/postinst"
+          test -s "${postinst}"
+          if grep -REin -- '--no-sandbox|--disable-sandbox|--disable-setuid-sandbox|--disable-seccomp-filter-sandbox|--disable-namespace-sandbox|--no-zygote-sandbox|ELECTRON_DISABLE_SANDBOX|apparmor_restrict_unprivileged_userns[[:space:]]*=[[:space:]]*0' "${inspection}/control" "${desktop}"; then
+            echo '::error::Debian launcher or maintainer script disables a sandbox boundary'
+            exit 1
+          else
+            scan_status="$?"
+            test "${scan_status}" -eq 1
+          fi
+          grep -Eq '^Exec="?/opt/.* %U$' "${desktop}"
+          grep -Fq 'x-scheme-handler/hapark-connect' "${desktop}"
+          grep -Fq 'unshare --user true' "${postinst}"
+          grep -Eq 'chmod 4755 .*/chrome-sandbox' "${postinst}"
+          grep -Eq 'chmod 0755 .*/chrome-sandbox' "${postinst}"
+          grep -Fq 'update-desktop-database' "${postinst}"
+          test "$(find "${inspection}/data/opt" -type f -name chrome-sandbox | wc -l)" -eq 1
+          dpkg-deb --field "${packages[0]}" Package Version Architecture
+          grep -E '^(Exec|MimeType)=' "${desktop}"
+          printf '%s\n' 'Debian archive verified: official sandbox setup and URI handler; no sandbox bypass. Installation was not performed.'
       - name: Windows install, protocol registration and uninstall
         if: matrix.platform == 'win'
         run: npm --prefix connector run qa:install
@@ -186,6 +226,5 @@ jobs:
             connector/dist/*.exe
             connector/dist/*.dmg
             connector/dist/*.deb
-            connector/dist/*.AppImage
           if-no-files-found: error
           retention-days: 14

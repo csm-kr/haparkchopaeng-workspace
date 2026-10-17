@@ -13,7 +13,7 @@
 5. 연결 뒤 웹에서 AI와 모델을 직접 선택한다. 처음 선택된 기본 모델은 없다. 이후 동일 기기는 암호화된 기기 키를 재사용하고 웹이 새로 승인한 연결을 이어 간다.
 6. 웹 로그아웃·세션 만료·연결 해제·권한 lease 만료 시 실행을 취소한다. 앱 창이 보이면 다시 연결할 안내를 유지한다. 기본 설정에서 창을 숨긴 상태라면 실행 정리 후 앱도 종료한다.
 
-처음 설치할 때 OS에 프로토콜 핸들러를 등록하므로 웹이 설치 경로를 알 필요가 없다. 앱이 꺼져 있어도 다음 웹 버튼이 실행한다. Windows는 사용자 단위 설치, macOS는 Applications에 복사, Ubuntu는 데스크톱 패키지/런처 등록을 사용한다. AppImage는 파일을 유지할 위치와 데스크톱 등록이 필요하다.
+처음 설치할 때 OS에 프로토콜 핸들러를 등록하므로 웹이 설치 경로를 알 필요가 없다. 앱이 꺼져 있어도 다음 웹 버튼이 실행한다. Windows는 사용자 단위 설치, macOS는 Applications에 복사, Ubuntu는 .deb 데스크톱 패키지/런처 등록을 사용한다. 각 OS의 실제 설치 검증 범위는 아래를 따른다.
 
 자동 시작과 펫은 기본으로 꺼져 있다. 사용자가 켠 경우에만 해당 백그라운드 상태를 유지한다. 웹 연결이 유효한 동안 X를 누르면 창을 숨기고 현재 연결을 유지하며 **앱 종료**는 명시적으로 취소 후 종료한다. 기본 설정에서는 웹 권한이 끝나면 숨은 앱을 남기지 않는다.
 
@@ -42,7 +42,7 @@ npm --prefix connector run qa:install
 
 UI 회귀는 사용자의 브라우저에 연결하지 않는다. 작업 전용 Electron의 CDP만 사용하고 실제 모델 작업을 적재하지 않는다. Windows 네이티브 닫기 검증은 소유한 앱 PID에만 WM_CLOSE를 전송한다. 산출물과 격리 프로필은 각각 무시되는 `artifacts/`와 작업별 임시 폴더에 둔다.
 
-설치 회귀는 GUID 임시 경로에 NSIS를 무인 설치하고 전용링크 등록 대상·최신 코어·번들 Node를 확인한 뒤 자체 제거해 기존 ‘등록 없음’ 상태로 복구한다. GUI·브라우저·모델 추론은 실행하지 않는다. Windows CI에서 패키징 다음 `qa:install`을 실행할 수 있다. macOS/Linux CI는 코어 테스트와 해당 OS 패키징을 사용하고 보안 저장소·네이티브 UI는 실기기 검증으로 남긴다.
+설치 회귀는 GUID 임시 경로에 NSIS를 무인 설치하고 전용링크 등록 대상·최신 코어·번들 Node를 확인한 뒤 자체 제거해 기존 ‘등록 없음’ 상태로 복구한다. GUI·브라우저·모델 추론은 실행하지 않는다. Windows CI에서도 패키징 다음 `qa:install`을 통과했다. 세 OS의 `node connector/scripts/ci-desktop-smoke.mjs`는 실제 Electron·OS 암호화 저장소와 loopback API fixture로 첫 연결·정상 종료 후 재개·손상 복구를 검증한다. 키링을 모의 구현하거나 평문 저장을 허용하지 않으며 모델을 호출하지 않는다. Linux는 workflow의 가상 디스플레이·D-Bus·키링·공식 sandbox 준비가 필요하다.
 
 `scripts/smoke.mjs --infer`는 실제 구독 사용량을 소비한다. 자동 테스트와 UI 회귀에서는 호출하지 않는다.
 
@@ -60,7 +60,7 @@ CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop ru
 CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop run package:linux
 ```
 
-각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. 현재 Windows NSIS 개발 설치본은 서명되지 않았고, macOS 서명·notarization과 Linux 실기기 검증은 완료하지 않았다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 업데이트한다. 최종 빌드 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
+각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. 현재 Windows NSIS 개발 설치본은 서명되지 않았고, macOS 서명·notarization과 macOS/Ubuntu의 실제 패키지 설치 흐름은 완료하지 않았다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 업데이트한다. 최종 빌드 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
 
 Electron의 Node 런타임을 앱에 포함한다. `desktop/node_modules`, `dist`, `artifacts`, 실제 환경의 `desktop/apps.generated.json`은 Git에 포함하지 않는다. CLI 로그인 토큰이나 OS 보안 저장소의 기기 키를 빌드·로그·저장소에 복사하지 않는다.
 
@@ -91,6 +91,10 @@ Codex는 read-only sandbox, 사용자 설정 무시, 임시 세션, 셸·이미�
 
 ## OS 범위와 다른 앱 적용
 
-Windows x64의 실제 CLI·UI·보안 저장소·NSIS 빌드를 검증했다. macOS arm64/x64와 GUI Ubuntu x64는 빌드 설정과 경로·프로토콜 처리를 구현했지만 실기기 검증이 남아 있다. Ubuntu는 키링, 데스크톱 세션, 패키지별 URI 등록이 필요하다. Wayland의 펫 위치·항상 위 표시에는 제약이 있어 자동 시작·펫을 필수로 삼지 않았다. Headless 서버 연결은 대상이 아니다.
+Windows x64에서는 로컬 실제 CLI·UI·보안 저장소·NSIS 설치/제거를 검증했다. [CI 실행 39028900156](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156)에서는 Windows x64, macOS 15 arm64, Ubuntu 24.04 x64의 실제 Electron·OS 암호화 저장·정상 앱 종료 후 재개·손상 복구 13조건을 각각 통과했다. API는 loopback fixture이며 세 runner에는 CLI가 설치되지 않아 실제 모델 추론·운영 웹·브라우저 URI 실행 검증으로 확대하지 않는다. macOS DMG는 arm64/x64 모두 생성했지만 x64 네이티브 UI는 미검증이다.
+
+Ubuntu는 GUI 세션, 활성 Secret Service/keyring, 한국어 표시 글꼴, 패키지별 URI 등록이 필요하다. CI의 Xvfb/D-Bus 세션에서는 공식 Electron sandbox를 root:root/4755로 준비해 샌드박스를 유지했다. 현재 캡처의 한글은 글꼴 부재로 네모여서 글꼴을 준비한 가독성 재검증이 남아 있다. .deb 생성은 통과했지만 일반 데스크톱 설치·제거·재부팅·Wayland는 미검증이며 .deb 설치를 우선 검증한다. 현재 builder의 기본 AppImage는 샌드박스 비활성화 인수 경로가 있어 빌드·배포 대상에서 제외했다. 이미 생성된 AppImage는 Git에서 제외한 개발 산출물로 보류하며 다운로드 목록에 등록하지 않는다. Wayland의 펫 위치·항상 위 표시에는 제약이 있어 자동 시작·펫을 필수로 삼지 않았다. Headless 서버 연결은 대상이 아니다.
+
+macOS Finder/설치·Keychain 확인창·서명/notarization, Ubuntu 패키지 설치와 브라우저 복귀, 운영 사이트의 최초 연결, OS 업데이트/앱 이동/재부팅 후 전용 링크 복구는 별도 검증 대상이다. CI의 unpackaged 앱 기동·종료와 설치된 앱의 사용자 흐름을 구분한다. 상세 근거와 남은 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
 
 다른 웹앱은 고유 appId·프로토콜·브랜드 자산·정적 HTTPS allowlist로 다시 구성하고 동일 REST 계약의 서버 어댑터를 제공한다. `parseLaunchUrl`과 암호화 저장소는 앱 ID별로 분리하지만, 사용자 입력 URI로 임의 origin을 추가하지 않는다. `scripts/configure-desktop.mjs`의 applications, 패키징 protocols, Windows `desktop/installer.nsh`의 프로토콜 키를 함께 변경한다. 이 폴더는 독립 Node 패키지이므로 별도 저장소로 추출할 수 있다.

@@ -73,7 +73,7 @@
     {
       "step": 3,
       "name": "web-flow",
-      "status": "pending",
+      "status": "completed",
       "paths": [
         "components/local-agent",
         "tests/e2e/local-agent.spec.ts"
@@ -85,14 +85,15 @@
           "e2e"
         ]
       ],
-      "summary": "첫 연결·설치 후 복귀·작은 링·모델 선택·390px 다크 모달을 실제 브라우저에서 검증한다.",
+      "summary": "첫 연결·설치 후 복귀·작은 링·모델 무선택·390px 다크 모달의 Chromium 흐름 4개를 통과했다. 한도·로그인·상태 변경 취소 사유와 빈 오류 fallback은 비동기 UI 회귀 5개를 추가해 확인했다.",
       "started_at": "2026-10-17T19:40:08+0900",
-      "completed_at": "2026-10-17T19:47:04+0900"
+      "completed_at": "2026-10-17T20:36:16+0900",
+      "verification": { "commit": "ffb00e5d943f046cc98b121cd866c577809f9dbb", "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156", "job": 117385267324 }
     },
     {
       "step": 4,
       "name": "integrated-quality",
-      "status": "pending",
+      "status": "completed",
       "paths": [],
       "checks": [
         [
@@ -111,12 +112,12 @@
           "build"
         ]
       ],
-      "summary": "main 기반 격리 작업트리에서 105 suites/845 tests, lint, production build, Chromium 흐름 4개, 실제 HTTP·45초 쿠키 회수 검증을 통과했다. PostgreSQL 16 실제 동시성 8개와 추가 SQL drift 검증도 별도 CI로 통과했다. 운영 DB는 변경하지 않았다.",
-      "completed_at": "2026-10-17T20:19:33+0900",
+      "summary": "main 기반 격리 작업트리에서 105 suites/852 tests, lint, production build, Chromium 흐름 4개, 실제 HTTP·45초 쿠키 회수 검증을 통과했다. 로그아웃 오류 시 IdP 종료 보장과 웹 오류 표시 회귀를 포함한다. PostgreSQL 16 실제 동시성 8개와 추가 SQL drift 검증도 별도 CI로 통과했다. 운영 DB는 변경하지 않았다.",
+      "completed_at": "2026-10-17T20:36:16+0900",
       "verification": {
-        "commit": "7671c008bf3d861397dbd95f79fee25678ac381b",
-        "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39027708420",
-        "jobs": { "web": 117381859476, "postgres": 117381859523 },
+        "commit": "ffb00e5d943f046cc98b121cd866c577809f9dbb",
+        "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156",
+        "jobs": { "web": 117385267324, "postgres": 117385267575 },
         "artifact": "web-evidence/phases/12-local-agent-connection/step4-output.json",
         "exitCodes": [0, 0, 0]
       }
