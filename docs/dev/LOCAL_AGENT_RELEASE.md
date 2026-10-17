@@ -1,6 +1,6 @@
 # 로컬 AI 연결 운영 배포 런북
 
-연결기 기준 `d54a1fd`의 [CI 39029600751](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751)에서 웹 852개·PostgreSQL 16 동시성 8개·3 OS native를 확인했다. 이후 phase 13의 로컬 논문 분석·AI 채팅을 추가했으며 그 변경의 검증 기록을 별도로 확인해야 한다. 운영 DB 반영·Production 승격·정식 설치 파일 게시 기록은 아직 없다. 실제 배포에는 최종 커밋, 해당 CI, 서명한 설치 파일의 SHA256을 한 묶음으로 기록한다.
+연결기 기준 `d54a1fd`의 [CI 39029600751](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751)에서 웹 852개·PostgreSQL 16 동시성 8개·3 OS native를 확인했다. 이후 로컬 논문 분석·AI 채팅을 추가한 `3f16685`의 [CI 39033348260](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·PostgreSQL 13개·Chromium 8개·HTTP 계약·3 OS native/패키징의 5 jobs가 성공했다. [새 기능 검증 HTML](../reports/local-ai-research-chat-2026-10-17.html)을 함께 확인한다. 운영 DB 반영·Production 승격·정식 설치 파일 게시 기록은 아직 없다. 실제 배포에는 최종 커밋, 해당 CI, 서명한 설치 파일의 SHA256을 한 묶음으로 기록한다.
 
 동작 계약은 [LOCAL_AGENT](LOCAL_AGENT.md)와 [연구 채팅 설계](../design/LOCAL_AI_RESEARCH_CHAT.md), 플랫폼별 검증 근거는 [connector/VALIDATION](../../connector/VALIDATION.md)를 따른다. 적용 SQL은 [연결기 5테이블](sql/20261017-local-agent-connection.sql) 다음 [논문 본문·분석 실행·대화 확장](sql/20261017-local-ai-research-chat.sql) 순서다.
 

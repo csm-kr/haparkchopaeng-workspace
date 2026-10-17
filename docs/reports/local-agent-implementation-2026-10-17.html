@@ -132,10 +132,13 @@
       </section>
 
       <section id="research-chat">
-        <h2>다음 작업: 논문 분석 API 대체와 AI 채팅</h2>
-        <p class="intro">사용자가 추가로 요청한 로컬 Codex·Claude Code를 통한 논문 분석 API 대체와 AI 채팅은 <strong>phase 13 구현 중</strong>입니다. 기존 연결·질문 카드 위에 새 분석·채팅 동작을 접합하는 별도 작업입니다.</p>
-        <div class="notice">이 보고서의 <strong>852개 웹 테스트·PostgreSQL 8개·3OS native 성공은 d54a1fd 연결기 기준</strong>입니다. 분석 대체·채팅의 기능 완료, 전체 테스트 통과, 운영 배포를 의미하지 않습니다. 새 기능은 해당 phase의 코드·인수 테스트·실제 검증 근거가 확보된 뒤 별도로 갱신합니다.</div>
-      </section>
+          <h2>?? ?? API ??? AI ??</h2>
+          <p class="intro">???? PDF ??? ????, ???? ??? PC?Codex/Claude Code??? ??? ??? ????? ?????. ?? <strong>AI ??</strong> ???? ? ?? 1~3?? ??? ???????? ?????? ??? ?????.</p>
+          <div class="notice"><strong>phase 13 ?? ?? ?? ??</strong><br>?? <code>3f16685</code>? <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260">CI 39033348260</a>?? ? 946???? PostgreSQL 13??Chromium 8??HTTP ?? ???3OS native/??? 5 jobs? ?? ??????. ?? ?? 2? PDF? Codex ??? ?? ?? ?? 2? ? ??? ??? ???? ? ????? ?? 1? ??????. ?? ????API fallback??? DB ??? 0???.</div>
+          <p class="small">??? ??????? ?? ???Figure???? ??? ?? ? ??, ????? ?? ? ?? ?? ??? ??? ??? ??? ??? ?????. ?? ???? ?? ????? ?? ???????? ?? ??? ??????. Figure? ?????? ???? ?? ??? ????? ?? ??? ???? ????.</p>
+          <p><a class="tool" href="local-ai-research-chat-2026-10-17.html">? ????? ??? ?? ?? HTML ?? ?</a></p>
+          <p class="small">?? ?? 852??PostgreSQL 8? ??? ??? ???? d54a1fd ??? ?????. ? ??? 946??13? ??? ?????. ?? SQL ?? ?????/????? ??????? ??? ?? ?? ????.</p>
+        </section>
 
       <section id="release">
         <h2>제품 배포와 재사용을 위한 남은 일</h2>
@@ -630,177 +633,187 @@
   <!-- 오케스트레이터 갱신용: 실제 실행한 최신 CI 결과만 아래 JSON에 반영한다. -->
   <script id="verification-data" type="application/json">
 {
-    "updatedAt":  "2026-10-17 · 연결기 d54a1fd: 웹 852·PG16 8·3OS native PASS · 공통1fc2689 3OS CI PASS · phase13 구현 중",
-    "checks":  {
-                   "e2e":  {
-                               "state":  "pass",
-                               "text":  "CI Chromium UI 4/4 통과 · 기존 locator 캡처 4개 유지"
-                           },
-                   "uiUnit":  {
-                                  "state":  "pass",
-                                  "text":  "최신 웹 전체 회귀에 포함 · 이전 단위·UI 수와 중복 합산하지 않음"
-                              },
-                   "native":  {
-                                  "state":  "pass",
-                                  "text":  "Windows 실제 앱·암호화 보관·권한 종료 검증 통과"
-                              },
-                   "codex":  {
-                                 "state":  "pass",
-                                 "text":  "실제 추론 1회 성공 · 답변 4"
-                             },
-                   "claude":  {
-                                  "state":  "fail",
-                                  "text":  "총 3회 실패 · 최종 구독 한도 오류"
-                              },
-                   "wire":  {
-                                "state":  "pass",
-                                "text":  "CI 실제 HTTP 통합 PASS · 모델은 가짜 어댑터"
-                            },
-                   "harness":  {
-                                   "state":  "pass",
-                                   "text":  "CI 하네스·격리 검증기 게이트 통과"
-                               },
-                   "fullQuality":  {
-                                       "state":  "pass",
-                                       "text":  "105 suites·웹 852개 통과·PG 전용 8개 skip · 린트·프로덕션 빌드 통과"
-                                   },
-                   "windowsRelease":  {
-                                          "state":  "pass",
-                                          "text":  "로컬·CI native와 NSIS 설치 회귀 PASS · 미서명"
-                                      },
-                   "production":  {
-                                      "state":  "pending",
-                                      "text":  "운영 적용 미확인 · 소비자 읽기 조사에서 status/downloads 404"
-                                  },
-                   "downloads":  {
-                                     "state":  "pending",
-                                     "text":  "로컬·CI 설치본 각각 검증 · 공개 배포·서명·운영 GUI 콜백 미검증"
-                                 },
-                   "extraction":  {
-                                      "state":  "pass",
-                                      "text":  "private 공통 repo·두 번째 호스트·스킬 소비자 설계·3OS CI 완료"
-                                  },
-                   "windowsInstall":  {
-                                          "state":  "pass",
-                                          "text":  "로컬·CI 설치·등록·9개 코어 SHA·런타임·제거·원복 PASS"
-                                      },
-                   "coreTests":  {
-                                     "state":  "pass",
-                                     "text":  "코어 43/43 · Windows·macOS·Ubuntu CI 통과"
-                                 },
-                   "localAgentTests":  {
-                                           "state":  "pass",
-                                           "text":  "최신 웹 전체 격리 회귀에 포함 · 중복 합산하지 않음"
-                                       },
-                   "nativeRecovery":  {
-                                          "state":  "pass",
-                                          "text":  "정상 무번호 재개·손상 후 새 번호 복구 PASS · 추론 0회"
-                                      },
-                   "postgres":  {
-                                    "state":  "pass",
-                                    "text":  "실제 PostgreSQL 16 · 동시성·권한 8/8 통과"
-                                },
-                   "nativeCi":  {
-                                    "state":  "pass",
-                                    "text":  "Windows x64·Mac arm64·Ubuntu x64 각 13항목 PASS · 실제 OS 암호화"
-                                },
-                   "commonTests":  {
-                                       "state":  "pass",
-                                       "text":  "Windows 64 tests + builder 1 + helper self-test 7 PASS"
-                                   },
-                   "commonNative":  {
-                                        "state":  "pass",
-                                        "text":  "공통 Windows native 13항목 + 브랜드 DOM PASS · NSIS 실제 설치 PASS"
-                                    },
-                   "commonRemote":  {
-                                        "state":  "pass",
-                                        "text":  "1fc2689 · CI 39030734544 · Mac/Windows/Ubuntu 3 jobs SUCCESS"
-                                    }
-               },
-    "ci":  {
-               "url":  "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751",
-               "sourceCommit":  "d54a1fd",
-               "scope":  "Local-agent connector baseline; excludes phase13",
-               "state":  "pass",
-               "resultVerified":  true,
-               "conclusion":  "success",
-               "jobsPassed":  5,
-               "scopeResults":  {
-                                    "web":  "pass",
-                                    "postgres":  "pass",
-                                    "windowsNativeAndInstaller":  "pass",
-                                    "macosArm64NativeAndDmg":  "pass",
-                                    "linuxNativeAndDeb":  "pass"
-                                },
-               "baseline":  {
-                                "webSuitesPassed":  105,
-                                "webTestsPassed":  852,
-                                "webTestsSkipped":  8,
-                                "postgresTestsPassed":  8,
-                                "postgresVersion":  16,
-                                "coreTestsPerOs":  43,
-                                "nativeChecksPerOs":  13,
-                                "lintExitCode":  0,
-                                "buildExitCode":  0,
-                                "uiTestsPassed":  4,
-                                "wire":  "pass",
-                                "ubuntuCjkReadable":  true,
-                                "debContentChecked":  true,
-                                "appImageExcluded":  true
-                            },
-               "historicalInstallerReceipt":  {
-                                                  "url":  "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028192201/job/117383245219",
-                                                  "sha256":  "3178E741D3D01BC91C6C119B73A4B1A01992DAA7AC974E4CE532E1E8B39C5A27",
-                                                  "belongsToLatestCi":  false
-                                              },
-               "pullRequest":  "https://github.com/csm-kr/haparkchopaeng-workspace/pull/23"
-           },
-    "commonRepository":  {
-                             "url":  "https://github.com/csm-kr/local-agent-connector",
-                             "visibility":  "private",
-                             "sourceCommit":  "1fc2689",
-                             "urlCi":  "https://github.com/csm-kr/local-agent-connector/actions/runs/39030734544",
-                             "conclusion":  "success",
-                             "jobsPassed":  3,
-                             "originalCoreFilesSha256Matched":  9,
-                             "windowsLocal":  {
-                                                  "testsPassed":  64,
-                                                  "builderTestsPassed":  1,
-                                                  "helperSelfTestsPassed":  7,
-                                                  "nativeChecksPassed":  13,
-                                                  "nsisInstalledAndRemoved":  true,
-                                                  "inferenceCalls":  0
-                                              },
-                             "artifactsArchived":  false,
-                             "artifactsReason":  "GitHub account artifact storage quota; upload optional and default off",
-                             "firstCi":  {
-                                             "url":  "https://github.com/csm-kr/local-agent-connector/actions/runs/39030533949",
-                                             "conclusion":  "failure",
-                                             "reason":  "artifact quota after native success"
-                                         },
-                             "productionReleaseVerified":  false
-                         },
-    "skillConsumer":  {
-                          "kitCommit":  "db770ef",
-                          "hostCommit":  "d54a1fd",
-                          "mode":  "read-only planning",
-                          "asideVersion":  "1.26.1015.732",
-                          "renderedDashboardObserved":  false,
-                          "dashboardFetch":  "redirected to login SSR",
-                          "statusApi":  404,
-                          "downloadsApi":  404,
-                          "tabsUnchanged":  true,
-                          "activeTargetUnchanged":  true,
-                          "codeChanges":  0,
-                          "inferenceCalls":  0,
-                          "reportSha256":  "8D76F0417316B0ADD706E7E50C25EF8D4C1418EC57021725DE31299E1F9E196D"
-                      },
-    "phase13":  {
-                    "scope":  "Local paper analysis provider replacement and AI chat",
-                    "state":  "in_progress",
-                    "connectorBaselineDoesNotVerifyNewFeatures":  true,
-                    "productionVerified":  false
-                }
+  "updatedAt": "2026-10-17 ? ??? d54a1fd ??? ?? ? phase13 3f16685: ?946?PG13?????8?3OS CI PASS",
+  "checks": {
+    "e2e": {
+      "state": "pass",
+      "text": "CI Chromium UI 4/4 통과 · 기존 locator 캡처 4개 유지"
+    },
+    "uiUnit": {
+      "state": "pass",
+      "text": "최신 웹 전체 회귀에 포함 · 이전 단위·UI 수와 중복 합산하지 않음"
+    },
+    "native": {
+      "state": "pass",
+      "text": "Windows 실제 앱·암호화 보관·권한 종료 검증 통과"
+    },
+    "codex": {
+      "state": "pass",
+      "text": "실제 추론 1회 성공 · 답변 4"
+    },
+    "claude": {
+      "state": "fail",
+      "text": "총 3회 실패 · 최종 구독 한도 오류"
+    },
+    "wire": {
+      "state": "pass",
+      "text": "CI 실제 HTTP 통합 PASS · 모델은 가짜 어댑터"
+    },
+    "harness": {
+      "state": "pass",
+      "text": "CI 하네스·격리 검증기 게이트 통과"
+    },
+    "fullQuality": {
+      "state": "pass",
+      "text": "105 suites·웹 852개 통과·PG 전용 8개 skip · 린트·프로덕션 빌드 통과"
+    },
+    "windowsRelease": {
+      "state": "pass",
+      "text": "로컬·CI native와 NSIS 설치 회귀 PASS · 미서명"
+    },
+    "production": {
+      "state": "pending",
+      "text": "운영 적용 미확인 · 소비자 읽기 조사에서 status/downloads 404"
+    },
+    "downloads": {
+      "state": "pending",
+      "text": "로컬·CI 설치본 각각 검증 · 공개 배포·서명·운영 GUI 콜백 미검증"
+    },
+    "extraction": {
+      "state": "pass",
+      "text": "private 공통 repo·두 번째 호스트·스킬 소비자 설계·3OS CI 완료"
+    },
+    "windowsInstall": {
+      "state": "pass",
+      "text": "로컬·CI 설치·등록·9개 코어 SHA·런타임·제거·원복 PASS"
+    },
+    "coreTests": {
+      "state": "pass",
+      "text": "코어 43/43 · Windows·macOS·Ubuntu CI 통과"
+    },
+    "localAgentTests": {
+      "state": "pass",
+      "text": "최신 웹 전체 격리 회귀에 포함 · 중복 합산하지 않음"
+    },
+    "nativeRecovery": {
+      "state": "pass",
+      "text": "정상 무번호 재개·손상 후 새 번호 복구 PASS · 추론 0회"
+    },
+    "postgres": {
+      "state": "pass",
+      "text": "실제 PostgreSQL 16 · 동시성·권한 8/8 통과"
+    },
+    "nativeCi": {
+      "state": "pass",
+      "text": "Windows x64·Mac arm64·Ubuntu x64 각 13항목 PASS · 실제 OS 암호화"
+    },
+    "commonTests": {
+      "state": "pass",
+      "text": "Windows 64 tests + builder 1 + helper self-test 7 PASS"
+    },
+    "commonNative": {
+      "state": "pass",
+      "text": "공통 Windows native 13항목 + 브랜드 DOM PASS · NSIS 실제 설치 PASS"
+    },
+    "commonRemote": {
+      "state": "pass",
+      "text": "1fc2689 · CI 39030734544 · Mac/Windows/Ubuntu 3 jobs SUCCESS"
+    }
+  },
+  "ci": {
+    "url": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751",
+    "sourceCommit": "d54a1fd",
+    "scope": "Local-agent connector baseline; excludes phase13",
+    "state": "pass",
+    "resultVerified": true,
+    "conclusion": "success",
+    "jobsPassed": 5,
+    "scopeResults": {
+      "web": "pass",
+      "postgres": "pass",
+      "windowsNativeAndInstaller": "pass",
+      "macosArm64NativeAndDmg": "pass",
+      "linuxNativeAndDeb": "pass"
+    },
+    "baseline": {
+      "webSuitesPassed": 105,
+      "webTestsPassed": 852,
+      "webTestsSkipped": 8,
+      "postgresTestsPassed": 8,
+      "postgresVersion": 16,
+      "coreTestsPerOs": 43,
+      "nativeChecksPerOs": 13,
+      "lintExitCode": 0,
+      "buildExitCode": 0,
+      "uiTestsPassed": 4,
+      "wire": "pass",
+      "ubuntuCjkReadable": true,
+      "debContentChecked": true,
+      "appImageExcluded": true
+    },
+    "historicalInstallerReceipt": {
+      "url": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028192201/job/117383245219",
+      "sha256": "3178E741D3D01BC91C6C119B73A4B1A01992DAA7AC974E4CE532E1E8B39C5A27",
+      "belongsToLatestCi": false
+    },
+    "pullRequest": "https://github.com/csm-kr/haparkchopaeng-workspace/pull/23"
+  },
+  "commonRepository": {
+    "url": "https://github.com/csm-kr/local-agent-connector",
+    "visibility": "private",
+    "sourceCommit": "1fc2689",
+    "urlCi": "https://github.com/csm-kr/local-agent-connector/actions/runs/39030734544",
+    "conclusion": "success",
+    "jobsPassed": 3,
+    "originalCoreFilesSha256Matched": 9,
+    "windowsLocal": {
+      "testsPassed": 64,
+      "builderTestsPassed": 1,
+      "helperSelfTestsPassed": 7,
+      "nativeChecksPassed": 13,
+      "nsisInstalledAndRemoved": true,
+      "inferenceCalls": 0
+    },
+    "artifactsArchived": false,
+    "artifactsReason": "GitHub account artifact storage quota; upload optional and default off",
+    "firstCi": {
+      "url": "https://github.com/csm-kr/local-agent-connector/actions/runs/39030533949",
+      "conclusion": "failure",
+      "reason": "artifact quota after native success"
+    },
+    "productionReleaseVerified": false
+  },
+  "skillConsumer": {
+    "kitCommit": "db770ef",
+    "hostCommit": "d54a1fd",
+    "mode": "read-only planning",
+    "asideVersion": "1.26.1015.732",
+    "renderedDashboardObserved": false,
+    "dashboardFetch": "redirected to login SSR",
+    "statusApi": 404,
+    "downloadsApi": 404,
+    "tabsUnchanged": true,
+    "activeTargetUnchanged": true,
+    "codeChanges": 0,
+    "inferenceCalls": 0,
+    "reportSha256": "8D76F0417316B0ADD706E7E50C25EF8D4C1418EC57021725DE31299E1F9E196D"
+  },
+  "phase13": {
+    "scope": "Local paper analysis provider replacement and private research chat",
+    "state": "verified_candidate",
+    "sourceCommit": "3f16685312e297d93461cba762ef6bc0fcdade75",
+    "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260",
+    "jobsPassed": 5,
+    "webTestsPassed": 946,
+    "postgresTestsPassed": 13,
+    "chromiumTestsPassed": 8,
+    "liveCodexManualCalls": 3,
+    "liveCodexPasses": 1,
+    "liveCodexFormatFailures": 2,
+    "automaticRetries": 0,
+    "report": "local-ai-research-chat-2026-10-17.html",
+    "productionVerified": false
+  }
 }
   </script>
   <script>

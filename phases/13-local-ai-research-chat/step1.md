@@ -14,7 +14,7 @@
 
 ```text
 node --test scripts/local-agent-verify.test.mjs scripts/local-agent-pg-guard.test.mjs
-python -m pytest scripts/test_execute.py -q
+python -X utf8 -m pytest scripts/test_execute.py -q
 ```
 
 최종 소스 커밋의 GitHub Actions 전체 검증이 끝난 뒤 해당 `gh run watch <run-id> --repo csm-kr/haparkchopaeng-workspace --exit-status`를 `index.json`의 checks에 추가하고 `python scripts/execute.py 13-local-ai-research-chat --verify --step 1`로 결과를 기록한다. 실패한 run을 최종 통과로 인용하지 않는다.

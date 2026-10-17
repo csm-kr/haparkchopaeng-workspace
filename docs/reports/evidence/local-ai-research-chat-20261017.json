@@ -1,0 +1,159 @@
+{
+  "source": "3f16685312e297d93461cba762ef6bc0fcdade75",
+  "ci": {
+    "url": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260",
+    "commit": "3f16685312e297d93461cba762ef6bc0fcdade75",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 117398182377,
+        "name": "web",
+        "conclusion": "success"
+      },
+      {
+        "id": 117398182539,
+        "name": "connector (ubuntu-24.04, linux)",
+        "conclusion": "success"
+      },
+      {
+        "id": 117398182556,
+        "name": "connector (macos-15, mac)",
+        "conclusion": "success"
+      },
+      {
+        "id": 117398182622,
+        "name": "postgres",
+        "conclusion": "success"
+      },
+      {
+        "id": 117398182667,
+        "name": "connector (windows-latest, win)",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "web": {
+    "suitesPassed": 120,
+    "testsPassed": 946,
+    "postgresTestsSkipped": 13,
+    "lintPassed": true,
+    "productionBuildPassed": true
+  },
+  "postgres": {
+    "version": 16,
+    "scope": "dedicated ephemeral CI database",
+    "testsPassed": 13,
+    "schemaDrift": 0,
+    "sqlOrder": [
+      "20261017-local-agent-connection.sql",
+      "20261017-local-ai-research-chat.sql"
+    ]
+  },
+  "e2e": {
+    "testsPassed": 8,
+    "connector": 4,
+    "chat": 3,
+    "analysis": 1,
+    "mode": "real Chromium with REST fixtures",
+    "modelInferences": 0
+  },
+  "wire": {
+    "testsPassed": 1,
+    "webLeaseSeconds": 45,
+    "modelInferences": 0,
+    "mode": "real HTTP server plus desktop runtime; AI adapter fixture"
+  },
+  "guards": {
+    "nodeIsolationPassed": 15,
+    "harnessPytestPassed": 60,
+    "windowsPythonMode": "-X utf8"
+  },
+  "liveAnalysis": {
+    "passed": true,
+    "calls": 3,
+    "successes": 1,
+    "failed": 2,
+    "provider": "codex",
+    "model": "gpt-6-luna",
+    "syntheticPdfPages": 2,
+    "automaticRetries": 0,
+    "productionDbConnections": 0,
+    "apiFallbacks": 0,
+    "receipt": "evidence/local-analysis-codex-20261017.json"
+  },
+  "aside": {
+    "session": "FhMMyshx0H9rLn8G",
+    "mode": "isolated local app, existing authenticated browser, UI reads and development login only",
+    "verified": [
+      "AI chat navigation",
+      "team paper selection",
+      "no default model",
+      "send blocked before connection/model/source",
+      "starter fills draft without sending",
+      "paper local analysis card"
+    ],
+    "notObserved": [
+      "three-paper maximum with actual data",
+      "stored two-lens Figure and notes, absent from QA fixture"
+    ],
+    "qaTabsClosed": true,
+    "existingTabsPreserved": 2,
+    "activeTargetPreserved": true,
+    "focusChanges": 0,
+    "modelInferences": 0
+  },
+  "native": {
+    "platforms": [
+      "Windows x64",
+      "macOS arm64",
+      "Ubuntu 24.04 GUI x64"
+    ],
+    "checksPerPlatform": 13,
+    "macIntelNativeTested": false,
+    "linuxDebInstalled": false,
+    "appImageSupported": false,
+    "signed": false
+  },
+  "commonRepo": {
+    "url": "https://github.com/csm-kr/local-agent-connector",
+    "private": true,
+    "head": "4281e1cdf9f852d83d0354b9037f0b8886f85f2f",
+    "ci": "https://github.com/csm-kr/local-agent-connector/actions/runs/39031837065",
+    "conclusion": "success"
+  },
+  "production": {
+    "sqlApplied": false,
+    "deployed": false,
+    "publicDownloadsPublished": false,
+    "signingConfigured": false,
+    "notarizationConfigured": false
+  },
+  "overallGoalComplete": false,
+  "originalWorkspace": {
+    "testsPassed": 151,
+    "postgresTestsSkipped": 13,
+    "unrelatedUserFilesPreserved": 71,
+    "gitIndexPreserved": true
+  },
+  "reportReview": {
+    "engine": "Aside",
+    "session": "YSJpHu7bQMwrVUwm",
+    "mode": "read-only loopback HTML preview",
+    "verified": [
+      "dark and light theme switching",
+      "three embedded PNGs complete with valid natural dimensions",
+      "image zoom, close, Escape and focus restoration",
+      "1440x900 computed layout without horizontal clipping",
+      "previous implementation report HTTP link and eleven PNGs",
+      "fixture labels, actual inference counts and operational limits"
+    ],
+    "pixelScreenshotObtained": false,
+    "mobileViewportObserved": false,
+    "screenshotFailure": "background CDP screenshot timeout; no focus-stealing workaround used",
+    "qaTabsClosed": true,
+    "existingTabsPreserved": 2,
+    "activeTargetPreserved": true,
+    "focusChanges": 0,
+    "modelInferences": 0
+  }
+}

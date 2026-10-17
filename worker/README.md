@@ -11,4 +11,4 @@
 
 현재 CLI는 텍스트 전용이다. Figure 이미지는 원문 PDF 페이지를 렌더하고 해석은 본문·캡션 기반 추론으로 표시한다. 외부 저장소 방문·검증은 하지 않는다. 연구 채팅은 별도 `/ai-chat`과 동일 로컬 큐를 사용하고 논문 관점·공유 노트를 자동 변경하지 않는다.
 
-검증은 격리 런처 `npm run test:local-agent` 또는 `npm run test:isolated`를 사용한다. 새 기능의 전체 품질 검증은 진행 중이고 운영 SQL은 아직 미적용이다. [API](../docs/dev/API.md), [스키마·수동 적용](../docs/dev/DB.md#local-ai-schema), [ADR-026](../docs/agent/ADR.md#adr-026)을 따른다.
+검증은 격리 런처 `npm run test:local-agent` 또는 `npm run test:isolated`를 사용한다. 소스 `3f16685`의 [CI](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·실제 PostgreSQL 13개·Chromium 8개·HTTP 계약을 통과했다. 운영 SQL은 아직 미적용이다. [검증 HTML](../docs/reports/local-ai-research-chat-2026-10-17.html), [API](../docs/dev/API.md), [스키마·수동 적용](../docs/dev/DB.md#local-ai-schema), [ADR-026](../docs/agent/ADR.md#adr-026)을 따른다.

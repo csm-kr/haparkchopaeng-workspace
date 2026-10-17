@@ -213,4 +213,4 @@ LiveKit 기반 다자간 화상 룸. 라이브가 없을 때의 빈 상태 — �
 
 별도 메뉴 `/ai-chat`에서 같은 팀 논문 1~3개를 근거로 개인 대화를 이어간다. 부분 답변·중지·연결 끊김을 구분하고 대화 기록과 현재 PC 실행 권한을 분리한다. 목록 최근 100개·상세 50턴, 모델 문맥은 완료된 최근 8턴·원문 합계 20만 자이며 생략 여부를 표시한다. 현재 CLI는 텍스트 전용으로 Figure는 본문·캡션 기반 추론, 외부 저장소는 미검증이다. Gemini·다른 CLI·원격 유료 API로 자동 대체하지 않는다.
 
-추가 전체 품질 검증은 진행 중이며 운영 DB에는 아직 적용하지 않았다. 기존 연결 5개 테이블 이후 연구 대화 테이블·추가 컬럼을 수동 적용해야 한다. [제품 범위](docs/user/PRD.md), [ADR-026](docs/agent/ADR.md#adr-026), [API](docs/dev/API.md), [스키마·운영 적용 순서](docs/dev/DB.md#local-ai-schema), [진행 하네스](phases/13-local-ai-research-chat/index.json)를 참조한다.
+소스 `3f16685`의 [CI 39033348260](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·실제 PostgreSQL 16 동시성 13개·Chromium 8개·HTTP 쿠키 회수·3 OS native/패키징을 통과했다. 합성 2쪽 PDF의 실제 Codex 구조화 분석은 형식 안내 수정 뒤 1회 성공했으며 이전 형식 거절 2회와 구분한다. 운영 DB·서명 배포는 아직 미완료다. 기존 연결 5개 테이블 이후 연구 대화 테이블·추가 컬럼을 수동 적용해야 한다. [화면과 검증 HTML](docs/reports/local-ai-research-chat-2026-10-17.html), [제품 범위](docs/user/PRD.md), [ADR-026](docs/agent/ADR.md#adr-026), [API](docs/dev/API.md), [스키마·운영 적용 순서](docs/dev/DB.md#local-ai-schema), [검증 하네스](phases/13-local-ai-research-chat/index.json)를 참조한다.
