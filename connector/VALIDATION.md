@@ -6,7 +6,7 @@ Windows x64(build 10.0.26200), 개발 Node 24.15.0, Electron 44.9.0, electron-bu
 
 | 항목 | 결과 | 근거 |
 | --- | --- | --- |
-| 독립 코어 테스트 | 37/37 통과 | `npm --prefix connector test` |
+| 독립 코어 테스트 | 43/43 통과 | `npm --prefix connector test` |
 | 실제 자식 프로세스 취소 | 통과 | 숨김 Node 자식을 시작하고 abort 완료 뒤 PID 소멸 확인 |
 | Codex 메타데이터 | 실제 확인 | 0.163.0, ChatGPT 로그인, 모델 7개, 제공된 7일 한도만 표시 |
 | Claude 메타데이터 | 실제 확인 | 2.1.301, 모델 12개, claude.ai/firstParty/Max 구독 OAuth |
@@ -49,7 +49,7 @@ Claude는 haiku에 같은 질문만 보냈다. 초기 2회 실패 후 승인된 
 npm --prefix connector run qa:desktop
 ```
 
-최종 실행은 2026-10-17 19:44 KST에 완료했다. 작업별 임시 프로필, loopback 서버, offscreen Electron renderer를 사용했다. 사용자의 웹 브라우저·기존 프로필·기본 프로토콜을 조작하지 않았다. 실제 CLI의 메타데이터를 조회했지만 fixture는 어떤 추론 작업도 만들지 않는다.
+최종 실행은 2026-10-17 20:09 KST에 완료했다. 작업별 임시 프로필, loopback 서버, offscreen Electron renderer를 사용했다. 사용자의 웹 브라우저·기존 프로필·기본 프로토콜을 조작하지 않았다. 실제 CLI의 메타데이터를 조회했지만 fixture는 어떤 추론 작업도 만들지 않는다.
 
 - 다크 배경 rgb(22,21,26), 빈 6자리 입력, 5자리 버튼 비활성, 잘못된 6자리 오류, 올바른 번호 연결.
 - 자동 시작·펫 기본 꺼짐, Node renderer 노출 없음, 가로 overflow 없음, 사용자 포커스 이동 없음.
@@ -84,15 +84,15 @@ npm --prefix connector run qa:install
 
 `dist/win-unpacked/resources/app.asar`의 manifest에서 production origin=https://hapark.vercel.app, development=false를 직접 확인했다. Windows NSIS는 설치 때도 전용 링크를 등록하도록 customInstall을 사용하며, 제거 시 현재 등록이 자기 설치 경로를 가리킬 때만 지운다.
 
-설치 회귀는 기존 동명 설치·merged 프로토콜이 없는 사용자만 허용한다. 검증한 절대 임시 경로에 `/S`로 설치하고 설치 경로를 가리키는 URI 명령, 최신 lifecycle 코어, 설치된 번들 Node를 확인한 뒤 own uninstaller로 제거한다. 브라우저와 GUI 첫 실행은 하지 않는다. 생성되는 `artifacts/windows-installer-qa.json`에 크기·SHA256·런타임 버전과 원복 결과를 남긴다.
+설치 회귀는 기존 동명 설치·merged 프로토콜이 없는 사용자만 허용한다. 검증한 절대 임시 경로에 `/S`로 설치하고 설치 경로를 가리키는 URI 명령, 코어 9개 전체의 이름·SHA256, 설치된 번들 Node를 확인한 뒤 own uninstaller로 제거한다. 브라우저와 GUI 첫 실행은 하지 않는다. 생성되는 `artifacts/windows-installer-qa.json`에 크기·SHA256·런타임 버전·대조한 모듈 목록과 원복 결과를 남긴다.
 
-최종 설치본은 `dist/hapark-connector-0.1.0-win-x64.exe`, **111,583,460 bytes**(약 106.4 MiB), Authenticode **NotSigned**다.
+최종 설치본은 `dist/hapark-connector-0.1.0-win-x64.exe`, **111,583,838 bytes**(약 106.4 MiB), Authenticode **NotSigned**다.
 
 ```text
-SHA256 7B62D8F6C5530C68A279603CFAA100F9B09C63679611C64EA0D0159D562DA5D3
+SHA256 9E12B8206ECB8A365C799B978A73B0396E68FC0AA32D184A3DAC82F046D6ABD8
 ```
 
-2026-10-17 19:52 KST에 시작한 실제 설치 회귀는 PASS다. 기존 프로토콜·동명 설치 없음 → task-owned 임시 경로에 무인 설치 → URI가 설치된 실행 파일을 가리킴 → lifecycle 코어와 소스 일치 → 번들 Node **24.22.0**·Electron **44.9.0** 실행 → 자체 제거 → merged 프로토콜이 다시 없음·임시 설치 경로 제거를 확인했다. GUI·브라우저·실제 모델 호출은 0회다. 이전 NSIS 구성에서 설치 직후 URI가 없던 실패를 재현한 뒤 customInstall/customUnInstall 보강으로 통과시켰다.
+2026-10-17 20:11 KST에 시작한 최종 실제 설치 회귀는 PASS다. 기존 프로토콜·동명 설치 없음 → task-owned 임시 경로에 무인 설치 → URI가 설치된 실행 파일을 가리킴 → storage 복구를 포함한 코어 9개 모두 소스와 이름·SHA256 일치 → 번들 Node **24.22.0**·Electron **44.9.0** 실행 → 자체 제거 → merged 프로토콜이 다시 없음·임시 설치 경로 제거를 확인했다. GUI·브라우저·실제 모델 호출은 0회다. 이전 NSIS 구성에서 설치 직후 URI가 없던 실패를 재현한 뒤 customInstall/customUnInstall 보강으로 통과시켰다.
 
 UI 회귀가 만든 이전 임시 프로필 7개를 추가로 삭제하려던 명령은 자동 승인 검토가 정책으로 거절해 그대로 두었다. 이 프로필은 Git 범위 밖의 task-owned Temp 폴더이며 가짜 서버용 암호화 기기 키만 포함한다. 소유 Electron·CLI 메타데이터·fixture 프로세스와 포트 3000 listener는 남기지 않았다.
 
@@ -103,6 +103,14 @@ macOS arm64/x64의 실제 설치·Keychain·Finder 실행, Ubuntu GUI에서 Secr
 3 OS CI에는 코어 테스트와 각 OS 패키징을 사용할 수 있다. Windows CI는 `qa:install`도 실행할 수 있다. `qa:desktop`은 현재 Windows의 실제 WM_CLOSE 및 로그인한 CLI 메타데이터를 확인하는 회귀이므로 무인 3 OS 공통 UI 검증으로 주장하지 않는다.
 
 ## 첫 실제 3 OS CI에서 발견한 패키징 차이
+
+### 암호문 손상 뒤 다시 연결
+
+새 네이티브 회귀에서 최초 페어링 직후 강제 종료한 프로필이 재실행 시 복호화 오류로 막히는 현상을 확인했다. Chromium OS 키의 Local State flush 여부는 원인 가설이며 확정하지 않았다. OS 보안 저장소가 활성 상태일 때 읽을 수 없는 암호문을 고유 `devices.enc.json.unreadable-UUID.enc.bak`으로 보존하고 새 기기 키·새 6자리 확인으로 복구하도록 구현했다. 정상 키·다른 앱의 정상 레코드는 유지하고, 비활성·접근 권한·파일 읽기 오류는 복구로 간주하지 않는다. 읽기·저장·제거·백업은 같은 큐에 들어간다.
+
+저장소 회귀는 7/7, 전체 코어는 43/43이며 독립 읽기 감사에서도 새 blocker가 없었다. 실제 Windows OS safeStorage로 정상 종료 후 재개, 자기 임시 프로필의 암호문 1비트 손상, 다음 기동에서 빈 6자리 입력, 다른 새 번호(716204)로 새 신원 페어링을 통과했다. 자동으로 이전 신원을 승인하지 않았고, 고유 기기 키는 2개, 원본 손상 바이트와 같은 암호문 백업은 1개를 유지했다. 모델 작업·브라우저 호출은 0회이며 근거는 `artifacts/ci-desktop-smoke-windows/result.json`이다. 정상 종료 재개와 암호문 손상 복구를 검증한 것이며 강제 종료 원인 가설을 실증한 것으로 확대하지 않는다.
+
+### 첫 CI의 패키징 보정
 
 2026-10-17의 [Actions 실행 39026669946](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946)에서 코어 37개는 세 OS 모두 통과했다. macOS arm64/x64 DMG도 생성됐다. 네이티브 사용자 UI와 OS 보안 저장소의 실기기 검증 범위는 위의 제한을 그대로 따른다.
 

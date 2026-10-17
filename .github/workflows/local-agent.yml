@@ -107,6 +107,8 @@ jobs:
       - name: Connector contracts and process cancellation
         run: npm --prefix connector test
       - run: npm --prefix connector/desktop ci
+      - name: Native runtime preparation regression
+        run: node connector/scripts/ci-desktop-smoke.mjs --self-test
       - name: Native encrypted pairing and resume
         if: runner.os != 'Linux'
         run: node connector/scripts/ci-desktop-smoke.mjs

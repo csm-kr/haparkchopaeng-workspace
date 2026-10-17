@@ -16,6 +16,61 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
+// Keep runtime preparation testable without spawning Electron or touching a
+// credential store. The production caller provides the official installer.
+async function prepareElectronRuntime({ packageDirectory, readPath, verifyExecutable, install }) {
+  const resolve = async () => {
+    const relativePath = (await readPath(join(packageDirectory, 'path.txt'))).trim();
+    const executable = join(packageDirectory, 'dist', relativePath);
+    await verifyExecutable(executable);
+    return executable;
+  };
+  try { return await resolve(); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  // Electron 44 has no package postinstall. Use its official installer rather
+  // than assume npm ci already downloaded path.txt and the native executable.
+  await install(join(packageDirectory, 'install.js'));
+  return resolve();
+}
+
+async function runtimePreparationTests() {
+  const { test } = await import('node:test');
+  const missing = () => Object.assign(new Error('Missing native runtime'), { code: 'ENOENT' });
+  const packageDirectory = join(tmpdir(), 'runtime-preparation-unit');
+  await test('ready native runtime skips installer', async () => {
+    let installs = 0;
+    const value = await prepareElectronRuntime({ packageDirectory, readPath: async () => 'electron', verifyExecutable: async () => {}, install: async () => { installs += 1; } });
+    assert.equal(value, join(packageDirectory, 'dist', 'electron')); assert.equal(installs, 0);
+  });
+  await test('fresh npm package prepares native runtime before resolving its path', async () => {
+    let installed = false, installs = 0;
+    const value = await prepareElectronRuntime({ packageDirectory,
+      readPath: async () => { if (!installed) throw missing(); return 'electron'; },
+      verifyExecutable: async () => { if (!installed) throw missing(); },
+      install: async () => { installs += 1; installed = true; },
+    });
+    assert.equal(value, join(packageDirectory, 'dist', 'electron')); assert.equal(installs, 1);
+  });
+  await test('missing executable is repaired even if path metadata exists', async () => {
+    let installed = false, installs = 0;
+    await prepareElectronRuntime({ packageDirectory, readPath: async () => 'electron',
+      verifyExecutable: async () => { if (!installed) throw missing(); },
+      install: async () => { installs += 1; installed = true; },
+    });
+    assert.equal(installs, 1);
+  });
+  await test('installer failure stops instead of returning a nonexistent runtime', async () => {
+    const failed = Object.assign(new Error('Native installer failed'), { code: 'INSTALL_FAILED' }); let installs = 0;
+    await assert.rejects(prepareElectronRuntime({ packageDirectory, readPath: async () => { throw missing(); }, verifyExecutable: async () => {},
+      install: async () => { installs += 1; throw failed; },
+    }), error => error === failed);
+    assert.equal(installs, 1);
+  });
+}
+
+if (process.argv.includes('--self-test')) {
+  await runtimePreparationTests();
+} else {
 const execute = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const desktop = join(root, 'desktop');
@@ -35,7 +90,8 @@ await Promise.all(['pairing-empty.png', 'connected.png', 'resumed.png', 'recover
   await unlink(join(artifacts, name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
 }));
 const stop = new AbortController();
-const overallTimer = setTimeout(() => stop.abort(), 120_000);
+// Allow the official binary download its own 120s, in addition to app flows.
+const overallTimer = setTimeout(() => stop.abort(), 240_000);
 const interrupt = () => stop.abort();
 process.once('SIGINT', interrupt);
 process.once('SIGTERM', interrupt);
@@ -44,6 +100,7 @@ const children = [];
 let connection;
 let serverListening = false;
 let failure;
+let phase = 'runtime_check';
 const evidence = {
   passed: false, platform, architecture: process.arch, qaDirectory,
   capturedAt: new Date().toISOString(),
@@ -52,6 +109,7 @@ const evidence = {
   visibleWindowRequested: false, protocolRegistrationRequested: false,
   mockKeychain: false, basicTextAllowed: false,
   checks: [], screenshots: [], providers: [], cleanup: {},
+  runtime: { installationRequired: false, prepared: false, preparationTimeoutMs: 120_000 },
 };
 const attempts = new Map();
 const deviceTokens = new Set();
@@ -168,6 +226,26 @@ async function quitOwned(record) {
   check(await exitWithin(record, 10_000), 'Owned Electron must exit through the app quit action before relaunch.');
   connection.close(); connection = undefined;
 }
+async function spawnOwned(command, args, name) {
+  const out = await open(join(qaDirectory, `${name}.stdout.log`), 'a');
+  const err = await open(join(qaDirectory, `${name}.stderr.log`), 'a');
+  const environment = { ...process.env };
+  // Electron must launch as Electron even when the orchestrator itself is Node.
+  // No credential/CLI environment overrides are introduced.
+  delete environment.ELECTRON_RUN_AS_NODE;
+  let record;
+  try {
+    const child = spawn(command, args, {
+      cwd: desktop, env: environment, windowsHide: true, shell: false,
+      detached: process.platform !== 'win32', stdio: ['ignore', out.fd, err.fd],
+    });
+    record = { child, closed: false };
+    record.done = new Promise(resolve => child.once('close', () => { record.closed = true; resolve(); }));
+    children.push(record);
+    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', () => reject(new Error('Could not launch the installed Electron runtime.'))); });
+  } finally { await out.close(); await err.close(); }
+  return record;
+}
 async function launch(electron, sequence) {
   // This file belongs only to this newly created profile. Remove its stale CDP
   // pointer after the previous owned process exits, never a user browser file.
@@ -179,24 +257,7 @@ async function launch(electron, sequence) {
     `--connector-data-dir=${dataDirectory}`, `--user-data-dir=${profileDirectory}`,
     '--remote-debugging-port=0', ...(process.platform === 'linux' ? ['--password-store=gnome-libsecret'] : []),
     `hapark-connect://connect?attemptId=${attemptId}&launchToken=${launchToken}`];
-  const out = await open(join(qaDirectory, `electron-${sequence}.stdout.log`), 'a');
-  const err = await open(join(qaDirectory, `electron-${sequence}.stderr.log`), 'a');
-  const environment = { ...process.env };
-  // Electron must launch as Electron even when the orchestrator itself is Node.
-  // No credential/CLI environment overrides are introduced.
-  delete environment.ELECTRON_RUN_AS_NODE;
-  let record;
-  try {
-    const child = spawn(electron, args, {
-      cwd: desktop, env: environment, windowsHide: true, shell: false,
-      detached: process.platform !== 'win32', stdio: ['ignore', out.fd, err.fd],
-    });
-    record = { child, closed: false };
-    record.done = new Promise(resolve => child.once('close', () => { record.closed = true; resolve(); }));
-    children.push(record);
-    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', () => reject(new Error('Could not launch the installed Electron runtime.'))); });
-  } finally { await out.close(); await err.close(); }
-  return record;
+  return spawnOwned(electron, args, `electron-${sequence}`);
 }
 
 async function attach(record) {
@@ -309,12 +370,24 @@ async function providerSummary() {
 }
 
 try {
-  const electronPath = (await readFile(join(desktop, 'node_modules', 'electron', 'path.txt'), 'utf8')).trim();
-  const electron = join(desktop, 'node_modules', 'electron', 'dist', electronPath); await access(electron);
+  const electron = await prepareElectronRuntime({
+    packageDirectory: join(desktop, 'node_modules', 'electron'),
+    readPath: path => readFile(path, 'utf8'), verifyExecutable: path => access(path),
+    install: async installer => {
+      phase = 'runtime_install'; evidence.runtime.installationRequired = true;
+      await access(installer);
+      const preparation = await spawnOwned(process.execPath, [installer], 'electron-runtime-install');
+      await until(() => preparation.closed, 'official Electron runtime preparation', 120_000);
+      if (preparation.child.exitCode !== 0) throw Object.assign(new Error('Native Electron runtime preparation failed.'), { code: 'ELECTRON_INSTALL_FAILED' });
+      phase = 'runtime_verify';
+    },
+  });
+  evidence.runtime.prepared = true; phase = 'fixture_start';
   await new Promise((resolve, reject) => {
     server.once('error', () => reject(new Error('Loopback fixture port 3000 is unavailable; no existing process was changed.')));
     server.listen(3000, '127.0.0.1', () => { serverListening = true; resolve(); });
   });
+  phase = 'initial_pairing';
   const first = await launch(electron, 1); connection = await attach(first); await connection.stage('pairing');
   const baseline = await connection.js(`({empty:document.querySelector('#code').value === '', disabled:document.querySelector('#pair-button').disabled,
     autoStart:document.querySelector('#auto-start').checked, pet:document.querySelector('#pet').checked, nodeExposed:typeof window.require !== 'undefined'})`);
@@ -329,6 +402,7 @@ try {
   check(stats.pair === 1 && stats.wrongCode === 1, 'Wrong code must cause exactly one rejected request.');
   evidence.checks.push('wrong-six-digit-code-rejected');
   await connection.typeCode('482107'); await connection.click('#pair-button'); await connection.stage('connected');
+  phase = 'initial_metadata';
   evidence.providers = await providerSummary();
   await until(() => stats.heartbeat > 0 && stats.claim > 0, 'authenticated heartbeat and empty job queue');
   evidence.storage = await encryptedEnvelope(); await connection.screenshot('connected');
@@ -341,6 +415,7 @@ try {
   await quitOwned(first);
   evidence.resumeExitMode = 'graceful-app-quit';
   evidence.checks.push('app-quit-exited-owned-electron-before-relaunch');
+  phase = 'normal_resume';
   const previousPair = stats.pair, previousHeartbeat = stats.heartbeat;
   const second = await launch(electron, 2); connection = await attach(second); await connection.stage('connected');
   await until(() => stats.heartbeat > previousHeartbeat, 'resumed authenticated heartbeat');
@@ -351,6 +426,7 @@ try {
   evidence.checks.push('same-profile-cold-restart-decrypts-same-identity', 'reconnect-without-code-or-additional-pair');
   await quitOwned(second);
   check((await unreadableBackups()).length === 0, 'Normal encrypted-store resume must not create an unreadable backup.');
+  phase = 'ciphertext_recovery';
 
   // Only this script's fresh temporary encrypted file is changed. Keep the
   // envelope valid and flip one bit of one byte of its opaque base64 payload;
@@ -390,6 +466,8 @@ try {
   // launch tokens, stack traces, environment values, or full app state.
   failure = error instanceof assert.AssertionError || (error instanceof Error && /^(Native |Owned |Could not |Loopback |Run this |This native)/.test(error.message))
     ? error.message : 'Native desktop smoke failed; inspect the retained owned Electron logs.';
+  evidence.failedStage = phase;
+  if (typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(error.code)) evidence.errorCode = error.code;
 } finally {
   clearTimeout(overallTimer);
   for (const record of children.slice().reverse()) {
@@ -399,7 +477,7 @@ try {
         await exitWithin(record, 5_000);
       }
       await forceStop(record);
-    } catch { failure ??= 'Owned Electron cleanup did not complete.'; }
+    } catch { if (!failure) evidence.failedStage = 'cleanup'; failure ??= 'Owned Electron cleanup did not complete.'; }
   }
   connection?.close();
   if (serverListening) {
@@ -409,9 +487,11 @@ try {
   evidence.cleanup = { ownedPids: children.map(record => record.child.pid).filter(Boolean), allOwnedAppsExited: children.every(record => record.closed), loopbackClosed: !server.listening, temporaryProfileRetained: true, keyringOrDbusTerminated: false };
   evidence.stats = { ...stats, uniqueDeviceCredentials: acknowledgedTokens.size, uniqueDeviceFingerprints: deviceFingerprints.size };
   evidence.passed = !failure && evidence.cleanup.allOwnedAppsExited && evidence.cleanup.loopbackClosed;
+  evidence.stage = evidence.passed ? 'complete' : evidence.failedStage ?? phase;
   if (failure) evidence.error = failure;
   await Promise.all([writeFile(evidenceFile, JSON.stringify(evidence, null, 2)), writeFile(join(qaDirectory, 'result.json'), JSON.stringify(evidence, null, 2))]);
   process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt);
   console.log(JSON.stringify({ passed: evidence.passed, platform, evidence: evidenceFile, retainedTemporaryDirectory: qaDirectory, ...(failure ? { error: failure } : {}) }));
   if (!evidence.passed) process.exitCode = 1;
+}
 }
