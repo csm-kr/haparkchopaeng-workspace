@@ -1,0 +1,20 @@
+{
+  "mode": "verification",
+  "step": 3,
+  "checks": [
+    {
+      "argv": [
+        "python",
+        "-X",
+        "utf8",
+        "-m",
+        "pytest",
+        "scripts/test_execute.py",
+        "-q"
+      ],
+      "exitCode": 0,
+      "stdout": "............................................................             [100%]\n60 passed in 2.18s\n",
+      "stderr": ""
+    }
+  ]
+}

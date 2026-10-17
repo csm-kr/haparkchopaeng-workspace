@@ -23,9 +23,9 @@
 
 | 환경 | 확인된 근거 | 정식 배포 전 남은 확인 |
 | --- | --- | --- |
-| Windows x64 | 과거 암호화·재개·손상 복구에 더해 `c808e926`의 실제 NSIS 설치·등록·cold/warm URI·가시 창/WM_CLOSE·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 통과 | unsigned QA artifact. 게시자 서명, 실사용자 브라우저 승인·인증 페어링·재부팅/업데이트·운영 연결 |
-| macOS arm64 | `c808e926` 실제 DMG 설치·ASCII 번들/Helper 4개·한글 표시/런타임/새 프로필 위치·cold/warm·정상 IPC 두 회차·제거 9 checks 통과. 이전 `730ad8d`의 SIGTRAP은 당시 실패로 보존 | ad hoc 서명·strict verify exit1 unknown·Gatekeeper 미통과. 기존 기기 키 이전, Developer ID·공증·실사용자·운영 검증 |
-| macOS x64 | x64 DMG 생성 | x64 네이티브 실행·암호화·재개 및 최종 설치 흐름 |
+| Windows x64 | 과거 암호화·재개·손상 복구에 더해 `394d47e8`의 실제 NSIS 설치·등록·cold/warm URI·가시 창/WM_CLOSE·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 통과 | unsigned QA artifact. 게시자 서명, 실사용자 브라우저 승인·인증 페어링·재부팅/업데이트·운영 연결 |
+| macOS arm64 | `394d47e8` 실제 DMG 설치·ASCII 번들/Helper 4개·한글 표시/런타임/새 프로필 위치·cold/warm·정상 IPC 두 회차·제거 9 checks 통과. 이전 `730ad8d`의 SIGTRAP은 당시 실패로 보존 | ad hoc 서명·strict verify exit1 unknown·Gatekeeper 미통과. 기존 기기 키 이전, Developer ID·공증·실사용자·운영 검증 |
+| macOS Intel x64 | `394d47e8` 실제 x64/X64 guard·DMG 설치·cold/warm·정상 IPC 두 회차·정리 9 checks PASS | unsigned·strict verify exit1 unsigned·Gatekeeper exit3 미통과. 최종 서명본의 실제 인증·암호화 보관/재개·실사용자·운영 검증 |
 | Ubuntu GUI x64 | 기존 암호화·재개·손상 복구 13조건과 별도로, phase14에서 실제 .deb 설치·전용 링크 cold/warm 실행·샌드박스·정상 종료·제거 8조건 통과 | 최종 배포본으로 실제 사용자 브라우저 승인·인증 페어링·GUI 설치 경험, 업데이트·재부팅·Wayland |
 
 과거 unpackaged 암호화 13조건의 근거는 [실행 39029600751](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751)이다. 실제 Electron·OS 암호화 저장소를 사용했으며 서버 API만 loopback fixture다. 그 실행은 실제 모델 추론·운영 웹·설치 앱 URI를 검증하지 않았다. 최신 설치본 결과와 구분하며 macOS x64는 여전히 DMG 생성만 확인했다.
@@ -34,7 +34,28 @@ Ubuntu는 GUI와 안전한 키링, 한국어 표시가 가능한 글꼴이 필�
 
 Ubuntu 배포 후보는 .deb만이다. builder의 기본 AppImage launcher에서 샌드박스 비활성화 경로를 확인해 AppImage를 빌드·배포 대상에서 제외했다. 이전 CI가 만든 AppImage는 Git에서 제외한 개발 산출물로 보류하고 `LOCAL_AGENT_RELEASES`에 등록하지 않는다. 안전한 AppImage 대안 개발은 이번 배포 범위 밖이다.
 
-### phase14 최신 확정 CI — c808e926 / 1e309c3f
+### phase14 최신 Intel 실제 설치 CI — 394d47e8 / 57ce1739
+
+제품 `394d47e8a24d2284b62bfefa2e2df173a3278012` [CI 39044291095](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39044291095) **6 jobs 모두 success**, 공통 `57ce17397a5a2c8b38028e3cbbfdb0e4bd2e9429` [CI 39044299350](https://github.com/csm-kr/local-agent-connector/actions/runs/39044299350) **4 jobs 모두 success**다. 제품 웹 946개·Chromium 8개·lint/build/HTTP cookie-loss와 PG16 실제 13개·drift 0, 양 저장소의 Windows actual full 5/preflight 2·Ubuntu 설치 8 checks, Mac arm64·Intel x64 각각 installed 9 checks와 전체 소유 정리를 확인했다.
+
+Intel 후속 phase14 step3 하네스 AC도 실제 60개 PASS로 기록해 현재 4 steps completed다. overallGoalComplete=false·운영 외부 gate 3개는 유지한다.
+
+Mac guard는 process.arch/RUNNER_ARCH=arm64/ARM64·x64/X64를 실제로 확인했다. 양 아키텍처의 ASCII 내부 이름·표시/runtime·기존 프로필 위치 설정을 유지하며 새 프로필 생성·정리를 확인했다. 기존 기기 키 이전이나 최종 운영 인증 페어링을 검증한 것은 아니다. 제품 Node 139개·공통 165개·각 builder 구현 회귀 5개·각 installed checks는 합산하지 않는다.
+
+| 이번 CI 산출물 | bytes | SHA256 |
+| --- | ---: | --- |
+| Windows NSIS unsigned QA | 111584107 | `187b43b10937821bc00565f0d2272f044afb8034b3156cc359fd623b944ab487` |
+| Mac arm64 DMG · 실제 설치 PASS | 128089057 | `e0a0d5d9361cdb13f54eff6d5973e9914f6c4c0b53fe3c2c0485c8329cd880c8` |
+| Mac Intel x64 DMG · 실제 설치 PASS | 131861538 | `206a492edaf78ed6cd1f386d1b35c0842f4427bc3cdd4ed035abf905a2994af4` |
+| Ubuntu .deb | 별도 크기 미측정 | `92924c8a92a57e55b73b4ef22ee444f761064aff20bc0814f3f6f0570a5b5223` |
+
+공통 arm64 DMG는 128087666 bytes·SHA256 `e83063073b44b34265bbb86b5a5d4346fd332a47cc889b16dcf5476f8208fadb`, Intel x64 DMG는 131872368 bytes·SHA256 `52a830b3281cf889a004c8f4beef35db20852491181f65f9b895b9e3e8120849`이며 **둘 다 실제 설치 9 checks**가 통과했다. 공통 Windows는 110619701 bytes·SHA256 `414327149c42d94cfb12145e4381e8f6675c2bd1f39109c8c5bcd754dd5af54c5`, Ubuntu .deb는 SHA256 `47b1e5e684d3da1786fcb0a3ac729413601d4d036d3423bbb9f636aa4e7b2f64`다. 상세는 [제품 검증 기록](../../connector/VALIDATION.md)과 [공통 검증 기록](https://github.com/csm-kr/local-agent-connector/blob/main/connector/VALIDATION.md)을 따른다.
+
+arm64는 adHoc=true·strict verify exit1/valid=false/reason unknown·Gatekeeper exit1/accepted=false다. Intel x64는 adHoc=false·strict verify exit1/valid=false/reason unsigned·Gatekeeper exit3/accepted=false다. 두 아키텍처 모두 Developer ID·공증 미완료, quarantine 없음/미변경이며 설치·기동 성공을 서명 승인으로 해석하지 않는다.
+
+직전 제품 `86b98d8f`/CI 39043732926의 5 jobs와 공통 `2fad9a9a`/CI 39043744517의 3 jobs도 당시 성공 기록이다. 이전 `c808e926`/`1e309c3f`·`9eeccee`/`e5e6a612`와 각 실행의 설치본 해시는 보존하며 새 산출물의 해시로 재사용하지 않는다. 9eeccee 로컬 QA exe는 과거 정적 검사본이며 링크·해시를 유지한다. 운영 SQL 사람 검토·수동 반영, 서명/공증과 게시, 실사용자 운영 파일럿의 외부 gate 3개와 overallGoalComplete=false는 유지한다.
+
+### phase14 직전 확정 CI — c808e926 / 1e309c3f · 당시 기록 보존
 
 제품 `c808e926301a6937b78383ebf064bb97cf20d909` [CI 39042877981](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042877981)는 **5 jobs 모두 success**, 공통 `1e309c3f3d2fe1a333029e23bffea3945a3c4fc7` [CI 39042868288](https://github.com/csm-kr/local-agent-connector/actions/runs/39042868288)는 **3 OS 모두 success**다. 제품 Web 120 suites·946 tests·Chromium 8개·Harness/lint/build/HTTP cookie-loss와 PostgreSQL 16 실제 13개·drift 0이 통과했다. 양쪽 Windows 실제 설치·cold/warm·정상 종료·제거, Mac arm64 실제 설치 9 checks, Ubuntu 실제 설치 8 checks와 소유 정리를 확인했다.
 
@@ -77,7 +98,7 @@ Windows unsigned QA artifact는 **111,584,107 bytes**, SHA256 `3e2b6669cb543d242
 
 합쳐진 Linux process title의 URI 토큰을 관측했으며 **원래 argv는 미증명**이다. cold renderer 상태와 직접 자식이 아닌 cold main의 종료 코드는 측정하지 않았다. 종료 확인 범위는 관측한 소유 PID와 읽기 가능한 `/proc`다. CLI·추론 0회이며 invalid URI parser가 자격 정보·API ACK·adapter 구성 전에 거절하는 경계로 배제했다. 독립 네트워크 캡처로 API 호출 수를 측정하지 않았다. 인증 페어링·실제 사용자 GUI·Wayland·재부팅·서명·업데이트·정식 배포는 남아 있다. Windows·macOS 상태는 이 Ubuntu 결과로 변경하지 않는다. 상세 8조건과 이전 기록은 [connector/VALIDATION](../../connector/VALIDATION.md)의 phase14 절을 따른다.
 
-현재 로컬 Windows QA 파일은 `hapark-connector-0.1.0-win-x64.exe`, 111,583,838바이트, SHA256 `9E12B8206ECB8A365C799B978A73B0396E68FC0AA32D184A3DAC82F046D6ABD8`, Authenticode `NotSigned`다. 재빌드하면 해시를 다시 계산한다. 이 파일과 CI의 unsigned artifact는 개발 검토용으로 표시한다. 미서명 파일을 먼저 사용할 경우 운영자가 비공개 개발 파일럿 범위를 명시적으로 선택한다.
+초기 검증 당시의 로컬 Windows QA 파일은 `hapark-connector-0.1.0-win-x64.exe`, 111,583,838바이트, SHA256 `9E12B8206ECB8A365C799B978A73B0396E68FC0AA32D184A3DAC82F046D6ABD8`, Authenticode `NotSigned`다. 재빌드하면 해시를 다시 계산한다. 이 파일과 CI의 unsigned artifact는 개발 검토용으로 표시한다. 미서명 파일을 먼저 사용할 경우 운영자가 비공개 개발 파일럿 범위를 명시적으로 선택한다.
 
 ## 2. 정식 설치 파일 준비
 
