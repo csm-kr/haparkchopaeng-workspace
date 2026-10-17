@@ -33,6 +33,22 @@ async function prepareElectronRuntime({ packageDirectory, readPath, verifyExecut
   return resolve();
 }
 
+function nativeProcessDiagnostic(record, stderr) {
+  const text = typeof stderr === 'string' ? stderr : '';
+  const categories = [
+    ['shared-library', /error while loading shared libraries|cannot open shared object file|library not loaded:|dyld[^\n]*image not found/i],
+    ['sandbox', /no usable sandbox|suid sandbox helper|failed to move to new namespace|running as root without --no-sandbox|zygote_host_impl_linux|apparmor[^\n]*(?:denied|userns)/i],
+    ['display', /missing x server|cannot open display|could not connect to display|unable to open x display|failed to connect to (?:the )?(?:x11|x server|wayland)|platform failed to initialize|ozone_platform_x11/i],
+  ];
+  const signals = ['SIGABRT', 'SIGTRAP', 'SIGSEGV', 'SIGILL', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT', 'SIGPIPE'];
+  return {
+    process: /^(?:electron-runtime-install|electron-[1-9][0-9]*)$/.test(record.name) ? record.name : 'unknown',
+    exitCode: Number.isSafeInteger(record.exitCode) ? record.exitCode : null,
+    exitSignal: signals.includes(record.exitSignal) ? record.exitSignal : null,
+    stderrCategory: categories.find(([,pattern]) => pattern.test(text))?.[0] ?? 'unknown',
+  };
+}
+
 async function runtimePreparationTests() {
   const { test } = await import('node:test');
   const missing = () => Object.assign(new Error('Missing native runtime'), { code: 'ENOENT' });
@@ -65,6 +81,26 @@ async function runtimePreparationTests() {
       install: async () => { installs += 1; throw failed; },
     }), error => error === failed);
     assert.equal(installs, 1);
+  });
+  await test('fatal sandbox exit diagnostics retain the signal and never copy sensitive stderr', () => {
+    const secret = 'hapark-connect://connect?attemptId=private&launchToken=' + 'a'.repeat(43);
+    const diagnostic = nativeProcessDiagnostic({ name: 'electron-1', exitCode: null, exitSignal: 'SIGTRAP' },
+      'The SUID sandbox helper binary was found, but is not configured correctly. ' + secret);
+    assert.deepEqual(diagnostic, { process: 'electron-1', exitCode: null, exitSignal: 'SIGTRAP', stderrCategory: 'sandbox' });
+    assert.equal(JSON.stringify(diagnostic).includes(secret), false);
+  });
+  await test('display, shared-library and unknown startup failures have fixed diagnostic categories', () => {
+    for (const [stderr, stderrCategory] of [
+      ['Missing X server or $DISPLAY', 'display'],
+      ['error while loading shared libraries: libgtk-3.so.0: cannot open shared object file', 'shared-library'],
+      ['unrecognized startup failure with token-private@example.test', 'unknown'],
+    ]) assert.deepEqual(nativeProcessDiagnostic({ name: 'electron-1', exitCode: 127, exitSignal: null }, stderr),
+      { process: 'electron-1', exitCode: 127, exitSignal: null, stderrCategory });
+  });
+  await test('unknown diagnostic metadata cannot carry paths, credentials or arbitrary signal strings', () => {
+    const diagnostic = nativeProcessDiagnostic({ name: 'private-token', exitCode: 'private-token', exitSignal: 'SIGTRAP private-token' }, 'private-token');
+    assert.deepEqual(diagnostic, { process: 'unknown', exitCode: null, exitSignal: null, stderrCategory: 'unknown' });
+    assert.equal(JSON.stringify(diagnostic).includes('private-token'), false);
   });
 }
 
@@ -228,7 +264,8 @@ async function quitOwned(record) {
 }
 async function spawnOwned(command, args, name) {
   const out = await open(join(qaDirectory, `${name}.stdout.log`), 'a');
-  const err = await open(join(qaDirectory, `${name}.stderr.log`), 'a');
+  const stderrPath = join(qaDirectory, `${name}.stderr.log`);
+  const err = await open(stderrPath, 'a');
   const environment = { ...process.env };
   // Electron must launch as Electron even when the orchestrator itself is Node.
   // No credential/CLI environment overrides are introduced.
@@ -239,12 +276,26 @@ async function spawnOwned(command, args, name) {
       cwd: desktop, env: environment, windowsHide: true, shell: false,
       detached: process.platform !== 'win32', stdio: ['ignore', out.fd, err.fd],
     });
-    record = { child, closed: false };
-    record.done = new Promise(resolve => child.once('close', () => { record.closed = true; resolve(); }));
+    record = { child, name, stderrPath, closed: false, exitCode: null, exitSignal: null };
+    record.done = new Promise(resolve => child.once('close', (code, signal) => { record.exitCode = code; record.exitSignal = signal; record.closed = true; resolve(); }));
     children.push(record);
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', () => reject(new Error('Could not launch the installed Electron runtime.'))); });
   } finally { await out.close(); await err.close(); }
   return record;
+}
+async function ownedProcessDiagnostics(records) {
+  return Promise.all(records.map(async record => {
+    let handle, stderr = '', stderrCaptured = false;
+    try {
+      handle = await open(record.stderrPath, 'r');
+      const { size } = await handle.stat();
+      const buffer = Buffer.alloc(Math.min(size, 16 * 1024));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, Math.max(0, size - buffer.length));
+      stderr = buffer.subarray(0, bytesRead).toString('utf8'); stderrCaptured = true;
+    } catch {} finally { if (handle) await handle.close().catch(() => {}); }
+    // Raw logs remain in the owned Temp directory. Artifacts contain fixed enums only.
+    return { ...nativeProcessDiagnostic(record, stderr), stderrCaptured };
+  }));
 }
 async function launch(electron, sequence) {
   // This file belongs only to this newly created profile. Remove its stale CDP
@@ -485,6 +536,7 @@ try {
     await new Promise(resolve => server.close(resolve));
   }
   evidence.cleanup = { ownedPids: children.map(record => record.child.pid).filter(Boolean), allOwnedAppsExited: children.every(record => record.closed), loopbackClosed: !server.listening, temporaryProfileRetained: true, keyringOrDbusTerminated: false };
+  evidence.processDiagnostics = await ownedProcessDiagnostics(children);
   evidence.stats = { ...stats, uniqueDeviceCredentials: acknowledgedTokens.size, uniqueDeviceFingerprints: deviceFingerprints.size };
   evidence.passed = !failure && evidence.cleanup.allOwnedAppsExited && evidence.cleanup.loopbackClosed;
   evidence.stage = evidence.passed ? 'complete' : evidence.failedStage ?? phase;
