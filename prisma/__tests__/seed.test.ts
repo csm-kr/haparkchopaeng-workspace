@@ -4,6 +4,9 @@
 // 가변 카운트가 아니라 '워크스페이스 단일'·'관리자 존재'·'라이브 없음' 같은 불변식으로 스코프해 검증한다.
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
+import { assertTestDatabase } from "@/scripts/test-database";
+
+assertTestDatabase();
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -23,7 +26,8 @@ describe("seed — 깨끗한 시작 상태", () => {
   });
 
   it("active LiveSession을 시드하지 않음 (ADR-001 — 기본 라이브 없음)", async () => {
-    expect(await prisma.liveSession.count({ where: { active: true } })).toBe(0);
+    const team = await prisma.team.findUniqueOrThrow({ where: { slug: "habakjopaeng" } });
+    expect(await prisma.liveSession.count({ where: { active: true, teamId: team.id } })).toBe(0);
   });
 });
 

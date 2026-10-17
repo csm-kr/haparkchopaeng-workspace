@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "test:db": "tsx scripts/test-db.mts db",
+    "test:e2e": "tsx scripts/test-db.mts e2e",
     "postinstall": "prisma generate"
   },
   "prisma": {
@@ -45,6 +47,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "embedded-postgres": "17.10.0-beta.17",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.0",
     "jsdom": "^25.0.1",

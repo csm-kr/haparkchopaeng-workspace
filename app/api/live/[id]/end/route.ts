@@ -34,10 +34,11 @@ export async function POST(
     }
 
     // 외부 룸 정리가 지연돼도 DB의 종료와 팀 화면 전파를 막지 않는다.
-    await prisma.liveSession.update({
-      where: { id },
+    const ended = await prisma.liveSession.updateMany({
+      where: { id, teamId: team.id, active: true },
       data: { active: false, endedAt: new Date() },
     });
+    if (ended.count === 0) return ok({});
 
     // 전역 종료를 모든 구독 클라에 푸시(폴링 아님, R33). 실패는 무시(graceful).
     await broadcastLive("live.ended", { teamId: team.id, sessionId: id });

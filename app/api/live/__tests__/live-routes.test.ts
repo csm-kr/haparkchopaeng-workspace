@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "@/lib/http";
 
 // 라이브 route handler 단위 테스트 — auth/active-team/prisma/livekit/live/realtime을 모킹한다(AC).
 // 검증(LiveKit · ADR-019 → 팀 스코핑 ADR-020):
@@ -24,16 +25,18 @@ const { prismaMock } = vi.hoisted(() => ({
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     participant: { upsert: vi.fn(), updateMany: vi.fn() },
   },
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
-const { getActiveSessionMock } = vi.hoisted(() => ({
+const { getActiveSessionMock, createLiveSessionMock } = vi.hoisted(() => ({
   getActiveSessionMock: vi.fn(),
+  createLiveSessionMock: vi.fn(),
 }));
-vi.mock("@/lib/live", () => ({ getActiveSession: getActiveSessionMock }));
+vi.mock("@/lib/live", () => ({ getActiveSession: getActiveSessionMock, createLiveSession: createLiveSessionMock }));
 
 const { issueAccessTokenMock, deleteRoomMock, isLiveConfiguredMock, livekitUrlMock } =
   vi.hoisted(() => ({
@@ -73,16 +76,25 @@ beforeEach(() => {
   issueAccessTokenMock.mockResolvedValue("JWT_TOKEN");
   broadcastLiveMock.mockResolvedValue(undefined);
   deleteRoomMock.mockResolvedValue(undefined);
+  prismaMock.liveSession.updateMany.mockResolvedValue({ count: 1 });
   // 기본: 활성 팀 tA의 멤버.
   getActiveTeamMock.mockResolvedValue({ id: "tA", slug: "alpha", role: "member" });
 });
 
 describe("GET /api/live", () => {
+  it("현재 브라우저 팀과 검증된 활성 팀이 다르면 스냅샷을 반환하지 않는다", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "jo" });
+    const response = await liveGET(new Request("http://localhost/api/live", {
+      headers: { "X-Hapark-Team-Id": "tB" },
+    }));
+    expect(response.status).toBe(409);
+    expect(getActiveSessionMock).not.toHaveBeenCalled();
+  });
   it("활성 팀이 없으면 null(라이브 없음) — 조회하지 않는다", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     getActiveTeamMock.mockResolvedValue(null);
 
-    const res = await liveGET();
+    const res = await liveGET(new Request("http://localhost/api/live"));
     expect(res.status).toBe(200);
     expect((await res.json()).data).toBeNull();
     expect(getActiveSessionMock).not.toHaveBeenCalled();
@@ -97,7 +109,7 @@ describe("GET /api/live", () => {
       participants: [],
     });
 
-    const res = await liveGET();
+    const res = await liveGET(new Request("http://localhost/api/live"));
     expect(res.status).toBe(200);
     expect(getActiveSessionMock).toHaveBeenCalledWith("tA");
     expect((await res.json()).data.id).toBe("s1");
@@ -127,23 +139,18 @@ describe("POST /api/live/start", () => {
 
   it("이미 같은 팀에 active 세션이 있으면 409 (팀당 1개)", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
-    getActiveSessionMock.mockResolvedValue({
-      id: "s1",
-      presenterId: "ha",
-      startedAt: new Date(),
-      participants: [],
-    });
+    createLiveSessionMock.mockRejectedValueOnce(new HttpError(409, "CONFLICT", "이미 라이브가 진행 중이에요."));
 
     const res = await startPOST();
     expect(res.status).toBe(409);
-    expect(getActiveSessionMock).toHaveBeenCalledWith("tA");
+    expect(createLiveSessionMock).toHaveBeenCalledWith("tA", "jo");
     expect(prismaMock.liveSession.create).not.toHaveBeenCalled();
   });
 
   it("없으면 생성하고 teamId·presenterId를 세션/활성 팀에서 주입(R3) + 발표자 token+url 반환", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     getActiveSessionMock.mockResolvedValue(null);
-    prismaMock.liveSession.create.mockResolvedValue({
+    createLiveSessionMock.mockResolvedValue({
       id: "s2",
       presenterId: "jo",
       startedAt: new Date("2026-06-13T01:00:00Z"),
@@ -153,17 +160,7 @@ describe("POST /api/live/start", () => {
     expect(res.status).toBe(201);
 
     // teamId는 활성 팀에서, presenterId는 세션에서 — 클라 입력 아님(R3).
-    expect(prismaMock.liveSession.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          active: true,
-          presenterId: "jo",
-          teamId: "tA",
-        }),
-      }),
-    );
-    const createArg = prismaMock.liveSession.create.mock.calls[0][0];
-    expect(createArg.data.cloudflareLiveInputId).toBeUndefined();
+    expect(createLiveSessionMock).toHaveBeenCalledWith("tA", "jo");
 
     expect(issueAccessTokenMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -190,7 +187,7 @@ describe("POST /api/live/start", () => {
     getActiveTeamMock.mockResolvedValue({ id: "tB", slug: "beta", role: "owner" });
     // 팀 B로 스코핑하면 active 세션이 없다(A의 세션은 B에 보이지 않음).
     getActiveSessionMock.mockResolvedValue(null);
-    prismaMock.liveSession.create.mockResolvedValue({
+    createLiveSessionMock.mockResolvedValue({
       id: "s3",
       presenterId: "paeng",
       startedAt: new Date(),
@@ -198,12 +195,7 @@ describe("POST /api/live/start", () => {
 
     const res = await startPOST();
     expect(res.status).toBe(201);
-    expect(getActiveSessionMock).toHaveBeenCalledWith("tB");
-    expect(prismaMock.liveSession.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ teamId: "tB", presenterId: "paeng" }),
-      }),
-    );
+    expect(createLiveSessionMock).toHaveBeenCalledWith("tB", "paeng");
   });
 });
 
@@ -301,7 +293,7 @@ describe("POST /api/live/:id/leave", () => {
       }),
     );
     // /leave는 세션을 종료하지 않는다(R6).
-    expect(prismaMock.liveSession.update).not.toHaveBeenCalled();
+    expect(prismaMock.liveSession.updateMany).not.toHaveBeenCalled();
   });
 
   it("다른 팀의 세션이면 404 (교차 팀 차단) — 퇴장 처리 안 함", async () => {
@@ -318,12 +310,23 @@ describe("POST /api/live/:id/leave", () => {
 });
 
 describe("POST /api/live/:id/end", () => {
+  it("이미 종료한 세션은 성공으로 응답하고 종료 알림·룸 정리를 반복하지 않는다", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "jo" });
+    prismaMock.liveSession.findUnique.mockResolvedValue({ id: "s1", presenterId: "jo", teamId: "tA" });
+    prismaMock.liveSession.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await endPOST(req(), ctx("s1"));
+
+    expect(response.status).toBe(200);
+    expect(broadcastLiveMock).not.toHaveBeenCalled();
+    expect(deleteRoomMock).not.toHaveBeenCalled();
+  });
   it("외부 룸 정리가 늦어져도 DB와 팀 라이브 상태를 먼저 종료한다", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1", presenterId: "jo", teamId: "tA",
     });
-    prismaMock.liveSession.update.mockResolvedValue({});
+    prismaMock.liveSession.updateMany.mockResolvedValue({ count: 1 });
     let finishCleanup!: () => void;
     deleteRoomMock.mockReturnValue(new Promise<void>((resolve) => {
       finishCleanup = resolve;
@@ -332,7 +335,7 @@ describe("POST /api/live/:id/end", () => {
     const response = endPOST(req(), ctx("s1"));
     try {
       await vi.waitFor(() => {
-        expect(prismaMock.liveSession.update).toHaveBeenCalled();
+        expect(prismaMock.liveSession.updateMany).toHaveBeenCalled();
         expect(broadcastLiveMock).toHaveBeenCalledWith(
           "live.ended", { teamId: "tA", sessionId: "s1" },
         );
@@ -350,14 +353,14 @@ describe("POST /api/live/:id/end", () => {
       presenterId: "jo",
       teamId: "tA",
     });
-    prismaMock.liveSession.update.mockResolvedValue({});
+    prismaMock.liveSession.updateMany.mockResolvedValue({ count: 1 });
 
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(200);
     expect(deleteRoomMock).toHaveBeenCalledWith("s1");
-    expect(prismaMock.liveSession.update).toHaveBeenCalledWith(
+    expect(prismaMock.liveSession.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "s1" },
+        where: { id: "s1", teamId: "tA", active: true },
         data: expect.objectContaining({ active: false }),
       }),
     );
@@ -375,7 +378,7 @@ describe("POST /api/live/:id/end", () => {
       presenterId: "jo",
       teamId: "tA",
     });
-    prismaMock.liveSession.update.mockResolvedValue({});
+    prismaMock.liveSession.updateMany.mockResolvedValue({ count: 1 });
 
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(200);
@@ -387,7 +390,7 @@ describe("POST /api/live/:id/end", () => {
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1", presenterId: "jo", teamId: "tA",
     });
-    prismaMock.liveSession.update.mockResolvedValue({});
+    prismaMock.liveSession.updateMany.mockResolvedValue({ count: 1 });
 
     const response = await endPOST(req(), ctx("s1"));
     expect(response.status).toBe(200);
@@ -415,7 +418,7 @@ describe("POST /api/live/:id/end", () => {
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(404);
     expect(deleteRoomMock).not.toHaveBeenCalled();
-    expect(prismaMock.liveSession.update).not.toHaveBeenCalled();
+    expect(prismaMock.liveSession.updateMany).not.toHaveBeenCalled();
   });
 
   it("발표자도 관리자도 아니면 403", async () => {
@@ -429,6 +432,6 @@ describe("POST /api/live/:id/end", () => {
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(403);
     expect(deleteRoomMock).not.toHaveBeenCalled();
-    expect(prismaMock.liveSession.update).not.toHaveBeenCalled();
+    expect(prismaMock.liveSession.updateMany).not.toHaveBeenCalled();
   });
 });

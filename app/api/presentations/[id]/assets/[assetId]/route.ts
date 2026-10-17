@@ -1,4 +1,5 @@
 import { requireAuth } from "@/lib/auth";
+import { getActiveTeam } from "@/lib/active-team";
 import { fail, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { signedDownloadUrl } from "@/lib/storage";
@@ -12,11 +13,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string; assetId: string }> },
 ): Promise<Response> {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    const team = await getActiveTeam(session.memberId);
+    if (!team) return fail(403, "FORBIDDEN", "활성 팀이 없어요.");
     const { id, assetId } = await params;
 
     const asset = await prisma.presentationAsset.findFirst({
-      where: { id: assetId, presentationId: id },
+      where: { id: assetId, presentationId: id, presentation: { teamId: team.id } },
       select: { url: true },
     });
     if (!asset) return fail(404, "NOT_FOUND", "자료를 찾을 수 없어요.");

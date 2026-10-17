@@ -1,9 +1,8 @@
 import { requireAuth } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
 import { fail, ok, toErrorResponse } from "@/lib/http";
-import { prisma } from "@/lib/prisma";
 import { isLiveConfigured, issueAccessToken, livekitUrl } from "@/lib/livekit";
-import { getActiveSession } from "@/lib/live";
+import { createLiveSession } from "@/lib/live";
 import { broadcastLive } from "@/lib/realtime";
 import type { LiveStartResponse } from "@/types";
 
@@ -28,20 +27,8 @@ export async function POST(): Promise<Response> {
     const team = await getActiveTeam(session.memberId);
     if (!team) return fail(403, "FORBIDDEN", "활성 팀이 없어요.");
 
-    // 팀당 1개 강제: 활성 팀에 이미 active 세션이 있으면 시작하지 않는다(입장 안내는 UI에서, 409).
-    const existing = await getActiveSession(team.id);
-    if (existing) {
-      return fail(409, "CONFLICT", "이미 라이브가 진행 중이에요.");
-    }
-
-    // 미사용 레거시 cloudflareLiveInputId는 설정하지 않는다 — 룸은 id에서 파생(ADR-019).
-    const live = await prisma.liveSession.create({
-      data: {
-        active: true,
-        teamId: team.id, // R3/R37: 활성 팀에서 주입
-        presenterId: session.memberId, // R3: 세션에서 주입
-      },
-    });
+    // DB 직렬화 트랜잭션으로 동시 요청도 팀당 1개만 생성한다.
+    const live = await createLiveSession(team.id, session.memberId);
 
     // 발표자 토큰: 화면공유 grant 포함. identity는 세션에서(R3).
     const token = await issueAccessToken({

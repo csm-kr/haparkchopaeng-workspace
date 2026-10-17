@@ -12,15 +12,17 @@ import { PaperNotifyProvider } from "./paper-notify-provider";
 export function AppProviders({
   children,
   initialLive = false,
+  initialSessionId = null,
   activeTeamId = null,
 }: {
   children: React.ReactNode;
   initialLive?: boolean;
+  initialSessionId?: string | null;
   activeTeamId?: string | null;
 }) {
   return (
     <ThemeProvider>
-      <LiveProvider key={activeTeamId} teamId={activeTeamId} initialLive={initialLive}>
+      <LiveProvider key={activeTeamId} teamId={activeTeamId} initialLive={initialLive} initialSessionId={initialSessionId}>
         <PaperNotifyProvider teamId={activeTeamId}>
           {children}
         </PaperNotifyProvider>

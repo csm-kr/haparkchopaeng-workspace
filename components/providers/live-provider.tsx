@@ -4,63 +4,108 @@ import * as React from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { liveChannel } from "@/lib/realtime";
 
-// CRITICAL: `live`는 앱 레벨에 단 하나만 존재한다(ADR-001/R5).
-// 화면 컴포넌트에 보관하지 않는다 — 사이드바 LIVE 알약·홈 배너·미팅 룸이 어긋난다.
-
-interface LiveContextValue {
+interface LiveSnapshot {
   live: boolean;
-  setLive: (v: boolean) => void;
+  sessionId: string | null;
+}
+
+interface LiveContextValue extends LiveSnapshot {
+  setLive: (live: boolean, sessionId?: string) => void;
 }
 
 const LiveContext = React.createContext<LiveContextValue | null>(null);
 
-/**
- * 라이브 전이 Supabase Realtime 구독 (ADR-014→016/R33).
- * 팀 채널을 구독해 broadcast 이벤트(live.started/ended)로 setLive를 호출한다.
- * 폴링이 아니라 단방향 푸시다 — setInterval/EventSource를 쓰지 않는다(R33).
- *
- * anon 키가 없으면(키 부재) 브라우저 클라이언트가 null → 조용히 no-op(graceful).
- * 언마운트 시 removeChannel로 정리해 재연결 폭주를 막는다.
- */
-function useLiveRealtime(teamId: string | null, setLive: (v: boolean) => void): void {
-  React.useEffect(() => {
-    if (!teamId) return;
-    const supabase = createBrowserSupabase();
-    if (!supabase) return; // 키 없음 → no-op
-
-    const channel = supabase
-      .channel(liveChannel(teamId))
-      .on("broadcast", { event: "live.started" }, ({ payload }) => {
-        if (payload?.teamId === teamId) setLive(true);
-      })
-      .on("broadcast", { event: "live.ended" }, ({ payload }) => {
-        if (payload?.teamId === teamId) setLive(false);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [teamId, setLive]);
-}
-
 export function LiveProvider({
   children,
   initialLive = false,
+  initialSessionId = null,
   teamId = null,
 }: {
   children: React.ReactNode;
   initialLive?: boolean;
+  initialSessionId?: string | null;
   teamId?: string | null;
 }) {
-  const [live, setLive] = React.useState(initialLive);
-  useLiveRealtime(teamId, setLive);
+  const [snapshot, setSnapshot] = React.useState<LiveSnapshot>({
+    live: initialLive,
+    sessionId: initialLive ? initialSessionId : null,
+  });
+  const current = React.useRef(snapshot);
+  const request = React.useRef(0);
+  const pending = React.useRef<AbortController | null>(null);
 
-  const value = React.useMemo<LiveContextValue>(
-    () => ({ live, setLive }),
-    [live],
-  );
+  const cancelPending = React.useCallback(() => {
+    request.current++;
+    pending.current?.abort();
+  }, []);
 
+  const setLive = React.useCallback((live: boolean, sessionId?: string) => {
+    // 이전 세션의 늦은 종료 응답으로 새 세션을 닫지 않는다.
+    if (!live && sessionId && current.current.sessionId &&
+      current.current.sessionId !== sessionId) return;
+    cancelPending();
+    current.current = {
+      live, sessionId: live ? (sessionId ?? current.current.sessionId) : null,
+    };
+    setSnapshot(current.current);
+  }, [cancelPending]);
+
+  const refresh = React.useCallback(async () => {
+    if (!teamId) return;
+    cancelPending();
+    const sequence = request.current;
+    const controller = new AbortController();
+    pending.current = controller;
+    try {
+      const response = await fetch("/api/live", {
+        cache: "no-store",
+        headers: { "X-Hapark-Team-Id": teamId },
+        signal: controller.signal,
+      });
+      if (!response.ok) return;
+      const body = await response.json();
+      if (sequence !== request.current || controller.signal.aborted) return;
+      if (body.data !== null && typeof body.data?.id !== "string") return;
+      current.current = { live: !!body.data, sessionId: body.data?.id ?? null };
+      setSnapshot(current.current);
+    } catch {
+      // 오프라인에서는 마지막 상태를 유지하고 연결 복귀 때 다시 확인한다.
+    }
+  }, [teamId, cancelPending]);
+
+  // RSC 갱신도 서버 현재 상태를 조회한다. 오래된 props로 새 세션을 덮지 않는다.
+  React.useEffect(() => { void refresh(); }, [refresh, initialLive, initialSessionId]);
+
+  React.useEffect(() => {
+    if (!teamId) return;
+    const supabase = createBrowserSupabase();
+    const onBroadcast = ({ payload }: { payload?: Record<string, unknown> }) => {
+      // broadcast는 갱신 신호다. 지연·중복 알림의 내용으로 상태를 확정하지 않는다.
+      if (payload?.teamId === teamId) void refresh();
+    };
+    const channel = supabase?.channel(liveChannel(teamId))
+      .on("broadcast", { event: "live.started" }, onBroadcast)
+      .on("broadcast", { event: "live.ended" }, onBroadcast)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void refresh();
+      });
+    const onResume = () => { void refresh(); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("online", onResume);
+    window.addEventListener("focus", onResume);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelPending();
+      window.removeEventListener("online", onResume);
+      window.removeEventListener("focus", onResume);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (supabase && channel) void supabase.removeChannel(channel);
+    };
+  }, [teamId, refresh, cancelPending]);
+
+  const value = React.useMemo(() => ({ ...snapshot, setLive }), [snapshot, setLive]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 

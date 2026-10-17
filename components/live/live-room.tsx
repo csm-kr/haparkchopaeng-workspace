@@ -67,7 +67,7 @@ export function LiveRoom({
   shareablePresentations,
   canEnd = false,
 }: LiveRoomProps) {
-  const { live, setLive } = useLive();
+  const { live, sessionId: activeSessionId, setLive } = useLive();
 
   const [session, setSession] = React.useState<LiveRoomSession | null>(
     initialSession,
@@ -89,9 +89,11 @@ export function LiveRoom({
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   // 발표자 이탈 시 /end를 단일 언로드에서 1회만 보내기 위한 가드(pagehide+beforeunload 중복 방지).
   const endSentRef = React.useRef(false);
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
 
   React.useEffect(() => {
-    if (live) return;
+    if (live && (!activeSessionId || session?.id === activeSessionId)) return;
     // 종료된 세션의 토큰·입장 오류를 다음 라이브에 재사용하지 않는다.
     setSession(null);
     setConnection(null);
@@ -102,8 +104,9 @@ export function LiveRoom({
     setConfirmEnd(false);
     setConfirmLeave(false);
     setEndError(false);
+    setEnding(false);
     endSentRef.current = false;
-  }, [live]);
+  }, [live, activeSessionId, session?.id]);
 
   const isPresenter = !!session && session.presenterId === currentMemberId;
 
@@ -117,7 +120,7 @@ export function LiveRoom({
     fetch("/api/live")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (cancelled || !j?.data) return;
+        if (cancelled || !j?.data || (activeSessionId && j.data.id !== activeSessionId)) return;
         setSession({
           id: j.data.id,
           presenterId: j.data.presenterId,
@@ -131,11 +134,11 @@ export function LiveRoom({
     return () => {
       cancelled = true;
     };
-  }, [live, session]);
+  }, [live, session, activeSessionId]);
 
   // 시청자: 룸에 들어오면 join → LiveKit 토큰 수신(발표자는 시작 시 받았으므로 join 안 함).
   React.useEffect(() => {
-    if (!live || !session || isPresenter || left || connection || joinError)
+    if (!live || !session || (activeSessionId && session.id !== activeSessionId) || isPresenter || left || connection || joinError)
       return;
     let cancelled = false;
     fetch(`/api/live/${session.id}/join`, { method: "POST" })
@@ -156,7 +159,7 @@ export function LiveRoom({
     return () => {
       cancelled = true;
     };
-  }, [live, session, isPresenter, left, connection, joinError]);
+  }, [live, session, activeSessionId, isPresenter, left, connection, joinError]);
 
   // 발표자 이탈 시 자동 종료(ADR-001/R6): 풀 언로드(pagehide/beforeunload)에서 /end 비콘 전송.
   // 탭/창 닫기·새로고침·외부 이동을 잡는다 — 크래시·네트워크 끊김·SPA 내부 이동은 미보장(best-effort).
@@ -207,7 +210,7 @@ export function LiveRoom({
       setConnected(false);
       setRoomError(false);
       setConnection({ token: j.data.token, url: j.data.url });
-      setLive(true); // 낙관적 — Realtime이 확정(R33)
+      setLive(true, j.data.session.id);
     } catch {
       setStartError("error");
     } finally {
@@ -224,10 +227,12 @@ export function LiveRoom({
 
   async function handleEnd() {
     if (!session) return;
+    const endingSessionId = session.id;
     setEnding(true);
     setEndError(false);
     try {
-      const r = await fetch(`/api/live/${session.id}/end`, { method: "POST" });
+      const r = await fetch(`/api/live/${endingSessionId}/end`, { method: "POST" });
+      if (sessionRef.current?.id !== endingSessionId) return;
       if (!r.ok) {
         setEndError(true);
         return;
@@ -236,11 +241,11 @@ export function LiveRoom({
       setSession(null);
       setConnection(null);
       setConnected(false);
-      setLive(false); // 낙관적 — Realtime이 확정
+      setLive(false, endingSessionId);
     } catch {
-      setEndError(true);
+      if (sessionRef.current?.id === endingSessionId) setEndError(true);
     } finally {
-      setEnding(false);
+      if (sessionRef.current?.id === endingSessionId) setEnding(false);
     }
   }
 
