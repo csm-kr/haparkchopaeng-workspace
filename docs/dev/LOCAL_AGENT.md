@@ -55,3 +55,5 @@ npm run build
 공유 운영 DB의 새 테이블 적용은 ADR-020/022에 따라 사람이 [추가 전용 SQL](sql/20261017-local-agent-connection.sql)을 검토하고 수동 실행한다. 자동 검증은 운영 DB를 변경하지 않는다. 실제 설치 파일 배포 전에는 manifest를 채우지 않는다. 설계는 [LOCAL_AGENT_CONNECTION](../design/LOCAL_AGENT_CONNECTION.md), 상태는 `phases/12-local-agent-connection/index.json`을 따른다.
 
 `.github/workflows/local-agent.yml`은 서비스 키 없이 전체 회귀·빌드·Chromium·HTTP 계약, 전용 PostgreSQL 16, Windows/macOS/Ubuntu의 연결기 테스트·설치 파일 빌드를 분리해 실행한다. CI의 미서명 패키지 생성은 실제 OS 설치·프로토콜 열기·Keychain/Secret Service·업데이트/제거 검증을 대신하지 않는다. Windows 네이티브 QA는 로그인된 CLI의 메타데이터를 읽지만 추론 요청은 보내지 않는다.
+
+운영 반영 순서·서명·다운로드 게시·수동 SQL 적용·롤백은 [운영 배포 런북](LOCAL_AGENT_RELEASE.md)을 따른다.

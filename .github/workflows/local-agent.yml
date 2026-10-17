@@ -117,6 +117,39 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11
+      - name: Prepare official Linux Electron sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_OS}" = Linux
+          test "$(id -u)" -ne 0
+          test -z "${ELECTRON_OVERRIDE_DIST_PATH:-}"
+          workspace="$(realpath -e "${GITHUB_WORKSPACE}")"
+          electron_package="${workspace}/connector/desktop/node_modules/electron"
+          test -f "${electron_package}/install.js"
+          test ! -L "${electron_package}/install.js"
+          node "${electron_package}/install.js"
+          test "$(cat "${electron_package}/path.txt")" = electron
+          electron_binary="${electron_package}/dist/electron"
+          sandbox="${electron_package}/dist/chrome-sandbox"
+          for executable in "${electron_binary}" "${sandbox}"; do
+            test -f "${executable}"
+            test ! -L "${executable}"
+            test "$(realpath -e "${executable}")" = "${executable}"
+            test -x "${executable}"
+          done
+          mount_options="$(findmnt --noheadings --output OPTIONS --target "${sandbox}")"
+          case ",${mount_options}," in
+            *,nosuid,*) echo '::error::Official Electron sandbox is on a nosuid mount'; exit 1 ;;
+          esac
+          sandbox_sha256="$(sha256sum "${sandbox}" | cut -d ' ' -f 1)"
+          sudo chown root:root "${sandbox}"
+          sudo chmod 4755 "${sandbox}"
+          test "$(stat --format='%u:%g:%a' "${sandbox}")" = 0:0:4755
+          test -u "${sandbox}"
+          test "$(sha256sum "${sandbox}" | cut -d ' ' -f 1)" = "${sandbox_sha256}"
+          printf '%s\n' 'Official Electron sandbox verified: root:root 4755; original binary retained.'
       - name: Native encrypted pairing and resume in a desktop session
         if: runner.os == 'Linux'
         env:

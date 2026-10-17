@@ -74,5 +74,6 @@
 
 ## 로컬 AI 연결
 
+- [실제 구현·검증 HTML 보고서](./reports/local-agent-implementation-2026-10-17.html) — 웹과 설치앱 화면, OS별 검증 범위, 남은 배포 절차.
 
 - [로컬 AI 연결 UX 설계](./design/LOCAL_AGENT_CONNECTION.md) · [클릭 가능한 하박조팽 적용 시연](./reports/local-agent-connection-design-2026-10-17.html) · [에이전트별 개발 계획](./design/LOCAL_AGENT_IMPLEMENTATION_PLAN.md) · [실제 구현·검증·배포 설정](./dev/LOCAL_AGENT.md) — UI/UX 설계 → 하박조팽 구현·OS 검증 → 완성 후 공통 repo·스킬 분리.

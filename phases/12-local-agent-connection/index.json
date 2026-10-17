@@ -73,7 +73,7 @@
     {
       "step": 3,
       "name": "web-flow",
-      "status": "completed",
+      "status": "pending",
       "paths": [
         "components/local-agent",
         "tests/e2e/local-agent.spec.ts"
@@ -111,7 +111,15 @@
           "build"
         ]
       ],
-      "summary": "기존 회귀 전체를 새 SQLite DB로 실행하고 린트·타입·빌드 및 독립 리뷰 결과를 기록한다."
+      "summary": "main 기반 격리 작업트리에서 105 suites/845 tests, lint, production build, Chromium 흐름 4개, 실제 HTTP·45초 쿠키 회수 검증을 통과했다. PostgreSQL 16 실제 동시성 8개와 추가 SQL drift 검증도 별도 CI로 통과했다. 운영 DB는 변경하지 않았다.",
+      "completed_at": "2026-10-17T20:19:33+0900",
+      "verification": {
+        "commit": "7671c008bf3d861397dbd95f79fee25678ac381b",
+        "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39027708420",
+        "jobs": { "web": 117381859476, "postgres": 117381859523 },
+        "artifact": "web-evidence/phases/12-local-agent-connection/step4-output.json",
+        "exitCodes": [0, 0, 0]
+      }
     },
     {
       "step": 5,

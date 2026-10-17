@@ -1,7 +1,7 @@
 import * as React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LocalAgentAttemptCreated, LocalAgentDeviceView, LocalAgentStatus } from "@/types/local-agent";
+import type { LocalAgentAttemptCreated, LocalAgentDeviceView, LocalAgentJobView, LocalAgentStatus } from "@/types/local-agent";
 import { LocalAgentApiError, type LocalAgentApi } from "../client";
 import { LocalAgentProvider } from "../provider";
 import { LocalAgentEntry } from "../entry";
@@ -109,6 +109,34 @@ describe("로컬 AI 연결 흐름", () => {
     fireEvent.change(screen.getByLabelText("질문할 논문"), { target: { value: "paper-a" } });
     fireEvent.change(screen.getByLabelText("논문 질문"), { target: { value: "핵심 기여가 무엇인가요?" } });
     expect(screen.getByRole("button", { name: "질문 보내기" })).toBeEnabled();
+  });
+
+  it.each<{ name: string; status: "failed" | "cancelled"; error: string | null; expected: string }>([
+    { name: "구독 한도 초과", status: "failed", error: "구독 사용 한도에 도달했어요.", expected: "구독 사용 한도에 도달했어요." },
+    { name: "CLI 로그인 필요", status: "failed", error: "PC에서 해당 CLI에 다시 로그인해 주세요.", expected: "PC에서 해당 CLI에 다시 로그인해 주세요." },
+    { name: "공급자 상태 변경 취소", status: "cancelled", error: "연결한 AI의 로그인과 사용 가능 상태를 확인해주세요.", expected: "연결한 AI의 로그인과 사용 가능 상태를 확인해주세요." },
+    { name: "안내 없는 실패", status: "failed", error: null, expected: "답변을 완료하지 못했어요. 연결과 공급자 상태를 확인해 주세요." },
+    { name: "안내 없는 취소", status: "cancelled", error: null, expected: "질문을 취소했어요" },
+  ])("비동기 질문 결과의 $name 상태를 답변 안에 안내한다", async ({ status, error, expected }) => {
+    const api = makeApi();
+    const queued: LocalAgentJobView = {
+      id: "job-a", version: 1, paperId: "paper-a", provider: "codex", model: "gpt-test", prompt: "핵심 기여가 무엇인가요?",
+      status: "queued", response: "", error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    vi.mocked(api.status).mockResolvedValue({ ...idle, device, devices: [device] });
+    vi.mocked(api.createJob).mockResolvedValue(queued);
+    vi.mocked(api.getJob).mockResolvedValue({ ...queued, version: 2, status, error });
+    render(<View api={api} />);
+    const picker = screen.getByRole("button", { name: "모델을 선택하세요" });
+    await waitFor(() => expect(picker).toBeEnabled());
+    fireEvent.click(picker);
+    fireEvent.click(screen.getByRole("option", { name: /실제 감지된 모델/ }));
+    fireEvent.change(screen.getByLabelText("질문할 논문"), { target: { value: "paper-a" } });
+    fireEvent.change(screen.getByLabelText("논문 질문"), { target: { value: queued.prompt } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "질문 보내기" })); });
+    expect(within(screen.getByRole("region", { name: "AI 답변" })).getByRole("status")).toHaveTextContent("이 PC의 AI가 질문을 기다리고 있어요");
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "AI 답변" })).getByRole("status")).toHaveTextContent(expected), { timeout: 3000 });
+    expect(api.getJob).toHaveBeenCalledWith("job-a");
   });
 
   it("팀 변경은 모델·번호·사용량과 이전 비동기 응답을 지운다", async () => {

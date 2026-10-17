@@ -18,6 +18,7 @@ export function LocalAgentSettingsCard({ papers = [] }: { papers?: AgentPaperOpt
   const [prompt, setPrompt] = React.useState("");
   const [confirmDisconnect, setConfirmDisconnect] = React.useState(false);
   if (!agent) return null;
+  const jobError = agent.job?.error?.trim();
   const working = agent.jobBusy || agent.job?.status === "queued" || agent.job?.status === "running";
   const canSubmit = agent.phase === "connected" && !!agent.selectedModel && !!paperId && !!prompt.trim() && !working;
   return <Card role="region" className="flex flex-col gap-4 p-5" aria-labelledby="local-agent-settings-title">
@@ -54,7 +55,7 @@ export function LocalAgentSettingsCard({ papers = [] }: { papers?: AgentPaperOpt
       <div className="flex flex-wrap items-center gap-2"><Button type="submit" disabled={!canSubmit}>{working ? "답변을 기다리고 있어요…" : "질문 보내기"}</Button>{working && agent.job && <Button variant="secondary" onClick={() => void agent.cancelJob()}>질문 취소</Button>}</div>
     </form>
     {agent.job && <section aria-label="AI 답변" className="flex flex-col gap-2 rounded-md border border-border-token bg-bg-subtle p-4">
-      <span role="status" className="text-[12px] font-medium text-fg-muted">{agent.job.status === "queued" ? "이 PC의 AI가 질문을 기다리고 있어요" : agent.job.status === "running" ? "논문을 읽고 답변하고 있어요…" : agent.job.status === "completed" ? "답변이 도착했어요" : agent.job.status === "cancelled" ? "질문을 취소했어요" : "답변을 완료하지 못했어요. 연결과 공급자 상태를 확인해 주세요."}</span>
+      <span role="status" className="text-[12px] font-medium text-fg-muted">{agent.job.status === "queued" ? "이 PC의 AI가 질문을 기다리고 있어요" : agent.job.status === "running" ? "논문을 읽고 답변하고 있어요…" : agent.job.status === "completed" ? "답변이 도착했어요" : agent.job.status === "cancelled" ? jobError || "질문을 취소했어요" : jobError || "답변을 완료하지 못했어요. 연결과 공급자 상태를 확인해 주세요."}</span>
       {agent.job.response && <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-fg">{agent.job.response}</p>}
     </section>}
     {agent.device && <div className="flex flex-wrap items-center gap-2 border-t border-border-token pt-3">
