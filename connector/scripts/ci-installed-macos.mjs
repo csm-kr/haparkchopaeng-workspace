@@ -9,7 +9,8 @@ import {
   verifyInstalledCore, createOwnedDirectory,
 } from './installed-smoke-support.mjs';
 import { assertMacPathInside, canonicalMacPath, classifyOwnedMacProcess, resolveMacProcessIdentity, sameMacPath } from './installed-macos-identity.mjs';
-import { classifyMacDirectLaunchOutput, classifyMacSignatureVerification, isMacInstalledCleanupSafe, mayRunMacDirectLaunchDiagnostic,
+import { classifyMacDirectLaunchOutput, classifyMacSignatureVerification, classifyReportedMacMainState,
+  isMacInstalledCleanupSafe, mayRunMacDirectLaunchDiagnostic,
   selectOwnedMacCrashDiagnostic } from './installed-macos-diagnostics.mjs';
 
 // NSWorkspace delivers an actual open-url AppleEvent, including on a cold launch.
@@ -269,24 +270,40 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       if (identity) owned.set(pid, identity);
     }
   }
+  async function observedStopStates() {
+    const known = new Map(await Promise.all([...owned.values()].map(async identity =>
+      [identity.pid, await ownedProcessState(identity)])));
+    const reported = result.mainPids.map(pid => {
+      let signalProbe = 'not_needed';
+      if (!known.has(pid)) {
+        signalProbe = 'present';
+        try { process.kill(pid, 0); } catch (error) { signalProbe = error.code === 'ESRCH' ? 'missing' : 'unavailable'; }
+      }
+      return { pid, knownIdentity: known.has(pid), signalProbe,
+        state: classifyReportedMacMainState({ knownState: known.get(pid), signalProbe }) };
+    });
+    metadata.reportedMainLiveness = { allGone: reported.every(value => value.state === 'gone'),
+      checked: reported.length, recent: reported.slice(-6) };
+    return { known, reported };
+  }
   async function allStopped() {
+    const { known, reported } = await observedStopStates();
     return isMacInstalledCleanupSafe({
-      ownedStates: await Promise.all([...owned.values()].map(ownedProcessState)),
+      ownedStates: [...known.values()], reportedMainStates: reported.map(value => value.state),
       directChild: diagnosticChildRecord,
     });
   }
   async function directLaunchDiagnostic() {
     const diagnostic = metadata.directLaunch = { attempted: false, diagnosticOnly: true, originalOsFailurePreserved: true };
     if (!installedExecutable || !installedApp || !result.mainPids.length) { diagnostic.skipped = 'no_installed_launch'; return; }
-    // Never overlap an unobservable or still-live OS launch. ESRCH proves the unadmitted PID is absent.
+    // Never overlap an unobservable or still-live OS launch. Known identity handles PID reuse;
+    // without it, only ESRCH proves the reported OS PID is absent.
     await captureRemainingProcesses();
-    const missingPids = [];
-    for (const pid of result.mainPids) {
-      try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') missingPids.push(pid); }
-    }
+    const observation = await observedStopStates();
+    const missingPids = observation.reported.filter(value => value.state === 'gone').map(value => value.pid);
     const running = (await swift('running', appId)).applications
       .filter(value => comparablePath(value.path) === comparablePath(installedApp));
-    const ownedStates = await Promise.all([...owned.values()].map(ownedProcessState));
+    const ownedStates = [...observation.known.values()];
     if (!mayRunMacDirectLaunchDiagnostic({ originalPids: result.mainPids, missingPids, ownedStates,
       runningInstalledApplications: running.length })) { diagnostic.skipped = 'prior_processes_not_proven_gone'; return; }
     const port = await reserveDebugPort();
@@ -630,7 +647,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   }
   finally {
     cleanup.directChildExitObserved = diagnosticChildRecord === null || diagnosticChildRecord.closed === true;
+    cleanup.reportedMainExitObserved = result.mainPids.length === 0;
     if (!cleanup.directChildExitObserved) cleanup.removalDeferred = 'direct_child_exit_unconfirmed';
+    else if (!cleanup.reportedMainExitObserved) cleanup.removalDeferred = 'reported_main_exit_unconfirmed';
     async function clean(label, action) {
       try { await action(); }
       catch { cleanup.errors.push(label); }
@@ -657,10 +676,14 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
           try { await until(allStopped, 'owned installed macOS process cleanup', 5_000); break; } catch {}
         }
       }
+      const stopped = await allStopped();
       cleanup.directChildExitObserved = diagnosticChildRecord === null || diagnosticChildRecord.closed === true;
+      cleanup.reportedMainExitObserved = metadata.reportedMainLiveness?.allGone === true;
       if (!cleanup.directChildExitObserved) cleanup.removalDeferred = 'direct_child_exit_unconfirmed';
+      else if (!cleanup.reportedMainExitObserved) cleanup.removalDeferred = 'reported_main_exit_unconfirmed';
+      else if (!stopped) cleanup.removalDeferred = 'owned_process_exit_unconfirmed';
       else delete cleanup.removalDeferred;
-      assert.ok(await allStopped(), 'An owned installed process or an unconfirmed direct child remains.');
+      assert.ok(stopped, 'An owned installed process, reported main PID or unconfirmed direct child remains.');
       cleanup.processesStopped = true;
     });
     if (cleanup.processesStopped && registered) await clean('protocol-unregister', async () => {

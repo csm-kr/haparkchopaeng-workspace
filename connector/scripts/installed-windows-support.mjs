@@ -15,8 +15,20 @@ export function windowsNativeFailure(error, operation) {
   else if (/UnauthorizedAccess|AccessDenied|Access is denied|PermissionDenied/i.test(stderr)) stderrCategory = 'POWERSHELL_ACCESS';
   else if (/OWNER_UNAVAILABLE|GetOwnerSid|CimException|Get-CimInstance|Invoke-CimMethod/i.test(stderr)) stderrCategory = 'POWERSHELL_CIM';
   else if (stderr) stderrCategory = 'POWERSHELL_OTHER';
-  return { operation: operations.has(operation) ? operation : 'unknown',
+  const result = { operation: operations.has(operation) ? operation : 'unknown',
     exitCode: Number.isSafeInteger(error?.result?.code) ? error.result.code : null, stderrCategory };
+  if (operation === 'path' && typeof error?.result?.stdout === 'string' && error.result.stdout.length < 64_000) {
+    try {
+      const value = JSON.parse(error.result.stdout.replace(/^\uFEFF/, '').trim()).nativeDiagnostic;
+      const stages = new Set(['exists', 'item', 'acl', 'owner_sid', 'response']);
+      const types = new Set(['UnauthorizedAccessException', 'SecurityException', 'IdentityNotMappedException', 'ArgumentException',
+        'ArgumentNullException', 'ItemNotFoundException', 'InvalidOperationException', 'IOException', 'Win32Exception',
+        'MethodInvocationException', 'ParameterBindingException', 'CommandNotFoundException', 'RuntimeException', 'PathTooLongException', 'UNKNOWN']);
+      if (stages.has(value?.pathStage)) result.pathStage = value.pathStage;
+      if (types.has(value?.exceptionType)) result.exceptionType = value.exceptionType;
+    } catch { /* Raw native output is never copied to diagnostics. */ }
+  }
+  return result;
 }
 
 export function windowsAbsolute(value) {
@@ -131,6 +143,30 @@ export function windowsProcessObservation(observation, { executable, uri }) {
   return { nativeCountsObserved, installedPathRows: nativeCountsObserved ? observation.counts.installedPathRows : 0,
     otherUserRows: nativeCountsObserved ? observation.counts.otherUserRows : 0, currentUserRows: rows.length,
     mainRows: mains.length, exactUriRows: mains.filter(row => row.argv.includes(uri)).length };
+}
+
+export function windowsControlledUriObservation(rows, { executable, uri }) {
+  assert.match(uri, /^[a-z][a-z0-9+.-]{2,63}:\/\/connect\?attemptId=ci-package-cold$/,
+    'URI diagnostics accept only the fixed synthetic cold input');
+  const expected = new URL(uri), token = 'ci-package-cold';
+  const mains = rows.filter(row => sameWindowsPath(row.executable, executable) && Array.isArray(row.argv)
+    && !row.argv.some(arg => typeof arg === 'string' && arg.startsWith('--type=')));
+  const args = mains.flatMap(row => row.argv).filter(arg => typeof arg === 'string').slice(0, 1024);
+  const candidates = args.filter(arg => {
+    if (arg.toLowerCase().includes(token)) return true;
+    try { return decodeURIComponent(arg).toLowerCase().includes(token); } catch { return false; }
+  });
+  const parsed = candidates.map(arg => { try { return new URL(arg); } catch { return null; } }).filter(Boolean);
+  const decodedMatches = arg => { try { return new URL(decodeURIComponent(arg)).href === expected.href; } catch { return false; } };
+  return { mainArgCount: args.length, schemeArgCount: args.filter(arg => arg.toLowerCase().startsWith(expected.protocol)).length,
+    controlledTokenArgCount: candidates.length, maxCandidateCharacters: Math.min(4096, Math.max(0, ...candidates.map(arg => arg.length))),
+    rawExactMatch: candidates.includes(uri), caseFoldMatch: candidates.some(arg => arg.toLowerCase() === uri.toLowerCase()),
+    urlCanonicalMatch: parsed.some(value => value.href === expected.href), percentDecodedMatch: candidates.some(decodedMatches),
+    exactControlledUriWithSlash: candidates.includes(uri.replace('://connect?', '://connect/?')),
+    pathnameEmptyOrSlash: parsed.some(value => value.pathname === '' || value.pathname === '/'),
+    unquotedMatch: candidates.some(arg => arg === `"${uri}"` || arg === `'${uri}'`),
+    queryKeysMatch: parsed.some(value => { const keys = [...value.searchParams.keys()]; return keys.length === 1 && keys[0] === 'attemptId'; }),
+    attemptValueMatch: parsed.some(value => { const values = value.searchParams.getAll('attemptId'); return values.length === 1 && values[0] === token; }) };
 }
 
 export function selectWindowsMain(rows, options) {

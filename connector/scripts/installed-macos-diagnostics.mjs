@@ -20,8 +20,14 @@ export function mayRunMacDirectLaunchDiagnostic({ originalPids, missingPids, own
     && runningInstalledApplications === 0;
 }
 
-export function isMacInstalledCleanupSafe({ ownedStates, directChild = null }) {
+export function classifyReportedMacMainState({ knownState, signalProbe }) {
+  if (['gone', 'owned', 'unresolved'].includes(knownState)) return knownState;
+  return signalProbe === 'missing' ? 'gone' : 'unresolved';
+}
+
+export function isMacInstalledCleanupSafe({ ownedStates, directChild = null, reportedMainStates = [] }) {
   return Array.isArray(ownedStates) && ownedStates.every(state => state === 'gone')
+    && Array.isArray(reportedMainStates) && reportedMainStates.every(state => state === 'gone')
     && (directChild === null || directChild.closed === true);
 }
 

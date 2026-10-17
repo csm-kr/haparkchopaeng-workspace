@@ -135,3 +135,19 @@ test('cleanup permission changes only when the same direct child emits its actua
   directChild.closed = true;
   assert.equal(diagnostics.isMacInstalledCleanupSafe({ ownedStates: ['gone'], directChild }), true);
 });
+
+test('an unadmitted original OS main PID still blocks app and profile cleanup', () => {
+  assert.equal(diagnostics.isMacInstalledCleanupSafe({ ownedStates: [], directChild: null, reportedMainStates: ['unresolved'] }), false);
+  assert.equal(diagnostics.isMacInstalledCleanupSafe({ ownedStates: [], directChild: { closed: true }, reportedMainStates: ['owned'] }), false);
+  assert.equal(diagnostics.isMacInstalledCleanupSafe({ ownedStates: [], directChild: null, reportedMainStates: ['gone'] }), true);
+});
+
+test('reported main liveness preserves known PID reuse proof and treats unobserved living PIDs conservatively', () => {
+  for (const signalProbe of ['present', 'unavailable', undefined]) {
+    assert.equal(diagnostics.classifyReportedMacMainState({ signalProbe }), 'unresolved');
+  }
+  assert.equal(diagnostics.classifyReportedMacMainState({ signalProbe: 'missing' }), 'gone');
+  assert.equal(diagnostics.classifyReportedMacMainState({ knownState: 'gone', signalProbe: 'present' }), 'gone');
+  assert.equal(diagnostics.classifyReportedMacMainState({ knownState: 'owned' }), 'owned');
+  assert.equal(diagnostics.classifyReportedMacMainState({ knownState: 'unresolved' }), 'unresolved');
+});

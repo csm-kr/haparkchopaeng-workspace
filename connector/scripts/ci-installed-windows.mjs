@@ -14,6 +14,7 @@ import {
   windowsNativeFailure,
   windowsProcessObservation,
   windowsProfileObservation,
+  windowsControlledUriObservation,
   assertFreshWindowsProfile, assertWindowsProtocolCommand, windowsSmokeUris, windowsInside, sameWindowsPath,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from './installed-windows-support.mjs';
@@ -69,12 +70,27 @@ switch ($qaInput.operation) {
     finally { if ($qaKey) { $qaKey.Dispose() } }
   }
   'path' {
-    if (-not (Test-Path -LiteralPath $qaInput.path)) { Write-QaJson @{ exists = $false }; break }
-    $qaItem = Get-Item -LiteralPath $qaInput.path -Force
-    $qaOwnerName = (Get-Acl -LiteralPath $qaInput.path).Owner
-    try { $qaOwnerSid = (New-Object Security.Principal.NTAccount($qaOwnerName)).Translate([Security.Principal.SecurityIdentifier]).Value }
-    catch { $qaOwnerSid = (New-Object Security.Principal.SecurityIdentifier($qaOwnerName)).Value }
-    Write-QaJson @{ exists = $true; sid = $qaOwnerSid; reparsePoint = [bool]($qaItem.Attributes -band [IO.FileAttributes]::ReparsePoint) }
+    $qaPathStage = 'exists'
+    try {
+      if (-not (Test-Path -LiteralPath $qaInput.path)) { Write-QaJson @{ exists = $false }; break }
+      $qaPathStage = 'item'
+      $qaItem = Get-Item -LiteralPath $qaInput.path -Force
+      $qaPathStage = 'acl'
+      $qaDescriptor = Get-Acl -LiteralPath $qaInput.path
+      $qaPathStage = 'owner_sid'
+      $qaOwnerSid = $qaDescriptor.GetOwner([Security.Principal.SecurityIdentifier]).Value
+      if ($qaOwnerSid -notmatch '^S-\d+(?:-\d+)+$') { throw (New-Object InvalidOperationException('OWNER_SID_UNAVAILABLE')) }
+      $qaPathStage = 'response'
+      Write-QaJson @{ exists = $true; sid = $qaOwnerSid; reparsePoint = [bool]($qaItem.Attributes -band [IO.FileAttributes]::ReparsePoint) }
+    } catch {
+      $qaException = $_.Exception
+      for ($qaDepth = 0; $qaDepth -lt 4 -and $qaException.InnerException; $qaDepth++) { $qaException = $qaException.InnerException }
+      $qaExceptionType = $qaException.GetType().Name
+      $qaAllowedExceptionTypes = @('UnauthorizedAccessException', 'SecurityException', 'IdentityNotMappedException', 'ArgumentException', 'ArgumentNullException', 'ItemNotFoundException', 'InvalidOperationException', 'IOException', 'Win32Exception', 'MethodInvocationException', 'ParameterBindingException', 'CommandNotFoundException', 'RuntimeException', 'PathTooLongException')
+      if ($qaAllowedExceptionTypes -notcontains $qaExceptionType) { $qaExceptionType = 'UNKNOWN' }
+      Write-QaJson @{ nativeDiagnostic = @{ pathStage = $qaPathStage; exceptionType = $qaExceptionType } }
+      exit 1
+    }
   }
   'processes' {
     $qaSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -224,6 +240,8 @@ async function observeWindowsInstallation(options, evidence) {
     const observation = await native('processes', { installation, installationAlias: options.installation });
     const rows = await Promise.all(observation.processes.map(async row => ({ ...row, nativeExecutable: row.executable, executable: await realpath(row.executable) })));
     const summary = windowsProcessObservation({ ...observation, processes: rows }, { executable, uri: windowsSmokeUris(layout).cold });
+    const uriObservation = windowsControlledUriObservation(rows, { executable, uri: windowsSmokeUris(layout).cold });
+    if (uriObservation.mainArgCount > 0) evidence.cold.uriArgumentObservation = uriObservation;
     evidence.processObservation.samples++;
     evidence.processObservation.latest = summary;
     for (const key of ['installedPathRows', 'otherUserRows', 'currentUserRows', 'mainRows', 'exactUriRows']) {

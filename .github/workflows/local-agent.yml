@@ -9,8 +9,6 @@ on:
         default: false
   pull_request:
     branches: [main]
-  push:
-    branches: [feat/local-agent-connection]
 
 permissions:
   contents: read

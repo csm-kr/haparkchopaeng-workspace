@@ -11,6 +11,7 @@ import {
   classifyWindowsKnownProcess,
   windowsProcessObservation,
   windowsProfileObservation,
+  windowsControlledUriObservation,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from '../scripts/installed-windows-support.mjs';
 
@@ -23,6 +24,43 @@ const sid = 'S-1-5-21-111-222-333-1001';
 const startedAt = Date.parse('2026-10-17T12:00:00.000Z');
 const executable = `${installation}\\research-notebook-connector.exe`;
 const processRow = (overrides = {}) => ({ pid: 1234, executable, sid, createdAt: '2026-10-17T12:00:01.000Z', argv: [executable], ...overrides });
+
+function syntheticWindowsPathExecutor(aclSetup) {
+  return async (file, args, options) => {
+    const original = Buffer.from(args.at(-1), 'base64').toString('utf16le');
+    const script = `${aclSetup}\nfunction Test-Path { $true }\nfunction Get-Item { [pscustomobject]@{ Attributes = [IO.FileAttributes]::Directory } }\n${original}`;
+    const result = spawnSync(file, [...args.slice(0, -1), Buffer.from(script, 'utf16le').toString('base64')],
+      { encoding: 'utf8', windowsHide: true, shell: false, timeout: options.timeout });
+    const captured = { code: Number.isInteger(result.status) ? result.status : 127, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+    if (captured.code !== 0) throw Object.assign(new Error('Synthetic path observation failed'), { code: 'COMMAND_FAILED', result: captured });
+    return captured;
+  };
+}
+
+test('path ownership reads the descriptor SID even when its account name cannot be resolved', { skip: process.platform !== 'win32' }, async () => {
+  const execute = syntheticWindowsPathExecutor(String.raw`
+$qaSyntheticDescriptor = New-Object Security.AccessControl.DirectorySecurity
+$qaSyntheticDescriptor.SetOwner((New-Object Security.Principal.SecurityIdentifier('S-1-5-21-111-222-333-99999')))
+$qaSyntheticDescriptor | Add-Member -MemberType ScriptProperty -Name Owner -Value { $this.GetOwner([Security.Principal.NTAccount]).Value }
+function Get-Acl { $qaSyntheticDescriptor }
+`);
+  const result = await invokeWindowsNative('path', { path: 'SYNTHETIC_NO_FILESYSTEM_ACCESS' }, { execute });
+  assert.deepEqual(result, { exists: true, sid: 'S-1-5-21-111-222-333-99999', reparsePoint: false });
+});
+
+test('an unreadable ACL fails closed with a fixed path stage and exception type', { skip: process.platform !== 'win32' }, async () => {
+  const privateText = 'PRIVATE_ACCOUNT_PATH_AND_TOKEN';
+  const execute = syntheticWindowsPathExecutor(`function Get-Acl { throw (New-Object UnauthorizedAccessException('${privateText}')) }`);
+  await assert.rejects(invokeWindowsNative('path', { path: 'SYNTHETIC_NO_FILESYSTEM_ACCESS' }, { execute }), error => {
+    assert.equal(error.code, 'WINDOWS_NATIVE_FAILED');
+    assert.equal(error.nativeFailure.operation, 'path');
+    assert.equal(error.nativeFailure.exitCode, 1);
+    assert.equal(error.nativeFailure.pathStage, 'acl');
+    assert.equal(error.nativeFailure.exceptionType, 'UnauthorizedAccessException');
+    assert.equal(JSON.stringify(error).includes(privateText), false);
+    return true;
+  });
+});
 
 test('native failures retain only an allowlisted operation, exit code and fixed stderr category', async () => {
   const privateText = 'PRIVATE_ACCOUNT_PATH_AND_TOKEN';
@@ -63,6 +101,34 @@ test('cold process diagnostics distinguish path matches, current-user mains and 
   assert.equal(otherUserOnly.exactUriRows, 0);
   const json = JSON.stringify(summary);
   for (const privateValue of [sid, executable, uri, 'argv', 'pid']) assert.equal(json.includes(privateValue), false);
+});
+
+test('controlled URI diagnostics distinguish OS canonicalization without disclosing or admitting another argument', () => {
+  const uri = windowsSmokeUris(layout()).cold;
+  const normalized = uri.replace('://connect?', '://connect/?');
+  const privateText = 'PRIVATE_ACCOUNT_PATH_AND_TOKEN';
+  const rows = [processRow({ argv: [executable, normalized, privateText] })];
+  const summary = windowsControlledUriObservation(rows, { executable, uri });
+  assert.equal(summary.mainArgCount, 3);
+  assert.equal(summary.schemeArgCount, 1); assert.equal(summary.controlledTokenArgCount, 1);
+  assert.equal(summary.rawExactMatch, false); assert.equal(summary.urlCanonicalMatch, false);
+  assert.equal(summary.exactControlledUriWithSlash, true); assert.equal(summary.pathnameEmptyOrSlash, true);
+  assert.equal(summary.queryKeysMatch, true); assert.equal(summary.attemptValueMatch, true);
+  const schemeCase = windowsControlledUriObservation([processRow({ argv: [executable, uri.replace('research-connect:', 'RESEARCH-CONNECT:')] })], { executable, uri });
+  assert.equal(schemeCase.rawExactMatch, false); assert.equal(schemeCase.caseFoldMatch, true); assert.equal(schemeCase.urlCanonicalMatch, true);
+  assert.equal(selectWindowsMain(rows, { installation, executable, sid, notBefore: startedAt, uri }), null);
+  for (const privateValue of [privateText, sid, executable, uri, normalized, 'argv']) assert.equal(JSON.stringify(summary).includes(privateValue), false);
+  assert.throws(() => windowsControlledUriObservation(rows, { executable, uri: 'research-connect://connect?launchToken=private' }));
+});
+
+test('controlled URI diagnostics recognize a percent-encoded synthetic token without admitting it', () => {
+  const uri = windowsSmokeUris(layout()).cold;
+  const rows = [processRow({ argv: [executable, uri.replace('ci-package-cold', 'ci-package%2Dcold')] })];
+  const summary = windowsControlledUriObservation(rows, { executable, uri });
+  assert.equal(summary.controlledTokenArgCount, 1);
+  assert.equal(summary.rawExactMatch, false); assert.equal(summary.percentDecodedMatch, true);
+  assert.equal(summary.queryKeysMatch, true); assert.equal(summary.attemptValueMatch, true);
+  assert.equal(selectWindowsMain(rows, { installation, executable, sid, notBefore: startedAt, uri }), null);
 });
 
 test('Windows URI execution requires the explicitly allowed disposable hosted runner before OS work', () => {
