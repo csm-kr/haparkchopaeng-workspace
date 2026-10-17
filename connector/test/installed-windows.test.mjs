@@ -16,6 +16,8 @@ import {
   windowsProcessObservation,
   windowsProfileObservation,
   windowsControlledUriObservation,
+  assertWindowsTokenContext,
+  captureWindowsColdUriSnapshot,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from '../scripts/installed-windows-support.mjs';
 
@@ -28,6 +30,15 @@ const sid = 'S-1-5-21-111-222-333-1001';
 const startedAt = Date.parse('2026-10-17T12:00:00.000Z');
 const executable = `${installation}\\research-notebook-connector.exe`;
 const processRow = (overrides = {}) => ({ pid: 1234, executable, sid, createdAt: '2026-10-17T12:00:01.000Z', argv: [executable], ...overrides });
+
+test('Windows token context requires the current user and a complete canonical default-owner SID', () => {
+  assert.doesNotThrow(() => assertWindowsTokenContext({ sid, tokenOwnerSid: 'S-1-5-32-544' }));
+  assert.doesNotThrow(() => assertWindowsTokenContext({ sid, tokenOwnerSid: sid }));
+  for (const tokenOwnerSid of [undefined, null, '', '*', 'S-1-5', 'S-1-5-32-544-extra', 'S-1-5-32-544\n', 'S-1-5-32-4294967296', 'S-1-281474976710656-1', `S-1-5${'-1'.repeat(16)}`]) {
+    assert.throws(() => assertWindowsTokenContext({ sid, tokenOwnerSid }));
+  }
+  assert.throws(() => assertWindowsTokenContext({ sid: 'S-1-5-18', tokenOwnerSid: 'S-1-5-32-544' }));
+});
 
 function syntheticWindowsPathExecutor(aclSetup) {
   return async (file, args, options) => {
@@ -171,6 +182,21 @@ test('controlled URI diagnostics recognize a percent-encoded synthetic token wit
   assert.equal(selectWindowsMain(rows, { installation, executable, sid, notBefore: startedAt, uri }), null);
 });
 
+test('accepted cold URI proof stays unchanged when a later warm argv sample differs', () => {
+  const uri = windowsSmokeUris(layout()).cold, options = { executable, uri };
+  const coldRows = [processRow({ argv: [executable, uri.replace('://connect?', '://connect/?')] })];
+  const snapshot = captureWindowsColdUriSnapshot(coldRows, options);
+  assert.equal(snapshot.exactUriArgumentObserved, false);
+  assert.equal(snapshot.controlledUriArgumentObserved, true); assert.equal(snapshot.normalizedRootSlashObserved, true);
+  const later = windowsControlledUriObservation([processRow({ argv: [executable, '--remote-debugging-port=1234', uri] })], options);
+  coldRows[0].argv[1] = uri;
+  assert.equal(later.rawExactMatch, true); assert.equal(later.exactControlledUriWithSlash, false);
+  assert.equal(snapshot.uriArgumentObservation.rawExactMatch, false);
+  assert.equal(snapshot.uriArgumentObservation.exactControlledUriWithSlash, true);
+  assert.equal(snapshot.uriArgumentObservation.mainArgCount, 2);
+  assert.throws(() => captureWindowsColdUriSnapshot([processRow()], options));
+});
+
 test('Windows URI execution requires the explicitly allowed disposable hosted runner before OS work', () => {
   assert.equal(assertWindowsRunner(env, { platform: 'win32', workspace }).runnerTemp, env.RUNNER_TEMP);
   for (const override of [{ CI: '' }, { GITHUB_ACTIONS: '' }, { RUNNER_ENVIRONMENT: 'self-hosted' }, { RUNNER_OS: 'Linux' }, { LOCAL_AGENT_INSTALL_QA: '' }, { GITHUB_WORKSPACE: 'D:\\other' }, { RUNNER_TEMP: workspace }, { RUNNER_TEMP: `${workspace}\\temp` }, { RUNNER_TEMP: 'D:\\' }, { RUNNER_TEMP: 'relative' }]) {
@@ -262,6 +288,26 @@ test('profile cleanup refuses prior, foreign, redirected and stale directories',
   assert.doesNotThrow(() => assertFreshWindowsProfile(fresh, ownership));
   assert.throws(() => assertFreshWindowsProfile(fresh, { ...ownership, existedBefore: true }));
   for (const override of [{ path: appData }, { path: `${profile}-other` }, { realPath: 'C:\\other' }, { directory: false }, { reparsePoint: true }, { sid: 'S-1-5-18' }, { createdAt: '2026-10-16T12:00:00.000Z' }]) assert.throws(() => assertFreshWindowsProfile({ ...fresh, ...override }, ownership));
+});
+
+test('profile cleanup admits only the current user or the same validated token default owner', () => {
+  const appData = 'C:\\Users\\runner\\AppData\\Roaming', profile = `${appData}\\org.example.research-notebook\\production`;
+  const tokenOwnerSid = 'S-1-5-32-544';
+  const ownership = { appData, profile, sid, tokenOwnerSid, notBefore: startedAt, existedBefore: false };
+  const fresh = { path: profile, exists: true, directory: true, reparsePoint: false, realPath: profile, sid: tokenOwnerSid, createdAt: '2026-10-17T12:00:01.000Z' };
+  assert.doesNotThrow(() => assertFreshWindowsProfile(fresh, ownership));
+  assert.doesNotThrow(() => assertFreshWindowsProfile({ ...fresh, sid }, ownership));
+  assert.throws(() => assertFreshWindowsProfile(fresh, { ...ownership, tokenOwnerSid: 'S-1-5-32-545' }));
+  assert.throws(() => assertFreshWindowsProfile({ ...fresh, sid: 'S-1-5-32-545' }, ownership));
+  for (const invalid of ['', '*', 'S-1-5-32-4294967296']) assert.throws(() => assertFreshWindowsProfile(fresh, { ...ownership, tokenOwnerSid: invalid }));
+  assert.throws(() => assertFreshWindowsProfile(fresh, { ...ownership, existedBefore: true }));
+  for (const override of [{ path: appData }, { realPath: 'C:\\other' }, { directory: false }, { reparsePoint: true }, { createdAt: '2026-10-16T12:00:00.000Z' }]) {
+    assert.throws(() => assertFreshWindowsProfile({ ...fresh, ...override }, ownership));
+  }
+  assert.throws(() => assertWindowsProcessIdentity(processRow({ sid: tokenOwnerSid }), { installation, executable, sid, tokenOwnerSid, notBefore: startedAt }));
+  const observation = windowsProfileObservation(fresh, ownership);
+  assert.equal(observation.currentUserOwner, false); assert.equal(observation.currentTokenOwner, true);
+  for (const privateValue of [sid, tokenOwnerSid, profile]) assert.equal(JSON.stringify(observation).includes(privateValue), false);
 });
 
 test('profile diagnostics distinguish current-user and Administrators ownership without weakening cleanup', () => {

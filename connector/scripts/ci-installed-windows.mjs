@@ -15,6 +15,8 @@ import {
   windowsProcessObservation,
   windowsProfileObservation,
   windowsControlledUriObservation,
+  assertWindowsTokenContext,
+  captureWindowsColdUriSnapshot,
   assertFreshWindowsProfile, assertWindowsProtocolCommand, windowsSmokeUris, windowsInside, sameWindowsPath,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from './installed-windows-support.mjs';
@@ -62,7 +64,9 @@ function Get-QaExpectedProcess {
 }
 switch ($qaInput.operation) {
   'context' {
-    Write-QaJson @{ sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; appData = [Environment]::GetFolderPath('ApplicationData') }
+    $qaIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    try { Write-QaJson @{ sid = $qaIdentity.User.Value; tokenOwnerSid = $qaIdentity.Owner.Value; appData = [Environment]::GetFolderPath('ApplicationData') } }
+    finally { $qaIdentity.Dispose() }
   }
   'protocol' {
     $qaKey = [Microsoft.Win32.Registry]::ClassesRoot.OpenSubKey(([string]$qaInput.scheme + '\shell\open\command'))
@@ -220,7 +224,8 @@ async function observeWindowsInstallation(options, evidence) {
   assert.ok((await lstat(options.installation)).isDirectory() && !(await lstat(options.installation)).isSymbolicLink());
   const executable = join(installation, layout.executableFilename);
   const system = await native('context');
-  assert.match(system.sid, /^S-1-5-21-\d+-\d+-\d+-\d+$/);
+  assertWindowsTokenContext(system);
+  evidence.tokenContext = { tokenOwnerObserved: true, tokenOwnerMatchesCurrentUser: system.tokenOwnerSid === system.sid };
   const appData = await realpath(system.appData), profile = windowsInside(join(appData, ...layout.profileRelativePath), appData);
   const parent = dirname(profile), parentBefore = await describePath(parent);
   if (parentBefore.exists) assert.ok(parentBefore.directory && !parentBefore.reparsePoint && sameWindowsPath(parentBefore.realPath, parent));
@@ -244,7 +249,7 @@ async function observeWindowsInstallation(options, evidence) {
     const rows = await Promise.all(observation.processes.map(async row => ({ ...row, nativeExecutable: row.executable, executable: await realpath(row.executable) })));
     const summary = windowsProcessObservation({ ...observation, processes: rows }, { executable, uri: windowsSmokeUris(layout).cold });
     const uriObservation = windowsControlledUriObservation(rows, { executable, uri: windowsSmokeUris(layout).cold });
-    if (uriObservation.mainArgCount > 0) evidence.cold.uriArgumentObservation = uriObservation;
+    evidence.processObservation.latestUriArguments = uriObservation;
     evidence.processObservation.samples++;
     evidence.processObservation.latest = summary;
     for (const key of ['installedPathRows', 'otherUserRows', 'currentUserRows', 'mainRows', 'exactUriRows']) {
@@ -286,18 +291,15 @@ async function observeWindowsInstallation(options, evidence) {
   try {
     evidence.phase = 'windows_cold_shell_execute';
     assert.equal((await native('open', { uri: uris.cold })).requested, true); evidence.cold.shellExecuteRequested = true;
-    const cold = await until(async () => {
+    const acceptedCold = await until(async () => {
       const rows = await capture();
       const identity = selectWindowsMain(rows, { ...ownership, uri: uris.cold });
       if (!identity) return false;
-      return owned.get(identity.pid);
+      return { identity: owned.get(identity.pid), snapshot: captureWindowsColdUriSnapshot(rows, { executable, uri: uris.cold }) };
     }, 'the OS cold URI in one installed main process', 30_000);
-    const coldArguments = evidence.cold.uriArgumentObservation;
+    const cold = acceptedCold.identity;
+    Object.assign(evidence.cold, acceptedCold.snapshot);
     evidence.cold.installedPidObserved = true;
-    evidence.cold.exactUriArgumentObserved = coldArguments.rawExactMatch === true;
-    evidence.cold.normalizedRootSlashObserved = coldArguments.exactControlledUriWithSlash === true;
-    evidence.cold.controlledUriArgumentObserved = evidence.cold.exactUriArgumentObserved || evidence.cold.normalizedRootSlashObserved;
-    assert.equal(evidence.cold.controlledUriArgumentObserved, true);
     evidence.phase = 'windows_cold_visible_window';
     await until(async () => { const window = await native('window', { identity: cold }); return window.matched && window.visible; }, 'the installed cold application window', 30_000);
     evidence.cold.visibleWindowObserved = true;
@@ -358,8 +360,8 @@ async function observeWindowsInstallation(options, evidence) {
       try {
         evidence.cleanup.profileTarget = 'profile';
         const descriptor = await describePath(profile);
-        evidence.cleanup.profileObservation = windowsProfileObservation(descriptor, { profile, sid: system.sid, notBefore: startedAt });
-        assertFreshWindowsProfile(descriptor, { appData, profile, sid: system.sid, notBefore: startedAt, existedBefore: before.exists });
+        evidence.cleanup.profileObservation = windowsProfileObservation(descriptor, { profile, sid: system.sid, tokenOwnerSid: system.tokenOwnerSid, notBefore: startedAt });
+        assertFreshWindowsProfile(descriptor, { appData, profile, sid: system.sid, tokenOwnerSid: system.tokenOwnerSid, notBefore: startedAt, existedBefore: before.exists });
         if (descriptor.exists) {
           assert.ok(owned.size > 0, 'Profile ownership was not observed through an installed process');
           windowsInside(profile, appData);
@@ -369,8 +371,8 @@ async function observeWindowsInstallation(options, evidence) {
         if (!parentBefore.exists && !sameWindowsPath(parent, appData) && await exists(parent)) {
           evidence.cleanup.profileTarget = 'parent';
           const descriptor = await describePath(parent);
-          evidence.cleanup.profileObservation = windowsProfileObservation(descriptor, { profile: parent, sid: system.sid, notBefore: startedAt });
-          assertFreshWindowsProfile(descriptor, { appData, profile: parent, sid: system.sid, notBefore: startedAt, existedBefore: false });
+          evidence.cleanup.profileObservation = windowsProfileObservation(descriptor, { profile: parent, sid: system.sid, tokenOwnerSid: system.tokenOwnerSid, notBefore: startedAt });
+          assertFreshWindowsProfile(descriptor, { appData, profile: parent, sid: system.sid, tokenOwnerSid: system.tokenOwnerSid, notBefore: startedAt, existedBefore: false });
           await rmdir(parent); // Empty only; preserve an independently created development profile.
         }
       } catch (error) {

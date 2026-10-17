@@ -4,6 +4,18 @@ import { win32 as path } from 'node:path';
 export const WINDOWS_COLD_ERROR = '연결 링크에 허용되지 않은 정보가 있어요.';
 export const WINDOWS_WARM_ERROR = '등록된 앱의 연결 링크를 사용해 주세요.';
 
+function isCanonicalWindowsSid(value) {
+  if (typeof value !== 'string' || value.trim() !== value || value.length > 184
+    || !/^S-1-(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*)){1,15}$/.test(value)) return false;
+  const [, , authority, ...subauthorities] = value.split('-');
+  return BigInt(authority) <= 0xffffffffffffn && subauthorities.every(part => BigInt(part) <= 0xffffffffn);
+}
+
+export function assertWindowsTokenContext(context) {
+  assert.ok(isCanonicalWindowsSid(context?.sid) && /^S-1-5-21-\d+-\d+-\d+-\d+$/.test(context.sid), 'A current Windows user SID is required');
+  assert.ok(isCanonicalWindowsSid(context?.tokenOwnerSid), 'The current token default owner SID is unavailable or invalid');
+}
+
 export function windowsNativeFailure(error, operation) {
   const operations = new Set(['context', 'protocol', 'path', 'processes', 'identity', 'open', 'window', 'close', 'kill', 'listeners']);
   const stderr = typeof error?.result?.stderr === 'string' ? error.result.stderr.slice(0, 64_000) : '';
@@ -169,6 +181,14 @@ export function windowsControlledUriObservation(rows, { executable, uri }) {
     attemptValueMatch: parsed.some(value => { const values = value.searchParams.getAll('attemptId'); return values.length === 1 && values[0] === token; }) };
 }
 
+export function captureWindowsColdUriSnapshot(rows, options) {
+  const observation = windowsControlledUriObservation(rows, options);
+  assert.ok(observation.rawExactMatch || observation.exactControlledUriWithSlash, 'The controlled cold URI was not observed');
+  return Object.freeze({ exactUriArgumentObserved: observation.rawExactMatch,
+    controlledUriArgumentObserved: true, normalizedRootSlashObserved: observation.exactControlledUriWithSlash,
+    uriArgumentObservation: Object.freeze(observation) });
+}
+
 export function selectWindowsMain(rows, options) {
   const mains = rows.filter(row => sameWindowsPath(row.executable, options.executable) && Array.isArray(row.argv) && !row.argv.some(arg => arg.startsWith('--type=')));
   assert.ok(mains.length <= 1, 'More than one installed main process is running');
@@ -189,23 +209,25 @@ export function assertWindowsRejectedState(state, description) {
   assert.equal(state.autoStart, false); assert.equal(state.pet, false);
 }
 
-export function windowsProfileObservation(descriptor, { profile, sid, notBefore }) {
+export function windowsProfileObservation(descriptor, { profile, sid, tokenOwnerSid, notBefore }) {
   const matches = (first, second) => { try { return sameWindowsPath(first, second); } catch { return false; } };
   return { exists: descriptor?.exists === true, directory: descriptor?.directory === true,
     reparsePoint: descriptor?.reparsePoint === true, exactPathMatches: matches(descriptor?.path, profile),
     realPathMatches: matches(descriptor?.realPath, profile), currentUserOwner: descriptor?.sid === sid,
     administratorsOwner: descriptor?.sid === 'S-1-5-32-544',
+    ...(tokenOwnerSid !== undefined ? { currentTokenOwner: isCanonicalWindowsSid(tokenOwnerSid) && descriptor?.sid === tokenOwnerSid } : {}),
     createdAfterStart: Number.isFinite(Date.parse(descriptor?.createdAt)) && Number.isFinite(notBefore)
       && Date.parse(descriptor.createdAt) >= notBefore - 2_000 };
 }
 
-export function assertFreshWindowsProfile(descriptor, { appData, profile, sid, notBefore, existedBefore }) {
+export function assertFreshWindowsProfile(descriptor, { appData, profile, sid, tokenOwnerSid, notBefore, existedBefore }) {
   assert.equal(existedBefore, false, 'Existing profiles must be preserved');
+  if (tokenOwnerSid !== undefined) assert.ok(isCanonicalWindowsSid(tokenOwnerSid), 'A valid captured token default owner is required');
   windowsInside(profile, appData);
   assert.ok(sameWindowsPath(descriptor.path, profile), 'Unexpected profile cleanup target');
   if (!descriptor.exists) return;
   assert.ok(descriptor.directory && !descriptor.reparsePoint && sameWindowsPath(descriptor.realPath, profile), 'A redirected profile must be preserved');
-  assert.equal(descriptor.sid, sid, 'The profile is not owned by this runner');
+  assert.ok(descriptor.sid === sid || (tokenOwnerSid !== undefined && descriptor.sid === tokenOwnerSid), 'The profile owner does not match this runner or its captured token default');
   assert.ok(Number.isFinite(Date.parse(descriptor.createdAt)) && Date.parse(descriptor.createdAt) >= notBefore - 2_000, 'A prior profile must be preserved');
 }
 

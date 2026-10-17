@@ -31,6 +31,32 @@ export function isMacInstalledCleanupSafe({ ownedStates, directChild = null, rep
     && (directChild === null || directChild.closed === true);
 }
 
+export function macDiagnosticEnvironment(environment) {
+  return { ...environment, ELECTRON_ENABLE_LOGGING: 'true', ELECTRON_ENABLE_STACK_DUMPING: 'true' };
+}
+
+function fatalCategoriesFromText(value) {
+  const text = typeof value === 'string' ? value.slice(0, 64_001) : '';
+  return [
+    ['profile', /\bprofile(?:s|_dir|_path)?\b/i],
+    ['user_data', /\buser[_ -]?data(?:[_ -]?(?:dir|directory))?\b/i],
+    ['path_append', /\b(?:FilePath::)?Append(?:ASCII|RelativePath)?\b|IsPathAbsolute|IsAbsolute\(/],
+    ['check_failed', /\bCheck failed\b|\bD?CHECK(?:_[A-Z]+)?\s*(?:failed|failure|\()/i],
+    ['oom', /\bout of memory\b|\bOOM\b|allocation failed|heap limit/i],
+    ['dyld', /\bdyld\b|library not loaded|symbol not found/i],
+    ['code_signature', /code sign(?:ature|ing)|CODESIGNING/i],
+  ].filter(([, pattern]) => pattern.test(text)).map(([name]) => name);
+}
+
+function nativeFatalSiteFromText(text) {
+  for (const line of text.split(/\r?\n/)) {
+    if (!/\bFATAL\b|\bAssertion failed\b|\bCheck failed\b/i.test(line)) continue;
+    const site = /(?:^|[^A-Za-z0-9_.-])(async_wrap\.(?:cc|h)|node\.cc|node_bindings\.cc|node_main_instance\.cc|electron_browser_main_parts\.cc|electron_main_delegate\.cc|electron_api_app\.cc|file_path\.cc|logging\.cc)(?:\(([1-9]\d{0,5})\)|:([1-9]\d{0,5})(?=[:\s)\].,]|$)|,\s*line\s+([1-9]\d{0,5})(?=[\s.)\],]|$))/.exec(line);
+    if (site) return { file: site[1], line: Number(site[2] ?? site[3] ?? site[4]) };
+  }
+  return null;
+}
+
 export function classifyMacDirectLaunchOutput({ stdout = '', stderr = '', closed = false, code = null, signal = null }) {
   const text = `${typeof stderr === 'string' ? stderr.slice(-32_000) : ''}\n${typeof stdout === 'string' ? stdout.slice(-32_000) : ''}`;
   const errorCode = [...text.matchAll(/\b(?:ERR_[A-Z_]+|MODULE_NOT_FOUND|ENOENT|EACCES|EPERM)\b/g)]
@@ -46,7 +72,7 @@ export function classifyMacDirectLaunchOutput({ stdout = '', stderr = '', closed
               : /Uncaught Exception|unhandled.{0,10}rejection|ERR_UNHANDLED_REJECTION/i.test(text) ? 'javascript'
                 : errorCode === 'ENOENT' ? 'missing_file'
                   : closed ? (code === 0 && signal == null ? 'early_exit' : 'early_failure') : 'alive_unknown';
-  return { reason, errorCode, file, exited: closed === true,
+  return { reason, errorCode, file, fatalCategories: fatalCategoriesFromText(text), nativeFatalSite: nativeFatalSiteFromText(text), exited: closed === true,
     exitCode: Number.isInteger(code) && code >= 0 && code <= 255 ? code : null,
     signal: signal == null ? null : selected(signal, signals),
     stdoutPresent: typeof stdout === 'string' && stdout.length > 0,
@@ -127,15 +153,7 @@ function publicNativeFacts(value, ownership) {
   };
   appendText(value.asi); appendText(value.termination?.details);
   appendText(value.termination?.indicator); appendText(value.termination?.reasons);
-  const categories = [
-    ['profile', /\bprofile(?:s|_dir|_path)?\b/i],
-    ['user_data', /\buser[_ -]?data(?:[_ -]?(?:dir|directory))?\b/i],
-    ['path_append', /\b(?:FilePath::)?Append(?:ASCII|RelativePath)?\b|IsPathAbsolute|IsAbsolute\(/],
-    ['check_failed', /\bCheck failed\b|\bD?CHECK(?:_[A-Z]+)?\s*(?:failed|failure|\()/i],
-    ['oom', /\bout of memory\b|\bOOM\b|allocation failed|heap limit/i],
-    ['dyld', /\bdyld\b|library not loaded|symbol not found/i],
-    ['code_signature', /code sign(?:ature|ing)|CODESIGNING/i],
-  ].filter(([, pattern]) => pattern.test(fatalText)).map(([name]) => name);
+  const categories = fatalCategoriesFromText(fatalText);
   if (categories.length) facts.fatalCategories = categories;
   return facts;
 }

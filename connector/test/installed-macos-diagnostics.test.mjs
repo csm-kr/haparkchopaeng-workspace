@@ -208,3 +208,41 @@ test('application-specific and termination text becomes only fixed fatal categor
   assert.equal(JSON.stringify(selected).includes('private'), false);
   assert.equal(selectOwnedMacCrashDiagnostic(ips({ ...value, pid: 777 }), ownership), null);
 });
+
+test('diagnostic-child console and owned crash reports share the same bounded fatal categories', () => {
+  const message = 'Check failed: !IsPathAbsolute(path); profile user_data out of memory dyld Code signature invalid /private/private-token';
+  const console = diagnostics.classifyMacDirectLaunchOutput({ stderr: message, closed: true, signal: 'SIGTRAP' });
+  const crash = selectOwnedMacCrashDiagnostic(ips({ ...report, asi: { Electron: [message] } }), ownership);
+  assert.deepEqual(console.fatalCategories, crash.fatalCategories);
+  assert.equal(JSON.stringify(console).includes('private'), false);
+});
+
+test('fatal console sites retain only allowlisted native basenames and bounded positive lines', () => {
+  for (const [stderr, file, line] of [
+    ['[123:FATAL:async_wrap.cc(188)] Check failed: private-token /private/path', 'async_wrap.cc', 188],
+    ['FATAL /private/path/electron_browser_main_parts.cc:241: private-token', 'electron_browser_main_parts.cc', 241],
+    ['Assertion failed: (private-token), function X, file ../../src/node.cc, line 214.', 'node.cc', 214],
+  ]) {
+    const selected = diagnostics.classifyMacDirectLaunchOutput({ stderr, closed: true, signal: 'SIGTRAP' });
+    assert.deepEqual(selected.nativeFatalSite, { file, line });
+    assert.equal(JSON.stringify(selected).includes('private'), false);
+  }
+});
+
+test('unknown native files, nonfatal frames and invalid line numbers are not published', () => {
+  for (const stderr of ['FATAL private_token.cc(188) private-token', 'at async_wrap.cc:188 private-token',
+    'FATAL async_wrap.cc(0)', 'FATAL async_wrap.cc(1234567)', 'FATAL private_async_wrap.cc(188)']) {
+    assert.equal(diagnostics.classifyMacDirectLaunchOutput({ stderr }).nativeFatalSite, null);
+  }
+  const selected = diagnostics.classifyMacDirectLaunchOutput({ stderr: "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/storage.mjs'" });
+  assert.equal(selected.file, 'storage.mjs');
+});
+
+test('official Electron logging is scoped to a copied child environment', () => {
+  const inherited = { PATH: 'fixture-path', ELECTRON_ENABLE_LOGGING: 'false', FIXTURE_KEY: 'private-token' };
+  const selected = diagnostics.macDiagnosticEnvironment(inherited);
+  assert.equal(selected.ELECTRON_ENABLE_LOGGING, 'true');
+  assert.equal(selected.ELECTRON_ENABLE_STACK_DUMPING, 'true');
+  assert.equal(selected.PATH, inherited.PATH); assert.equal(selected.FIXTURE_KEY, inherited.FIXTURE_KEY);
+  assert.deepEqual(inherited, { PATH: 'fixture-path', ELECTRON_ENABLE_LOGGING: 'false', FIXTURE_KEY: 'private-token' });
+});

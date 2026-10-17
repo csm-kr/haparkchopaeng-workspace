@@ -10,7 +10,7 @@ import {
 } from './installed-smoke-support.mjs';
 import { assertMacPathInside, canonicalMacPath, classifyOwnedMacProcess, resolveMacProcessIdentity, sameMacPath } from './installed-macos-identity.mjs';
 import { classifyMacDirectLaunchOutput, classifyMacSignatureVerification, classifyReportedMacMainState,
-  isMacInstalledCleanupSafe, mayRunMacDirectLaunchDiagnostic,
+  isMacInstalledCleanupSafe, macDiagnosticEnvironment, mayRunMacDirectLaunchDiagnostic,
   selectOwnedMacCrashDiagnostic } from './installed-macos-diagnostics.mjs';
 
 // NSWorkspace delivers an actual open-url AppleEvent, including on a cold launch.
@@ -308,13 +308,14 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       runningInstalledApplications: running.length })) { diagnostic.skipped = 'prior_processes_not_proven_gone'; return; }
     const port = await reserveDebugPort();
     const child = spawn(installedExecutable, [`--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1', coldUri],
-      { windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+      { windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'], env: macDiagnosticEnvironment(process.env) });
     const record = diagnosticChildRecord = { stdout: '', stderr: '', closed: false, code: null, signal: null };
     child.stdout.on('data', value => { record.stdout = (record.stdout + value.toString()).slice(-32_000); });
     child.stderr.on('data', value => { record.stderr = (record.stderr + value.toString()).slice(-32_000); });
     child.once('error', () => { diagnostic.spawnFailed = true; });
     child.once('close', (code, signal) => { record.closed = true; record.code = code; record.signal = signal; });
     diagnostic.attempted = true; diagnostic.cdpConnected = false; diagnostic.sameParserErrorObserved = false;
+    diagnostic.officialElectronConsoleDiagnostics = true;
     diagnostic.cleanupSignalsSent = 0;
     let client;
     try {
