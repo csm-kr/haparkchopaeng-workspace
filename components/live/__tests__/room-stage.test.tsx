@@ -44,7 +44,16 @@ function renderStage() {
 }
 
 function share() {
-  return { source: "screen_share", publication: {}, participant: { identity: "jo" } };
+  return {
+    source: "screen_share",
+    publication: {
+      isMuted: false,
+      track: {
+        mediaStreamTrack: Object.assign(new EventTarget(), { readyState: "live" }),
+      },
+    },
+    participant: { identity: "jo" },
+  };
 }
 
 beforeEach(() => {
@@ -71,6 +80,46 @@ describe("orderParticipantsForStrip", () => {
 });
 
 describe("RoomStage 화면공유", () => {
+  it("브라우저에서 공유 중지를 누르면 SDK 정리를 기다리지 않고 기본 그리드로 돌아온다", () => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    const mediaStreamTrack = Object.assign(new EventTarget(), { readyState: "live" });
+    lk.tracks = [{
+      ...share(),
+      publication: { isMuted: false, track: { mediaStreamTrack } },
+    }];
+    const { container } = renderStage();
+    expect(container.querySelector("[data-face-strip]")).not.toBeNull();
+
+    mediaStreamTrack.readyState = "ended";
+    fireEvent(mediaStreamTrack, new Event("ended"));
+
+    expect(container.querySelector("[data-face-strip]")).toBeNull();
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(3);
+  });
+
+  it.each([
+    { isMuted: true, track: { mediaStreamTrack: { readyState: "live" } } },
+    { isMuted: false, track: { mediaStreamTrack: { readyState: "ended" } } },
+    { isMuted: false, track: undefined },
+  ])("공유 트랙이 종료되면 큰 검은 무대 대신 기본 얼굴 그리드로 돌아온다: %j", (publication) => {
+    lk.participants = [{ identity: "jo" }, { identity: "ha" }, { identity: "bak" }];
+    const activeShare = share();
+    lk.tracks = [activeShare];
+    const props = {
+      members, presenterId: "jo", currentMemberId: "jo", hands: new Set<string>(),
+    };
+    const { container, rerender } = render(<RoomStage {...props} />);
+    expect(container.querySelector("[data-face-strip]")).not.toBeNull();
+
+    // 브라우저의 공유 중지 직후에는 SDK의 publication 정리가 늦을 수 있다.
+    lk.tracks = [{ ...activeShare, publication }];
+    rerender(<RoomStage {...props} />);
+
+    expect(screen.queryByText(/님이 발표 중/)).toBeNull();
+    expect(container.querySelector("[data-face-strip]")).toBeNull();
+    expect(container.querySelectorAll("[data-identity]")).toHaveLength(3);
+  });
+
   it("공유 화면에 '○○님이 발표 중' 라벨을 보인다", () => {
     lk.participants = [{ identity: "jo" }, { identity: "ha" }];
     lk.tracks = [share()];

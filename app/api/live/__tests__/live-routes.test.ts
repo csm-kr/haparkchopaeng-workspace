@@ -318,6 +318,31 @@ describe("POST /api/live/:id/leave", () => {
 });
 
 describe("POST /api/live/:id/end", () => {
+  it("외부 룸 정리가 늦어져도 DB와 팀 라이브 상태를 먼저 종료한다", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
+    prismaMock.liveSession.findUnique.mockResolvedValue({
+      id: "s1", presenterId: "jo", teamId: "tA",
+    });
+    prismaMock.liveSession.update.mockResolvedValue({});
+    let finishCleanup!: () => void;
+    deleteRoomMock.mockReturnValue(new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    }));
+
+    const response = endPOST(req(), ctx("s1"));
+    try {
+      await vi.waitFor(() => {
+        expect(prismaMock.liveSession.update).toHaveBeenCalled();
+        expect(broadcastLiveMock).toHaveBeenCalledWith(
+          "live.ended", { teamId: "tA", sessionId: "s1" },
+        );
+      }, { timeout: 200 });
+    } finally {
+      finishCleanup();
+      await response;
+    }
+  });
+
   it("발표자가 종료하면 active=false + deleteRoom + broadcastLive(leave≠end)", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
     prismaMock.liveSession.findUnique.mockResolvedValue({
@@ -344,6 +369,7 @@ describe("POST /api/live/:id/end", () => {
 
   it("관리자도 종료할 수 있다", async () => {
     requireAuthMock.mockResolvedValue({ memberId: "ha", role: "관리자" });
+    getActiveTeamMock.mockResolvedValue({ id: "tA", slug: "alpha", role: "admin" });
     prismaMock.liveSession.findUnique.mockResolvedValue({
       id: "s1",
       presenterId: "jo",
@@ -353,6 +379,29 @@ describe("POST /api/live/:id/end", () => {
 
     const res = await endPOST(req(), ctx("s1"));
     expect(res.status).toBe(200);
+  });
+
+  it.each(["owner", "admin"])("전역 역할이 멤버여도 팀 %s는 종료할 수 있다", async (role) => {
+    requireAuthMock.mockResolvedValue({ memberId: "ha", role: "멤버" });
+    getActiveTeamMock.mockResolvedValue({ id: "tA", slug: "alpha", role });
+    prismaMock.liveSession.findUnique.mockResolvedValue({
+      id: "s1", presenterId: "jo", teamId: "tA",
+    });
+    prismaMock.liveSession.update.mockResolvedValue({});
+
+    const response = await endPOST(req(), ctx("s1"));
+    expect(response.status).toBe(200);
+  });
+
+  it("다른 팀의 관리자라도 현재 팀 일반 멤버면 타인의 라이브를 종료할 수 없다", async () => {
+    requireAuthMock.mockResolvedValue({ memberId: "ha", role: "관리자" });
+    prismaMock.liveSession.findUnique.mockResolvedValue({
+      id: "s1", presenterId: "jo", teamId: "tA",
+    });
+
+    const response = await endPOST(req(), ctx("s1"));
+    expect(response.status).toBe(403);
+    expect(deleteRoomMock).not.toHaveBeenCalled();
   });
 
   it("다른 팀의 세션이면 404 (교차 팀 차단) — 권한 체크 전에 막는다", async () => {

@@ -1,11 +1,12 @@
 // @vitest-environment node
 // 서버 전용 모듈 — LiveKit SDK(jose)는 Node Uint8Array를 요구하므로 node 환경에서 실행한다.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isLiveConfigured,
   issueAccessToken,
   livekitUrl,
   roomName,
+  deleteRoom,
 } from "@/lib/livekit";
 
 // lib/livekit.ts 단위 테스트 — 설정 분기·룸 이름·토큰 grant 규칙(R7).
@@ -69,6 +70,39 @@ describe("livekitUrl", () => {
   it("LIVEKIT_URL을 호출 시점에 읽어 반환한다", () => {
     setKeys();
     expect(livekitUrl()).toBe("wss://test.livekit.cloud");
+  });
+});
+
+describe("deleteRoom", () => {
+  it("LiveKit가 응답하지 않아도 5초 안에 정리를 마친다", async () => {
+    setKeys();
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new Error("timeout")), ms);
+      return controller.signal;
+    });
+    const fetchMock = vi.fn((_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    let finished = false;
+    const cleanup = deleteRoom("s1").then(() => { finished = true; });
+
+    try {
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(finished).toBe(true);
+    } finally {
+      await vi.runAllTimersAsync();
+      await cleanup;
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
   });
 });
 

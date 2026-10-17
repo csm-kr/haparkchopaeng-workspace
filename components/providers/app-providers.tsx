@@ -20,7 +20,7 @@ export function AppProviders({
 }) {
   return (
     <ThemeProvider>
-      <LiveProvider initialLive={initialLive}>
+      <LiveProvider key={activeTeamId} teamId={activeTeamId} initialLive={initialLive}>
         <PaperNotifyProvider teamId={activeTeamId}>
           {children}
         </PaperNotifyProvider>

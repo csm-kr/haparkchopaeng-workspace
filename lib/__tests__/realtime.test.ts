@@ -10,7 +10,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdmin: createSupabaseAdminMock,
 }));
 
-const { broadcastLive, broadcastPaperAnalyzed, papersChannel, LIVE_CHANNEL } =
+const { broadcastLive, broadcastPaperAnalyzed, papersChannel } =
   await import("@/lib/realtime");
 
 beforeEach(() => {
@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 describe("broadcastLive", () => {
-  it("정상: LIVE_CHANNEL에 broadcast로 전송한다", async () => {
+  it("정상: 팀 채널에 broadcast로 전송한다", async () => {
     const sendMock = vi.fn().mockResolvedValue("ok");
     const removeChannelMock = vi.fn();
     const channelMock = vi.fn().mockReturnValue({ send: sendMock });
@@ -28,14 +28,14 @@ describe("broadcastLive", () => {
     });
 
     await expect(
-      broadcastLive("live.started", { sessionId: "s1" }),
+      broadcastLive("live.started", { teamId: "t1", sessionId: "s1" }),
     ).resolves.toBeUndefined();
 
-    expect(channelMock).toHaveBeenCalledWith(LIVE_CHANNEL);
+    expect(channelMock).toHaveBeenCalledWith("live:t1");
     expect(sendMock).toHaveBeenCalledWith({
       type: "broadcast",
       event: "live.started",
-      payload: { sessionId: "s1" },
+      payload: { teamId: "t1", sessionId: "s1" },
     });
   });
 
@@ -45,7 +45,7 @@ describe("broadcastLive", () => {
     });
 
     await expect(
-      broadcastLive("live.ended", { sessionId: "s1" }),
+      broadcastLive("live.ended", { teamId: "t1", sessionId: "s1" }),
     ).resolves.toBeUndefined();
   });
 
@@ -56,7 +56,9 @@ describe("broadcastLive", () => {
       removeChannel: vi.fn(),
     });
 
-    await expect(broadcastLive("live.started")).resolves.toBeUndefined();
+    await expect(
+      broadcastLive("live.started", { teamId: "t1", sessionId: "s1" }),
+    ).resolves.toBeUndefined();
   });
 });
 

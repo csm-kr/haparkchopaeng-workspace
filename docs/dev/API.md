@@ -100,10 +100,10 @@
 - **`/join` 응답**(참가자): `{ token, url }`. 카메라/마이크 publish 가능, 화면공유 grant 없음.
 - **CRITICAL: 토큰 신원은 세션에서.** identity=`Member.id`, 클라가 보낸 식별자 미신뢰(R3). 토큰을 다른 사람에게 돌려주지 않는다(R7).
 - **CRITICAL: 동시 active 세션은 팀당 1개(ADR-020이 ADR-019 "전역 1개" 개정).** `/start`는 **활성 팀**에 이미 active 세션이 있으면 `409`. `getActiveSession(teamId)`로 조회하고 `LiveSession.teamId`를 주입하며 LiveKit 룸 이름에 팀을 포함한다. 팀 전역 `live`와 1:1(ADR-001). 다른 팀 세션 `:id` 접근은 `403`.
-- **`/end`만 전역 종료.** `/leave`는 본인 `Participant`만 닫는다(LiveKit 연결 종료는 클라이언트). 종료 시 LiveKit 룸 삭제는 best-effort.
+- **`/end`만 팀 전체 종료.** 발표자 또는 활성 팀의 owner/admin이 종료할 수 있다. `/leave`는 본인 `Participant`만 닫는다(LiveKit 연결 종료는 클라이언트). DB 종료·팀 전파 후 LiveKit 룸을 best-effort로 삭제하며, 외부 룸 정리 요청은 5초로 제한한다.
 - **채팅·반응·손들기**는 HTTP 엔드포인트가 아니라 **LiveKit 데이터 채널**로 룸 내부 전송한다(휘발·미저장).
 - **CRITICAL: 미설정(키 부재) 시 `/start`·`/join`은 `503`**("아직 연결 안 됨", R30). build/test는 키 없이 통과(R2).
-- **전이 전파는 Supabase Realtime으로**(R33) — `/start`·`/end` 핸들러가 broadcast하고 클라는 폴링 없이 구독해 배지·배너·룸을 동시 갱신한다(ADR-014→016).
+- **전이 전파는 팀별 Supabase Realtime 채널 `live:{teamId}`로**(R33/R37) — `/start`·`/end` 핸들러가 `{teamId, sessionId}`를 broadcast하고 해당 팀 클라이언트만 배지·배너·룸을 갱신한다. 팀 전환·종료 시 이전 룸의 로컬 연결 상태를 비운다.
 
 ### NEWS (팀 출판 실적 · ADR-022)
 | 메서드 | 경로 | 설명 | 권한 |
