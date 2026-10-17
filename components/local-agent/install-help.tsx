@@ -62,7 +62,7 @@ export function InstallHelp() {
       <span className="font-mono text-[11px] text-fg-subtle">{release?.version}</span>
     </> : <>
       <Button disabled variant="secondary">{state === "loading" ? "설치 파일 확인 중…" : state === "error" ? "설치 파일을 확인하지 못했어요" : "설치 파일 준비 중"}</Button>
-      <p className="text-[12px] text-fg-muted">{!platform ? "사용하는 PC의 운영체제를 선택해 주세요." : "이 환경의 설치 파일이 아직 배포되지 않았어요."}</p>
+      <p className="text-[12px] text-fg-muted">{!platform ? "사용하는 PC의 운영체제를 선택해 주세요." : matching.length > 1 && !release ? "칩 종류를 먼저 선택해 주세요." : "이 환경의 설치 파일이 아직 배포되지 않았어요."}</p>
     </>}
   </div>;
 }

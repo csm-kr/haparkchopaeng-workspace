@@ -53,6 +53,25 @@ describe("로컬 AI 연결 흐름", () => {
     expect(api.createAttempt).toHaveBeenCalledTimes(1);
   });
 
+  it("설치 파일이 있는 macOS는 칩 선택을 안내하고 고른 아키텍처만 내려받는다", async () => {
+    const api = makeApi();
+    vi.mocked(api.downloads).mockResolvedValue({ releases: [
+      { platform: "macos", architecture: "arm64", version: "0.1.0", url: "https://downloads.example/arm64.dmg" },
+      { platform: "macos", architecture: "x64", version: "0.1.0", url: "https://downloads.example/x64.dmg" },
+    ] });
+    render(<View api={api} />);
+    await waitFor(() => expect(api.status).toHaveBeenCalled());
+    fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "연결기가 열리지 않아요" }));
+    await waitFor(() => expect(api.downloads).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "macos" } });
+    expect(await screen.findByLabelText("칩 종류")).toHaveValue("");
+    expect(screen.getByText("칩 종류를 먼저 선택해 주세요.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "연결기 다운로드" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("칩 종류"), { target: { value: "arm64" } });
+    expect(screen.getByRole("link", { name: "연결기 다운로드" })).toHaveAttribute("href", "https://downloads.example/arm64.dmg");
+  });
+
   it("취소 뒤 도착한 생성 응답은 실행·연결을 되살리지 않는다", async () => {
     const api = makeApi();
     let resolve!: (value: LocalAgentAttemptCreated) => void;

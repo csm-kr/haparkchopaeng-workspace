@@ -84,25 +84,30 @@
           <tr><td>웹 UI 회귀</td><td>실제 headless 브라우저, 격리한 API 응답. 최초 연결·취소·모델 키보드·390px 다크·설치 후 복귀.</td><td><span class="result" data-evidence="e2e"></span></td><td>실제 설치기 실행·OS 전용 링크·유료 모델 추론</td></tr>
           <tr><td>UI·셸·Provider 단위</td><td>늦은 응답 무시·팀 변경·인증 소실·49개 관련 회귀. 포커스·중복 제출·이전 사용량 시각 포함.</td><td><span class="result" data-evidence="uiUnit"></span></td><td>운영 배포·다른 OS에서의 실행</td></tr>
           <tr><td>Windows 네이티브 앱</td><td>실제 Electron 앱과 OS 암호화 보관. 빈 번호·오답·연결·호버·재실행·401·권한 만료.</td><td><span class="result" data-evidence="native"></span></td><td>이 UI 회귀의 서버 응답은 fixture이며 실제 추론 요청은 0회</td></tr>
+          <tr><td>Windows NSIS 실제 설치</td><td>미서명 설치본을 임시 경로에 무인 설치 → 전용 링크 등록 → 번들 Node 24.22.0 / Electron 44.9.0 실행 → 자체 제거·등록 없음 복구.</td><td><span class="result" data-evidence="windowsInstall"></span></td><td>GUI 첫 실행·운영 웹 콜백·브라우저 앱 열기·모델 추론은 이 설치 회귀에서 실행하지 않음.</td></tr>
           <tr><td>실제 Codex 최소 추론</td><td><code>smoke --provider=codex --infer</code> 1회. 모델 gpt-6-luna, 고정 질문 2+2.</td><td><span class="result" data-evidence="codex"></span></td><td>전체 논문 분석 품질·모든 모델의 사용 권한·운영 사이트의 전체 흐름</td></tr>
           <tr><td>실제 Claude Code 시도</td><td>haiku. 초기 2회와 승인된 마지막 진단 1회. 구독 OAuth·Max 및 모델 목록은 조회됨.</td><td><span class="result" data-evidence="claude"></span></td><td>추론 성공 아님. 최종 RATE_LIMITED · exit 1 · 답변 0. HTTP 상태·API 오류 type은 미제공.</td></tr>
           <tr><td>HTTP·실행기 통합</td><td>임시 SQLite + 실제 Next HTTP 서버 + 연결기 코어. 번호·큐·답변·취소·로그아웃·쿠키 소실.</td><td><span class="result" data-evidence="wire"></span></td><td>모델 응답은 가짜 어댑터. 실제 CLI 추론·운영 DB·OS 설치를 대체하지 않음.</td></tr>
+          <tr><td>연결기 코어</td><td>전용 링크·origin·기기 키·CLI 제한 실행·취소·사용량·재전송·권한 종료.</td><td><span class="result" data-evidence="coreTests"></span></td><td>테스트에서 실제 모델을 호출하지 않음. 각 OS의 GUI 설치·첫 실행과 별도.</td></tr>
+          <tr><td>로컬 에이전트 격리 게이트</td><td>임시 SQLite에서 연결·권한·작업·UI의 지정된 회귀 범위 실행.</td><td><span class="result" data-evidence="localAgentTests"></span></td><td>PostgreSQL 전용 8개는 아직 실행하지 않음. 실제 PostgreSQL 동시성 검증 완료로 표시하지 않음.</td></tr>
           <tr><td>하네스·격리 검증기</td><td>소유 경로·외부 키 차단·임시 DB URL·프로세스 종료·Prisma 복구·lock 정리.</td><td><span class="result" data-evidence="harness"></span></td><td>실제 제품 사용 흐름과 별도인 검증 도구의 안전 회귀</td></tr>
           <tr><td>전체 회귀·빌드·린트</td><td>격리 DB 전체 테스트, 린트, 타입·프로덕션 빌드.</td><td><span class="result" data-evidence="fullQuality"></span></td><td>운영 적용·서명·다른 OS 실기기 검증</td></tr>
         </tbody></table></div>
         <div class="notice"><strong>Claude의 ‘모델 목록 확인’과 ‘추론 성공’은 다릅니다.</strong> 네이티브 화면의 사용 가능 표시는 로그인·메타데이터 감지 결과입니다. 이번 실제 추론 시도는 구독 한도 오류로 끝났으며, 추가 추론 호출은 하지 않았습니다.</div>
+        <p class="small">자동 CI 실행: <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946" target="_blank" rel="noopener noreferrer">GitHub Actions · 실행 39026669946</a>. 이 보고서 갱신 시점에는 실제 CI 결과가 아직 없어 대기로 표시합니다. 로컬 검증과 CI 결과는 별도이며, 범위가 겹치는 테스트 수를 합산하지 않습니다.</p>
         <p class="small">최신 결과 갱신 위치: 이 파일의 <code>verification-data</code> JSON. 결과·횟수·검증 시각을 함께 바꾸고 실제로 실행한 범위만 통과로 표시합니다. 현재 갱신 시각: <span id="verification-updated">2026-10-17</span>.</p>
       </section>
 
       <section id="platforms">
         <h2>운영체제별 범위</h2>
         <div class="table-wrap"><table><thead><tr><th>환경</th><th>구현·산출물</th><th>실제로 확인한 것</th><th>남은 검증</th></tr></thead><tbody>
-          <tr><td>Windows x64</td><td>Electron 연결기·사용자용 NSIS 개발 패키지·전용 링크 설정</td><td>실제 앱·OS 암호화 보관·단일 기기 키·cold 재실행·명시적 종료·인증/권한 종료, Codex 최소 추론</td><td><span data-evidence="windowsRelease" class="result"></span><p>개발 빌드는 코드 서명된 정식 배포가 아닙니다. 설치·제거·업데이트 실사용 기록은 별도로 확인합니다.</p></td></tr>
+          <tr><td>Windows x64</td><td>Electron 연결기·사용자용 NSIS 개발 패키지·전용 링크 등록</td><td>개발 Electron UI·OS 암호화 보관·기기 키·cold 재실행·인증/권한 종료, Codex 최소 추론. 별도로 실제 NSIS 무인 설치·URI 등록·번들 런타임 실행·자체 제거·등록 없음 복구 통과.</td><td><span data-evidence="windowsRelease" class="result"></span><p>미서명 개발 설치본입니다. 설치본 GUI 첫 실행·운영 웹 콜백·실제 브라우저의 앱 열기·업데이트는 미검증입니다.</p></td></tr>
           <tr><td>macOS arm64 / x64</td><td>앱·프로토콜·패키징 설정, OS 저장소 경로</td><td><span class="tag wait">실기기 미검증</span></td><td>실제 빌드·설치·Safari/Chrome 실행·Keychain·서명·공증·업데이트·제거</td></tr>
           <tr><td>Ubuntu · GUI x64</td><td>데스크톱 패키지/런처·URI 등록 설정</td><td><span class="tag wait">실기기 미검증</span></td><td>지원 버전·deb/AppImage 설치·키링·X11/Wayland·재실행·제거. 자동 시작·펫은 OS별 제약이 있습니다.</td></tr>
           <tr><td>휴대폰 · GUI 없는 서버</td><td>웹의 작은 화면 배치 검증만 수행</td><td>모바일 다크 모달</td><td>현재 PC용 데스크톱 연결기의 실행 대상이 아닙니다.</td></tr>
         </tbody></table></div>
-        <p class="small">현재 실증 버전: Node 24.15.0 · Codex CLI 0.163.0 · Claude Code 2.1.301 · Electron 44.9.0. 설치 경로는 OS가 관리하며, 웹은 물리적인 실행 파일 경로를 갖지 않습니다.</p>
+        <p class="small">현재 실증 버전: 개발 Node 24.15.0 · 설치본 번들 Node 24.22.0 / Electron 44.9.0 · Codex CLI 0.163.0 · Claude Code 2.1.301. 설치 경로는 OS가 관리하며, 웹은 물리적인 실행 파일 경로를 갖지 않습니다.</p>
+        <div class="notice"><strong>확인한 Windows 설치본</strong><br><code>hapark-connector-0.1.0-win-x64.exe</code> · 111,583,460 bytes · Authenticode <strong>NotSigned</strong><br>SHA256 <code>7B62D8F6C5530C68A279603CFAA100F9B09C63679611C64EA0D0159D562DA5D3</code><p style="margin:8px 0 0">실제 검증 순서: 기존 동명 설치·등록 없음 확인 → 임시 경로에 무인 설치 → 전용 링크가 설치 파일을 가리킴 → 번들 Node·Electron 실행 → 자체 제거 → 전용 링크 등록과 임시 설치 경로가 사라짐 확인. 이 설치 회귀에서 GUI·브라우저·실제 모델 호출은 0회입니다.</p></div>
       </section>
 
       <section id="release">
@@ -110,7 +115,7 @@
         <p class="intro">개발 검증과 사용자가 내려받는 정식 배포는 별도입니다. 아래 상태는 오케스트레이터가 최종 게이트와 함께 갱신할 수 있게 분리했습니다.</p>
         <div class="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>완료 조건</th></tr></thead><tbody>
           <tr><td>운영 웹·DB 적용</td><td><span data-evidence="production" class="result"></span></td><td>운영 스키마 적용·서버 설정·실제 HTTPS 웹에서 연결·로그아웃 회수 검증</td></tr>
-          <tr><td>설치 파일 배포</td><td><span data-evidence="downloads" class="result"></span></td><td>검증한 파일 게시·해시·서명 상태·OS별 다운로드 manifest 설정. 파일이 없으면 버튼은 비활성화.</td></tr>
+          <tr><td>설치 파일 배포</td><td><span data-evidence="downloads" class="result"></span></td><td>검증한 파일 게시·서명 상태·OS별 다운로드 manifest 설정. Windows 개발 설치본의 해시와 무인 설치 회귀는 확인했으며, 운영 GUI 첫 실행 콜백과 공개 배포는 미검증.</td></tr>
           <tr><td>macOS · Ubuntu</td><td><span class="result" data-state="pending">실기기 검증 필요</span></td><td>각 OS에서 최초 설치부터 종료 후 웹 재실행·업데이트·제거까지 확인</td></tr>
           <tr><td>공통 repo · UI/UX 우선 스킬</td><td><span data-evidence="extraction" class="result"></span></td><td>호스트별 브랜드·인증·도메인 격리, 두 번째 앱 fixture, 대상 앱 UI/UX 조사부터 시작하는 절차</td></tr>
         </tbody></table></div>
@@ -259,6 +264,66 @@
       "pairRequests": 7,
       "actualInferenceRequests": 0,
       "capturedAt": "2026-10-17T10:44:54.214Z"
+    },
+    "windows-installer-qa.json": {
+      "existingProtocolBefore": false,
+      "packagedCoreMatches": true,
+      "guiLaunched": false,
+      "runtime": {
+        "electron": "44.9.0",
+        "node": "24.22.0"
+      },
+      "passed": true,
+      "protocolRegistered": true,
+      "actualInferenceRequests": 0,
+      "automaticBrowserLaunch": false,
+      "uninstalled": true,
+      "installerBytes": 111583460,
+      "existingInstallationBefore": false,
+      "bundledNode": true,
+      "capturedAt": "2026-10-17T10:52:38.9438003Z",
+      "protocolRestoredToAbsent": true,
+      "silentInstall": true,
+      "installerSha256": "7B62D8F6C5530C68A279603CFAA100F9B09C63679611C64EA0D0159D562DA5D3"
+    },
+    "cli-smoke-summary.json": {
+      "source": "Recorded minimal results of explicit authorized smoke commands; no raw credential or CLI payload retained",
+      "capturedAt": "2026-10-17T10:50:26.447Z",
+      "codex": {
+        "version": "0.163.0",
+        "metadataReady": true,
+        "modelCount": 7,
+        "quotaWindows": [
+          "weekly"
+        ],
+        "inferenceCalls": 1,
+        "model": "gpt-6-luna",
+        "prompt": "What is 2 + 2? Reply with only the number.",
+        "passed": true,
+        "answer": "4"
+      },
+      "claude": {
+        "version": "2.1.301",
+        "metadataReady": true,
+        "modelCount": 12,
+        "quotaWindows": [],
+        "authentication": {
+          "loggedIn": true,
+          "authMethod": "claude.ai",
+          "apiProvider": "firstParty",
+          "subscriptionType": "max"
+        },
+        "inferenceCalls": 3,
+        "model": "haiku",
+        "lastAssistantError": "rate_limit",
+        "lastErrorCode": "RATE_LIMITED",
+        "httpStatus": null,
+        "apiErrorType": null,
+        "passed": false,
+        "outputTextReceived": false
+      },
+      "uiQaInferenceCalls": 0,
+      "packagedOrigin": "https://hapark.vercel.app"
     }
   }
 }
@@ -266,11 +331,11 @@
   <!-- 오케스트레이터 갱신용: 실제 실행한 최신 CI 결과만 아래 JSON에 반영한다. -->
   <script id="verification-data" type="application/json">
 {
-  "updatedAt": "2026-10-17 · 웹 E2E 4/4 재통과 반영 · 전체 CI 집계 전",
+  "updatedAt": "2026-10-17 · Windows NSIS 실제 설치 반영 · GitHub CI 결과 대기",
   "checks": {
     "e2e": {
       "state": "pass",
-      "text": "4개 시나리오 재통과 · 4개 locator 캡처"
+      "text": "로컬 headless UI 4/4 통과 · locator 캡처 4개"
     },
     "uiUnit": {
       "state": "pass",
@@ -294,15 +359,15 @@
     },
     "harness": {
       "state": "pass",
-      "text": "Python 60개 · Node 4개 통과 기록"
+      "text": "Python 60개 통과 · 검증기 Node 4개 통과 기록"
     },
     "fullQuality": {
       "state": "pending",
-      "text": "최신 전체 테스트·린트·빌드 집계 대기"
+      "text": "GitHub Actions 대기 · 실제 CI 결과 아직 없음"
     },
     "windowsRelease": {
-      "state": "pending",
-      "text": "NSIS 개발 설치본 최종 기록 반영 대기"
+      "state": "pass",
+      "text": "NSIS 설치 회귀 PASS · 미서명 개발 설치본"
     },
     "production": {
       "state": "pending",
@@ -310,12 +375,29 @@
     },
     "downloads": {
       "state": "pending",
-      "text": "서명·게시·manifest 배포 확인 필요"
+      "text": "Windows 개발 설치본 검증 완료 · 서명·공개 게시·운영 GUI 콜백 미검증"
     },
     "extraction": {
       "state": "pending",
       "text": "최종 분리·소비 검증 기록 반영 대기"
+    },
+    "windowsInstall": {
+      "state": "pass",
+      "text": "실제 무인 설치·등록·런타임·제거·원복 PASS"
+    },
+    "coreTests": {
+      "state": "pass",
+      "text": "연결기 코어 37/37 통과"
+    },
+    "localAgentTests": {
+      "state": "pass",
+      "text": "격리 게이트 71개 통과 · PostgreSQL 8개 미실행"
     }
+  },
+  "ci": {
+    "url": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946",
+    "state": "pending",
+    "resultVerified": false
   }
 }
   </script>

@@ -5,6 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 const fixture = vi.hoisted(() => {
   function deferred() { let resolve!: () => void; const promise = new Promise<void>((accept) => { resolve = accept; }); return { promise, resolve }; }
+  async function isolatedPrismaViolation() {
+    // Independent generated clients have their own runtime constructor. Load the
+    // real Prisma error in another context without starting a client/database.
+    const { createRequire } = await import("node:module"), { readFileSync } = await import("node:fs"), { dirname } = await import("node:path"), { runInNewContext } = await import("node:vm");
+    const require = createRequire(import.meta.url), library = require.resolve("@prisma/client/runtime/library");
+    const isolated: { exports: { PrismaClientKnownRequestError?: typeof Prisma.PrismaClientKnownRequestError } } = { exports: {} };
+    const execute: (exports: object, require: NodeRequire, module: typeof isolated, filename: string, directory: string) => void = runInNewContext(`(function(exports, require, module, __filename, __dirname) {${readFileSync(library, "utf8")}\n})`, { process, Buffer, console, setTimeout, clearTimeout, setImmediate, clearImmediate, URL, URLSearchParams, TextEncoder, TextDecoder });
+    execute(isolated.exports, require, isolated, library, dirname(library));
+    const ErrorType = isolated.exports.PrismaClientKnownRequestError;
+    if (!ErrorType) throw new Error("Missing independently loaded Prisma error constructor");
+    return new ErrorType("unique request constraint", { code: "P2002", clientVersion: "6.19.3", meta: { target: ["teamId", "memberId", "sessionKey", "requestId"] } });
+  }
   function make(mode: "duplicate" | "capacity" | "cross-device") {
     const paused = deferred(), release = deferred(), contenderWaiting = deferred();
     const now = new Date();
@@ -29,7 +41,7 @@ const fixture = vi.hoisted(() => {
         localAgentJob: {
           findUnique: async (args: Parameters<typeof findExisting>[0]) => { const captured = findExisting(args); if ((mode === "duplicate" || mode === "cross-device") && ++reads === 1) { paused.resolve(); await release.promise; } return captured; },
           count: async () => { const captured = rows.length; if (mode === "capacity" && ++reads === 1) { paused.resolve(); await release.promise; } return captured; },
-          create: async ({ data }: { data: Record<string, unknown> }) => { if (rows.some((row) => row.requestId === data.requestId)) throw new Prisma.PrismaClientKnownRequestError("unique request constraint", { code: "P2002", clientVersion: "6.19.3", meta: { target: ["teamId", "memberId", "sessionKey", "requestId"] } }); const row = { ...data, id: `job-${rows.length}`, status: "queued", version: 0, response: "", error: null, createdAt: now, updatedAt: now }; rows.push(row); return row; },
+          create: async ({ data }: { data: Record<string, unknown> }) => { if (rows.some((row) => row.requestId === data.requestId)) throw await isolatedPrismaViolation(); const row = { ...data, id: `job-${rows.length}`, status: "queued", version: 0, response: "", error: null, createdAt: now, updatedAt: now }; rows.push(row); return row; },
         },
       };
       try { return await run(tx); } finally { for (const [key, owner] of owners) if (owner === id) { owners.delete(key); waiters.get(key)?.shift()?.(); } }
@@ -72,7 +84,7 @@ describe("job queue concurrent admission", () => {
     if (rejected?.status === "rejected") expect(rejected.reason).toMatchObject({ status: 429, code: "QUEUE_FULL" });
   });
 
-  it("returns 409 when the same request ID races across two independently locked devices", async () => {
+  it("returns 409 across independently locked devices even when a different Prisma runtime reports the conflict", async () => {
     const run = fixture.set("cross-device");
     const first = createJob(scope(), { ...input("same-request"), deviceId: "first-device" });
     await run.paused.promise;

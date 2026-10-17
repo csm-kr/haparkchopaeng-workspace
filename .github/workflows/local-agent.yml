@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: local-agent-${{ github.ref }}
+  group: local-agent-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -107,6 +107,31 @@ jobs:
       - name: Connector contracts and process cancellation
         run: npm --prefix connector test
       - run: npm --prefix connector/desktop ci
+      - name: Native encrypted pairing and resume
+        if: runner.os != 'Linux'
+        run: node connector/scripts/ci-desktop-smoke.mjs
+      - name: Linux desktop test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11
+      - name: Native encrypted pairing and resume in a desktop session
+        if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: |
+          dbus-run-session -- xvfb-run -a bash -euc '
+            printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
+            node connector/scripts/ci-desktop-smoke.mjs
+          '
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: native-smoke-${{ matrix.platform }}
+          path: |
+            connector/artifacts/ci-desktop-*/**
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Native installer build (unsigned validation artifact)
         run: npm --prefix connector/desktop run package:${{ matrix.platform }}
       - name: Windows install, protocol registration and uninstall

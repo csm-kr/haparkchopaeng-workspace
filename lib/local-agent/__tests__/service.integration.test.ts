@@ -7,12 +7,13 @@ vi.mock("@/lib/prisma", async () => {
   if (!clientModule) return { prisma: {} };
   const url = process.env.LOCAL_AGENT_TEST_DATABASE_URL;
   if (!url || !process.env.HAPARK_TEST_DIRECTORY) throw new Error("Local-agent integration tests require an isolated SQLite database");
-  const { assertIsolatedDatabase } = await import(new URL("../../../scripts/local-agent-verify.mjs", import.meta.url).href);
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const { assertIsolatedDatabase } = require("../../../scripts/local-agent-verify.mjs");
   assertIsolatedDatabase(process.env.HAPARK_TEST_DIRECTORY, url);
   const { isAbsolute } = await import("node:path");
   if (!isAbsolute(clientModule)) throw new Error("Local-agent test client must be an absolute path");
-  const { createRequire } = await import("node:module");
-  const { PrismaClient } = createRequire(import.meta.url)(clientModule);
+  const { PrismaClient } = require(clientModule);
   return { prisma: new PrismaClient({ datasources: { db: { url } } }) };
 });
 vi.mock("@/lib/auth", () => ({ requireAuth: async () => ({ memberId: "la-test-ha", role: "관리자" }) }));

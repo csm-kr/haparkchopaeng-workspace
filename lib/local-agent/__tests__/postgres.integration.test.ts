@@ -14,12 +14,13 @@ vi.mock("@/lib/prisma", async () => {
   const clientModule = process.env.LOCAL_AGENT_PG_TEST_CLIENT_MODULE;
   if (!clientModule && process.env.HAPARK_PG_ISOLATED_TESTS !== "1") return { prisma: {} };
   if (!clientModule) throw new Error("Run the guarded PostgreSQL verifier to generate an isolated test client.");
-  const verifier = await import(new URL("../../../scripts/local-agent-pg-verify.mjs", import.meta.url).href);
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const verifier = require("../../../scripts/local-agent-pg-verify.mjs");
   const url = verifier.assertIsolatedPostgres(process.env);
   const { isAbsolute } = await import("node:path");
   if (!isAbsolute(clientModule)) throw new Error("The isolated PostgreSQL client path must be absolute.");
-  const { createRequire } = await import("node:module");
-  const { PrismaClient } = createRequire(import.meta.url)(clientModule);
+  const { PrismaClient } = require(clientModule);
   const client: ApplicationPrismaClient = new PrismaClient({ datasources: { db: { url } } });
   return { prisma: client.$extends({ query: { $allModels: { async $allOperations({ model, operation, args, query }) {
     const event = { model, operation, args };

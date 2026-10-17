@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { Prisma, type LocalAgentAttempt, type LocalAgentDevice, type LocalAgentGrant, type LocalAgentJob } from "@prisma/client";
+import type { Prisma, LocalAgentAttempt, LocalAgentDevice, LocalAgentGrant, LocalAgentJob } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
 import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
@@ -301,7 +301,8 @@ export async function createJob(scope: LocalAgentScope, input: LocalAgentJobCrea
     return jobView(job);
     });
   } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    // Generated clients/bundles can carry distinct runtime constructors.
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "P2002") throw error;
     // Different device rows do not share the admission lock, while request IDs
     // are unique across the whole web session. Read only after PG rolls back
     // the failed transaction, then apply the same idempotency/conflict rule.

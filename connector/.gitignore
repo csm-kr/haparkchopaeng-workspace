@@ -4,3 +4,4 @@ dist/
 artifacts/
 *.log
 devices.enc.json
+devices.enc.json.*

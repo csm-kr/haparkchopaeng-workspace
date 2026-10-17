@@ -1,4 +1,10 @@
 $ErrorActionPreference = 'Stop'
+function Get-QaSha256([string]$LiteralPath) {
+  $qaStream = [IO.File]::OpenRead($LiteralPath)
+  $qaHasher = [Security.Cryptography.SHA256]::Create()
+  try { return [BitConverter]::ToString($qaHasher.ComputeHash($qaStream)).Replace('-', '') }
+  finally { $qaHasher.Dispose(); $qaStream.Dispose() }
+}
 $qaConnectorRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $qaPackage = Get-Content -LiteralPath (Join-Path $qaConnectorRoot 'desktop\package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $qaInstaller = Join-Path $qaConnectorRoot ('dist\hapark-connector-' + $qaPackage.version + '-win-x64.exe')
@@ -10,7 +16,7 @@ if ($qaPriorInstalls.Count) { throw 'An existing installation must be preserved;
 $qaTemporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $qaInstallRoot = [IO.Path]::GetFullPath((Join-Path $qaTemporaryRoot ('hapark-connector-install-' + [Guid]::NewGuid().ToString('N'))))
 if (-not $qaInstallRoot.StartsWith($qaTemporaryRoot, [StringComparison]::OrdinalIgnoreCase) -or -not ([IO.Path]::GetFileName($qaInstallRoot)).StartsWith('hapark-connector-install-')) { throw 'Unexpected install target' }
-$qaEvidence = @{ passed = $false; silentInstall = $false; protocolRegistered = $false; bundledNode = $false; packagedCoreMatches = $false; uninstalled = $false; existingProtocolBefore = $false; existingInstallationBefore = $false; guiLaunched = $false; automaticBrowserLaunch = $false; actualInferenceRequests = 0; installerBytes = (Get-Item -LiteralPath $qaInstaller).Length; installerSha256 = (Get-FileHash -LiteralPath $qaInstaller -Algorithm SHA256).Hash; capturedAt = (Get-Date).ToUniversalTime().ToString('o') }
+$qaEvidence = @{ passed = $false; silentInstall = $false; protocolRegistered = $false; bundledNode = $false; packagedCoreMatches = $false; uninstalled = $false; existingProtocolBefore = $false; existingInstallationBefore = $false; guiLaunched = $false; automaticBrowserLaunch = $false; actualInferenceRequests = 0; installerBytes = (Get-Item -LiteralPath $qaInstaller).Length; installerSha256 = (Get-QaSha256 -LiteralPath $qaInstaller); capturedAt = (Get-Date).ToUniversalTime().ToString('o') }
 New-Item -ItemType Directory -Path $qaInstallRoot | Out-Null
 $qaInstalled = $false
 try {
@@ -23,10 +29,19 @@ try {
   $qaCommand = (Get-Item -LiteralPath "$qaProtocol\shell\open\command").GetValue('')
   if (-not $qaCommand.Contains($qaExe[0].FullName)) { throw 'Protocol points outside the owned installation' }
   $qaEvidence.protocolRegistered = $true
-  $qaSourceHash = (Get-FileHash -LiteralPath (Join-Path $qaConnectorRoot 'core\lifetime.mjs') -Algorithm SHA256).Hash
-  $qaPackagedHash = (Get-FileHash -LiteralPath (Join-Path $qaInstallRoot 'resources\core\lifetime.mjs') -Algorithm SHA256).Hash
-  if ($qaSourceHash -ne $qaPackagedHash) { throw 'Packaged lifecycle code does not match source' }
+  $qaSourceCoreRoot = Join-Path $qaConnectorRoot 'core'
+  $qaPackagedCoreRoot = Join-Path $qaInstallRoot 'resources\core'
+  $qaSourceModules = @(Get-ChildItem -LiteralPath $qaSourceCoreRoot -Filter '*.mjs' -File | Sort-Object Name)
+  $qaPackagedModules = @(Get-ChildItem -LiteralPath $qaPackagedCoreRoot -Filter '*.mjs' -File | Sort-Object Name)
+  if (-not $qaSourceModules.Count -or ($qaSourceModules.Name -join '|') -ne ($qaPackagedModules.Name -join '|')) { throw 'Packaged core module names do not match source' }
+  foreach ($qaModule in $qaSourceModules) {
+    $qaSourceHash = Get-QaSha256 -LiteralPath $qaModule.FullName
+    $qaPackagedHash = Get-QaSha256 -LiteralPath (Join-Path $qaPackagedCoreRoot $qaModule.Name)
+    if ($qaSourceHash -ne $qaPackagedHash) { throw "Packaged core module does not match source: $($qaModule.Name)" }
+  }
   $qaEvidence.packagedCoreMatches = $true
+  $qaEvidence.coreModulesVerified = $qaSourceModules.Count
+  $qaEvidence.verifiedCoreModules = @($qaSourceModules.Name)
   $qaSavedRunAsNode = $env:ELECTRON_RUN_AS_NODE
   try {
     $env:ELECTRON_RUN_AS_NODE = '1'

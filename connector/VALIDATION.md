@@ -101,3 +101,10 @@ UI 회귀가 만든 이전 임시 프로필 7개를 추가로 삭제하려던 �
 macOS arm64/x64의 실제 설치·Keychain·Finder 실행, Ubuntu GUI에서 Secret Service/keyring·프로토콜·Wayland 펫 동작, 운영 사이트와 서명된 설치본의 첫 실행 콜백, 공개 다운로드 게시·OS 서명/notarization은 아직 검증하지 않았다. Windows UI 회귀는 개발 Electron에서 수행했고 NSIS 설치 회귀는 실제 패키지를 별도로 검증한다. 지속 실행 시 CPU·메모리·배터리 영향은 측정하지 않았다.
 
 3 OS CI에는 코어 테스트와 각 OS 패키징을 사용할 수 있다. Windows CI는 `qa:install`도 실행할 수 있다. `qa:desktop`은 현재 Windows의 실제 WM_CLOSE 및 로그인한 CLI 메타데이터를 확인하는 회귀이므로 무인 3 OS 공통 UI 검증으로 주장하지 않는다.
+
+## 첫 실제 3 OS CI에서 발견한 패키징 차이
+
+2026-10-17의 [Actions 실행 39026669946](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946)에서 코어 37개는 세 OS 모두 통과했다. macOS arm64/x64 DMG도 생성됐다. 네이티브 사용자 UI와 OS 보안 저장소의 실기기 검증 범위는 위의 제한을 그대로 따른다.
+
+- [Ubuntu job 117378896196](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896196): AppImage 생성 뒤 .deb builder가 project homepage와 author.email 또는 명시적 maintainer 누락으로 실패했다. 설치된 electron-builder 26.15.3의 실제 `FpmTarget.computeFpmMetaInfoOptions` 호출에서도 동일 오류를 로컬 재현했다. `homepage=https://hapark.vercel.app`, `linux.maintainer=Hapark maintainers` 보강 후 같은 builder 경로가 URL과 maintainer를 반환해 통과했다. 개인 이메일을 추가하지 않았다. 실제 Ubuntu .deb 재빌드 결과는 다음 CI에서 확인한다.
+- [Windows job 117378896415](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896415): NSIS 생성은 성공했고 설치 회귀의 PowerShell에서 `Get-FileHash`를 찾지 못해 설치 전에 실패했다. SHA256을 .NET 파일 스트림으로 계산해 셸 모듈 의존을 없앴다. `Get-FileHash`를 사용하면 `CommandNotFoundException`이 나도록 한 환경에서 실제 설치·프로토콜·번들 Node·코어 해시·제거 원복을 전부 다시 통과했다. 해시는 앞선 독립 계산값과 같고 추론·GUI·브라우저 호출은 0회다. 실제 Windows runner 재실행 결과는 다음 CI에서 확인한다.
