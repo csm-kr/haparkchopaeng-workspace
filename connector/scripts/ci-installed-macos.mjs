@@ -71,6 +71,13 @@ async function exists(path) {
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
 }
 
+// Only bounded public bundle identifiers/display names belong in diagnostics.
+// Unexpected paths, URLs, control characters, or email-like values stay opaque.
+function publicMetadata(value) {
+  return typeof value === 'string' && /^[\p{L}\p{M}\p{N} ._()+&-]{1,200}$/u.test(value)
+    ? value : { type: typeof value, length: typeof value === 'string' ? value.length : null, omitted: true };
+}
+
 export async function verifyMacInstallation({ configuration, context, qaRoot, evidence }) {
   assert.equal(process.platform, 'darwin', 'Installed DMG verification requires macOS.');
   assert.ok(['arm64', 'x64'].includes(process.arch), 'Unsupported native macOS architecture.');
@@ -93,6 +100,13 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   ])];
   const result = evidence.macos = { architecture: process.arch, mainPids: [], core: null,
     mode: 'production-packaged-invalid-uri', apiExclusion: 'parser-rejected-before-ack', mainProcessNetworkMeasured: false };
+  const metadata = result.metadata = {
+    configured: { appId: publicMetadata(appId), productName: publicMetadata(productName),
+      packageVersion: publicMetadata(packageVersion), scheme: publicMetadata(scheme) },
+    mount: {}, bundle: {},
+    profile: { mode: profileRelativePath.length ? 'app-id-production' : 'bundle-name',
+      relativePath: profileRelativePath.map(publicMetadata) },
+  };
   const cleanup = evidence.cleanup.macos = { processesStopped: false, protocolUnregistered: false,
     applicationRemoved: false, profileRemoved: false, mountDetached: true, errors: [] };
   const coldUri = `${scheme}://wrong-host?attemptId=ci&launchToken=x`;
@@ -202,45 +216,93 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     await assertInside(await realpath(image), dist);
     result.dmg = { filename: basename(image), sha256: await fileHash(image), bytes: imageStat.size };
 
-    evidence.phase = 'macos_dmg_mount';
+    evidence.phase = 'macos_dmg_mount_directory';
     mountDirectory = await createOwnedDirectory(qaRoot, 'mac-volume-');
     // Leave the directory's ownership marker outside the actual empty mountpoint.
     mountPoint = join(mountDirectory.path, 'volume'); await mkdir(mountPoint);
     // Record attachment ownership even if a later plist check fails.
     mounted = true; cleanup.mountDetached = false;
+    evidence.phase = 'macos_dmg_attach';
     const attachment = await run('/usr/bin/hdiutil', ['attach', '-readonly', '-nobrowse', '-noautoopen',
       '-mountpoint', mountPoint, '-plist', image]);
+    metadata.mount.attachExitCode = attachment.code;
+    metadata.mount.plistReturned = attachment.stdout.trim().length > 0;
+    evidence.phase = 'macos_mount_plist';
     const attachmentFile = join(helperDirectory.path, 'attachment.plist');
     await writeFile(attachmentFile, attachment.stdout, { flag: 'wx' });
     const entities = JSON.parse(await plist(attachmentFile, 'system-entities', 'json'));
+    metadata.mount.entitiesAreArray = Array.isArray(entities);
+    metadata.mount.entityCount = Array.isArray(entities) ? entities.length : null;
+    if (Array.isArray(entities)) metadata.mount.entities = entities.slice(0, 16).map(entry => ({
+      hasMountPoint: typeof entry?.['mount-point'] === 'string',
+      mountPointMatched: entry?.['mount-point'] === mountPoint,
+      normalizedMountPointMatched: typeof entry?.['mount-point'] === 'string'
+        && comparablePath(entry['mount-point']) === comparablePath(mountPoint),
+      devEntryValid: /^\/dev\/disk\d+(?:s\d+)*$/.test(entry?.['dev-entry'] ?? ''),
+    }));
     const volume = entities.find(entry => entry['mount-point'] === mountPoint);
+    metadata.mount.mountPointMatched = !!volume;
+    metadata.mount.devEntryValid = !!volume && /^\/dev\/disk\d+(?:s\d+)*$/.test(volume['dev-entry']);
+    evidence.phase = 'macos_mount_device_assert';
     assert.ok(volume && /^\/dev\/disk\d+(?:s\d+)*$/.test(volume['dev-entry']), 'Unexpected mounted DMG device.');
+    evidence.phase = 'macos_dmg_app_names';
     const appNames = (await readdir(mountPoint)).filter(name => name.endsWith('.app'));
+    metadata.mount.appNameCount = appNames.length;
+    metadata.mount.appNames = appNames.slice(0, 10).map(publicMetadata);
+    metadata.mount.appNamesAscii = appNames.slice(0, 10).map(name => /^[\x20-\x7e]+$/.test(name));
+    metadata.mount.configuredAppName = publicMetadata(`${productName}.app`);
+    metadata.mount.appNamesNormalized = appNames.slice(0, 10).map(name => publicMetadata(name.normalize('NFC')));
     assert.deepEqual(appNames.map(name => name.normalize('NFC')), [`${productName}.app`.normalize('NFC')],
       'DMG app name differs from the configured product.');
+    evidence.phase = 'macos_dmg_app_directory';
     const sourceApp = join(mountPoint, appNames[0]);
-    assert.ok((await lstat(sourceApp)).isDirectory(), 'DMG app is not a real directory.');
+    const sourceAppStat = await lstat(sourceApp);
+    metadata.mount.appIsDirectory = sourceAppStat.isDirectory();
+    metadata.mount.appIsSymlink = sourceAppStat.isSymbolicLink();
+    assert.ok(sourceAppStat.isDirectory(), 'DMG app is not a real directory.');
     await assertInside(await realpath(sourceApp), mountPoint);
     const info = join(sourceApp, 'Contents', 'Info.plist');
-    assert.equal(await plist(info, 'CFBundleIdentifier'), appId);
-    assert.equal(await plist(info, 'CFBundleShortVersionString'), packageVersion);
+    evidence.phase = 'macos_bundle_identifier';
+    const observedAppId = await plist(info, 'CFBundleIdentifier');
+    metadata.bundle.appId = publicMetadata(observedAppId);
+    assert.equal(observedAppId, appId);
+    evidence.phase = 'macos_bundle_version';
+    const observedVersion = await plist(info, 'CFBundleShortVersionString');
+    metadata.bundle.packageVersion = publicMetadata(observedVersion);
+    assert.equal(observedVersion, packageVersion);
+    evidence.phase = 'macos_bundle_schemes';
     const schemes = JSON.parse(await plist(info, 'CFBundleURLTypes', 'json')).flatMap(value => value.CFBundleURLSchemes ?? []);
+    metadata.bundle.schemeCount = schemes.length;
+    metadata.bundle.schemes = schemes.slice(0, 10).map(publicMetadata);
     assert.deepEqual(schemes, [scheme], 'Installed bundle must advertise only its configured URI scheme.');
+    evidence.phase = 'macos_bundle_name';
     const bundleName = await plist(info, 'CFBundleName');
+    metadata.bundle.bundleName = publicMetadata(bundleName);
     assert.ok(bundleName && basename(bundleName) === bundleName, 'Invalid app profile directory name.');
+    evidence.phase = 'macos_profile_path';
     const profileParent = join(homedir(), 'Library', 'Application Support');
     userData = profileRelativePath.length ? join(profileParent, ...profileRelativePath) : join(profileParent, bundleName);
     await assertInside(userData, profileParent);
+    metadata.profile.insideAppData = true;
     if (profileRelativePath.length) {
+      evidence.phase = 'macos_profile_parent';
       profileContainer = join(profileParent, appId);
       profileContainerAbsent = !(await exists(profileContainer));
+      metadata.profile.parentExists = !profileContainerAbsent;
       if (!profileContainerAbsent) {
         const parentStat = await lstat(profileContainer);
+        metadata.profile.parentIsDirectory = parentStat.isDirectory();
+        metadata.profile.parentIsSymlink = parentStat.isSymbolicLink();
         assert.ok(parentStat.isDirectory() && !parentStat.isSymbolicLink(), 'Production profile parent must be a real directory.');
-        assert.equal(comparablePath(await realpath(profileContainer)), comparablePath(profileContainer));
+        const actualProfileParent = comparablePath(await realpath(profileContainer));
+        metadata.profile.parentRealpathMatched = actualProfileParent === comparablePath(profileContainer);
+        assert.equal(actualProfileParent, comparablePath(profileContainer));
       }
     }
-    assert.equal(await exists(userData), false, 'An existing production profile must be preserved.');
+    evidence.phase = 'macos_profile_absence';
+    const profileExists = await exists(userData);
+    metadata.profile.exists = profileExists;
+    assert.equal(profileExists, false, 'An existing production profile must be preserved.');
     profileAbsent = true;
 
     evidence.phase = 'macos_copy';

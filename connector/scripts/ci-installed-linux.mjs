@@ -47,6 +47,31 @@ function mainProcesses(entries, executable) {
   return entries.filter(entry => entry.executable === executable && !entry.argv.some(arg => arg.startsWith('--type=')));
 }
 
+function processCounts(entries, executable) {
+  const main = mainProcesses(entries, executable).length;
+  return { total: entries.length, main, helper: entries.length - main,
+    renderer: entries.filter(entry => entry.argv.includes('--type=renderer')).length };
+}
+
+// Classify in memory. Never persist stderr, argv, URLs, filesystem paths or tokens.
+function stderrCategory(value) {
+  const text = typeof value === 'string' ? value : '';
+  if (/no usable sandbox|suid sandbox helper|failed to move to new namespace|running as root without --no-sandbox|zygote_host_impl_linux|apparmor[^\n]*(?:denied|userns)/i.test(text)) return 'sandbox';
+  if (/missing x server|cannot open display|could not connect to display|unable to open x display|failed to connect to (?:the )?(?:x11|x server|wayland)|ozone_platform_x11|platform failed to initialize/i.test(text)) return 'display';
+  if (/ERR_MODULE_NOT_FOUND|cannot find (?:module|package)|apps\.generated\.json|preferences\.json|(?:ENOENT|EACCES|permission denied)[^\n]*(?:config|profile|production)|(?:config|profile|production)[^\n]*(?:ENOENT|EACCES|permission denied)|등록된 웹앱 설정|연결 앱 설정/i.test(text)) return 'configuration';
+  return 'unknown';
+}
+
+async function processDiagnostic(record) {
+  if (!record) return null;
+  const result = record.closed ? await record.done : { code: record.child.exitCode, signal: record.child.signalCode };
+  const signals = ['SIGABRT', 'SIGTRAP', 'SIGSEGV', 'SIGILL', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT', 'SIGPIPE'];
+  return { started: Number.isSafeInteger(record.pid), closed: record.closed,
+    exitCode: Number.isSafeInteger(result?.code) ? result.code : null,
+    exitSignal: signals.includes(result?.signal) ? result.signal : null,
+    stderrPresent: Boolean(record.stderr), stderrCategory: stderrCategory(record.stderr) };
+}
+
 async function stopProcesses(installation) {
   for (const signal of ['SIGTERM', 'SIGKILL']) {
     const entries = await processes(installation);
@@ -97,7 +122,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
   if (configuration.profileRelativePath?.length) profilePaths.push(assertInside(join(appData, ...configuration.profileRelativePath), appData));
   for (const profile of profilePaths) assert.equal(await exists(profile), false, 'Existing app profile must not be changed');
   const inspection = await createOwnedDirectory(qaRoot, 'linux-deb-inspection-');
-  let installed = false, installAttempted = false, installationOwned = false, installation, executable, desktopInstalled, appArmor, client, launched;
+  let installed = false, installAttempted = false, installationOwned = false, installation, executable, desktopInstalled, appArmor, client, launched, coldOpener, warmOpener;
   const openers = [];
   let failure, failedPhase;
   const details = evidence.linux = { packageName, version, architecture, packageSha256 };
@@ -170,22 +195,39 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     evidence.checks.push('linux_actual_deb_install_core_hashes_sandbox_and_default_protocol');
     evidence.checks.push('linux_installed_bundled_node_without_external_node_installation');
 
-    evidence.phase = 'linux_cold_uri';
+    evidence.phase = 'linux_cold_pid';
     const coldUri = `${scheme}://connect?attemptId=ci-package-cold`;
-    const coldOpener = start('xdg-open', [coldUri]); openers.push(coldOpener);
+    details.cold = { launchedBy: 'xdg-open', installedBinary: false, uriArgumentObserved: false,
+      visibleWindowObserved: false, rendererStateObserved: false, closeRequested: false,
+      processExitObserved: false, mainExitCodeObserved: false, peakMainProcesses: 0 };
+    coldOpener = start('xdg-open', [coldUri]); openers.push(coldOpener);
     const cold = await until(async () => {
-      const entries = mainProcesses(await processes(installation), executable);
-      return entries.length === 1 && entries[0].argv.includes(coldUri) ? entries[0] : false;
+      const entries = await processes(installation), mains = mainProcesses(entries, executable);
+      details.cold.lastProcessCounts = processCounts(entries, executable);
+      details.cold.peakMainProcesses = Math.max(details.cold.peakMainProcesses, mains.length);
+      return mains.length === 1 && mains[0].argv.includes(coldUri) ? mains[0] : false;
     }, 'cold xdg-open to launch the installed binary');
+    details.cold.installedBinary = true; details.cold.uriArgumentObserved = true;
+    evidence.phase = 'linux_cold_visible_window';
     const windowId = await until(async () => {
       const result = await run('xdotool', ['search', '--onlyvisible', '--pid', String(cold.pid)], { allowFailure: true, timeout: 2_000 });
+      details.cold.lastWindowSearchExitCode = result.code;
+      details.cold.windowSearchStderrCategory = stderrCategory(result.stderr);
       return result.code === 0 ? result.stdout.trim().split(/\s+/).find(value => /^\d+$/.test(value)) : false;
     }, 'the cold installed application window');
+    details.cold.visibleWindowObserved = true;
+    evidence.phase = 'linux_cold_capture';
     await run('scrot', ['--overwrite', join(qaRoot, 'linux-installed-cold.png')]);
-    details.cold = { launchedBy: 'xdg-open', installedBinary: true, uriArgumentObserved: true, visibleWindowObserved: true, rendererStateObserved: false, screenshot: 'linux-installed-cold.png' };
+    details.cold.screenshot = 'linux-installed-cold.png';
+    evidence.phase = 'linux_cold_close_window';
     await run('xdotool', ['windowclose', windowId]);
+    details.cold.closeRequested = true;
+    evidence.phase = 'linux_cold_process_exit';
     await until(async () => !(await processes(installation)).length, 'cold application window close to exit all installed processes');
+    details.cold.processExitObserved = true;
+    evidence.phase = 'linux_cold_opener_exit';
     await until(() => coldOpener.closed, 'cold desktop opener to exit');
+    details.cold.opener = await processDiagnostic(coldOpener);
     evidence.checks.push('linux_unmodified_desktop_cold_uri_binary_argv_window_and_close');
 
     evidence.phase = 'linux_packaged_cdp';
@@ -208,7 +250,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     evidence.checks.push('linux_packaged_renderer_cdp_parser_rejection_and_live_sandbox');
 
     evidence.phase = 'linux_warm_uri';
-    const warmOpener = start('xdg-open', [`${scheme}://invalid`]); openers.push(warmOpener);
+    warmOpener = start('xdg-open', [`${scheme}://invalid`]); openers.push(warmOpener);
     const warmRejected = '등록된 앱의 연결 링크를 사용해 주세요.';
     await until(async () => { const state = await client.state(); return state.stage === 'error' && state.description === warmRejected; }, 'warm URI to reach the existing packaged instance');
     assertRejected(await client.state(), warmRejected);
@@ -229,7 +271,19 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     await until(async () => !(await processes(installation)).length, 'packaged application and helpers to exit');
     details.normalQuit = true;
     evidence.checks.push('linux_packaged_ipc_quit_and_owned_process_exit');
-  } catch (error) { failure = error; failedPhase = evidence.phase; }
+  } catch (error) {
+    failure = error; failedPhase = evidence.phase;
+    // Preserve the pre-cleanup state: later termination/purge must not erase the launch diagnosis.
+    evidence.linuxFailure = { phase: failedPhase, commandStderrCategory: stderrCategory(error?.result?.stderr) };
+    try {
+      evidence.linuxFailure.coldOpener = await processDiagnostic(coldOpener);
+      evidence.linuxFailure.warmOpener = await processDiagnostic(warmOpener);
+      evidence.linuxFailure.directApplication = await processDiagnostic(launched);
+      evidence.linuxFailure.installedProcesses = installation ? processCounts(await processes(installation), executable) : { total: 0, main: 0, helper: 0, renderer: 0 };
+    } catch {
+      evidence.linuxFailure.snapshotUnavailable = true;
+    }
+  }
   try {
     evidence.phase = 'linux_cleanup';
     client?.close();

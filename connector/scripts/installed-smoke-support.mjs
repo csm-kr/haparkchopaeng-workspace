@@ -102,8 +102,11 @@ export async function verifyInstalledCore(resourcesDir, sourceCoreDir) {
 }
 
 export function diagnostic(error, phase) {
-  return { phase: /^[a-z][a-z0-9_]{0,59}$/.test(phase ?? '') ? phase : 'unknown',
+  const result = { phase: /^[a-z][a-z0-9_]{0,59}$/.test(phase ?? '') ? phase : 'unknown',
     code: /^[A-Z][A-Z0-9_]{1,59}$/.test(error?.code ?? '') ? error.code : 'UNKNOWN' };
+  const site = typeof error?.stack === 'string' && /\n\s+at[^\n]*[/\\](ci-installed-(?:linux|macos|smoke)\.mjs|installed-smoke-support\.mjs):([1-9]\d{0,5}):([1-9]\d{0,4})/.exec(error.stack.slice(0, 20_000));
+  if (site) result.site = { file: site[1], line: Number(site[2]), column: Number(site[3]) };
+  return result;
 }
 
 export async function run(file, args, { timeout = 30_000, allowFailure = false, env } = {}) {

@@ -119,3 +119,10 @@ test('diagnostics retain failure type and phase without copying URI, stderr or a
   assert.equal(JSON.stringify(value).includes('private'), false);
   assert.deepEqual(diagnostic({ code: 'raw secret code' }, 'raw private phase'), { phase: 'unknown', code: 'UNKNOWN' });
 });
+
+test('native assertion diagnostics expose only the verifier filename and numeric source position', () => {
+  const error = { code: 'ERR_ASSERTION', stack: 'Error: private-token\n at verify (file:///private/secret/ci-installed-macos.mjs:188:12)' };
+  assert.deepEqual(diagnostic(error, 'macos_bundle'), { phase: 'macos_bundle', code: 'ERR_ASSERTION', site: { file: 'ci-installed-macos.mjs', line: 188, column: 12 } });
+  assert.equal(JSON.stringify(diagnostic(error, 'macos_bundle')).includes('private'), false);
+  assert.deepEqual(diagnostic({ code: 'ERR_ASSERTION', stack: 'Error: private\n at credential (/private/secrets/user.mjs:17:22)' }, 'macos_bundle'), { phase: 'macos_bundle', code: 'ERR_ASSERTION' });
+});
