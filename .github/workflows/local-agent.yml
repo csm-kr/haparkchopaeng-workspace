@@ -204,7 +204,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Native installer build (unsigned validation artifact)
+        if: runner.os != 'macOS'
         run: npm --prefix connector/desktop run package:${{ matrix.platform }}
+      - name: macOS native identity regression and installer build (unsigned)
+        if: runner.os == 'macOS'
+        run: npm --prefix connector/desktop run package:mac
       - name: Verify Debian sandbox and protocol contents
         if: runner.os == 'Linux'
         shell: bash

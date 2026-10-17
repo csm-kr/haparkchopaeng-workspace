@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -36,6 +37,10 @@ export function validateConfiguration(value) {
     && !/[<>:"/\\|?*\u0000-\u001f]/.test(value.productName) && !['.', '..'].includes(value.productName));
   assert.ok(typeof value.macBundleName === 'string' && value.macBundleName.length <= 100 && value.macBundleName.trim()
     && !/[<>:"/\\|?*\u0000-\u001f]/.test(value.macBundleName) && !['.', '..'].includes(value.macBundleName));
+  for (const key of ['runtimeProductName', 'macInternalName', 'macDisplayName']) if (value[key] !== undefined) {
+    assert.ok(typeof value[key] === 'string' && value[key].length <= 100 && value[key].trim()
+      && !/[<>:"/\\|?*\u0000-\u001f]/.test(value[key]) && !['.', '..'].includes(value[key]));
+  }
   assert.ok(/^[a-z][a-z0-9+.-]{2,63}$/.test(value.scheme ?? '') && !['http', 'https', 'file', 'data', 'javascript'].includes(value.scheme));
   assert.ok(/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.+-]+)?$/.test(value.packageVersion ?? ''));
   return value;
@@ -61,10 +66,25 @@ export async function loadConfiguration(connectorRoot) {
   assert.equal(runtime.development, false, 'Installed smoke requires the production build configuration');
   assert.equal(runtime.applications?.length, 1);
   const productName = build.productName ?? pkg.productName;
+  let macBuild = build;
+  if (!portableProfile && /--config mac-builder\.cjs\b/.test(pkg.scripts?.['package:mac'] ?? '')) {
+    const file = path.join(desktop, 'mac-builder.cjs'), stat = await lstat(file);
+    assert.ok(stat.isFile() && !stat.isSymbolicLink());
+    macBuild = createRequire(pathToFileURL(file))(file);
+    assert.equal(macBuild.appId, build.appId);
+    assert.equal(macBuild.extraMetadata?.productName, productName, 'Mac native naming must preserve runtime and credential identity');
+  }
+  const runtimeProductName = macBuild.extraMetadata?.productName ?? build.extraMetadata?.productName ?? productName;
+  const macInternalName = macBuild.mac?.extendInfo?.CFBundleName ?? macBuild.productName ?? productName;
+  const macDisplayName = macBuild.mac?.extendInfo?.CFBundleDisplayName ?? macBuild.productName ?? productName;
+  assert.equal(macInternalName.normalize('NFC'), (macBuild.productName ?? productName).normalize('NFC'),
+    'CFBundleName must match the builder Helper name');
   return validateConfiguration({ appId: build.appId, productName,
-    macBundleName: build.mac?.executableName ?? build.executableName ?? productName,
+    runtimeProductName, macInternalName, macDisplayName,
+    macBundleName: macBuild.mac?.executableName ?? macBuild.executableName ?? macBuild.productName ?? productName,
     scheme: runtime.applications[0].scheme, packageVersion: build.extraMetadata?.version ?? pkg.version, connectorRoot,
     packageName: build.deb?.packageName ?? build.extraMetadata?.name ?? pkg.name,
+    runtimePackageName: macBuild.extraMetadata?.name ?? build.extraMetadata?.name ?? pkg.name,
     profileRelativePath: portableProfile ? [build.appId, 'production'] : [] });
 }
 
@@ -124,6 +144,27 @@ export async function run(file, args, { timeout = 30_000, allowFailure = false, 
       else resolve(result);
     });
   });
+}
+
+export function validateMacInstalledIdentity(configuration, observed) {
+  const equal = (actual, expected) => assert.ok(typeof actual === 'string' && actual.normalize('NFC') === expected.normalize('NFC'));
+  const internalName = configuration.macInternalName ?? configuration.productName;
+  equal(observed.internalName, internalName);
+  equal(observed.displayName, configuration.macDisplayName ?? configuration.productName);
+  equal(observed.executableName, configuration.macBundleName);
+  equal(observed.runtimeProductName, configuration.runtimeProductName ?? configuration.productName);
+  assert.ok(Array.isArray(observed.helpers) && observed.helpers.length > 0 && observed.helpers.length <= 12);
+  const suffixes = new Set([' Helper', ' Helper EH', ' Helper NP', ' Helper (Renderer)', ' Helper (GPU)', ' Helper (Plugin)', ' Login Helper']);
+  const seen = new Set();
+  for (const helper of observed.helpers) {
+    assert.ok(typeof helper.bundleName === 'string' && !seen.has(helper.bundleName)); seen.add(helper.bundleName);
+    const name = helper.bundleName.normalize('NFC');
+    assert.ok(name.startsWith(internalName) && name.endsWith('.app'));
+    const suffix = name.slice(internalName.length, -4);
+    assert.ok(suffixes.has(suffix)); equal(helper.executableName, `${internalName}${suffix}`);
+  }
+  assert.ok(observed.helpers.some(helper => helper.bundleName.normalize('NFC') === `${internalName} Helper.app`));
+  return { helperCount: observed.helpers.length };
 }
 
 export function start(file, args, { env } = {}) {

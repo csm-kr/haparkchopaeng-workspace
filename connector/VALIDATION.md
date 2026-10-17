@@ -1,6 +1,6 @@
 # 연결기 검증 기록 — 2026-10-17
 
-> 기존 절은 각 실행 당시의 검증 기록을 보존한다. Ubuntu 실제 설치·전용 링크·제거의 추가 결과는 맨 아래 **phase14 Ubuntu 설치본 검증** 절을 따른다. 이전 절의 Ubuntu 설치 미검증 표기는 당시 범위이며, Windows·macOS 상태를 이번 Ubuntu 결과로 변경하지 않는다.
+> 기존 절은 각 실행 당시의 검증 기록을 보존한다. 최신 설치본 상태는 맨 아래 **phase14 최신 설치본 CI — 730ad8d** 절을 따른다. 초기 Ubuntu 영수증도 별도 보존하며 이전 절의 설치 미검증 표기는 당시 범위다.
 
 ## 검증 범위
 
@@ -157,3 +157,24 @@ macOS arm64의 CI Keychain 사용과 Ubuntu의 CI Secret Service 사용은 통�
 실제 CLI·모델 추론은 **0회**(`cliInferenceRequested=false`)다. invalid URI가 기기 키 저장·API ACK·adapter 구성 전에 거절되는 제품 흐름으로 해당 작업을 배제했으며, main의 네트워크를 독립 캡처해 API 호출 0회를 측정한 것은 아니다. cold 실행은 renderer 상태를 CDP로 읽지 않았고, 직접 자식이 아닌 cold main의 종료 코드는 측정하지 않았다. 프로세스 소멸 근거는 관측한 소유 PID와 읽을 수 있는 `/proc` 범위이며 모든 sandbox 자손의 관측을 보장하지 않는다.
 
 이번 8조건은 인증 페어링·OS 키 암호화·실제 모델 응답을 검증하지 않는다. 앞선 unpackaged 암호화 13조건과 별개다. 정식 배포, 실사용자의 브라우저 승인·GUI 설치 경험, Wayland, 재부팅, 서명·업데이트는 미검증이며 Windows·macOS의 별도 진행 상태는 유지한다. AppImage는 계속 빌드·배포 대상에서 제외한다.
+
+## phase14 최신 설치본 CI — 730ad8d
+
+제품 소스 `730ad8d0ee418b623634288636e44a47fe8e4331`의 [CI 39041064640](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640)는 **Web·PostgreSQL·Windows·Linux 성공, Mac 실패**로 종료됐다. 설치 영수증 source는 CI merge `c926f9965458c089a2b38b4d0c4ceda631aea54c`다. 과거 `ec594c2`의 해시·검증 수와 합산하지 않는다.
+
+Web job 117420497398은 120 suites 통과·1 skip, 웹 946개 통과·PG 전용 13개 skip, pytest 60개, lint/build 종료 코드 0, Chromium 8개(30.7초), HTTP wire step 통과다. 별도 PostgreSQL job 117420497435의 13개도 성공했다. phase13의 같은 수치와 중복 합산하지 않는다.
+
+| job | 완료된 검증 |
+| --- | --- |
+| [Windows 117420497431](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497431) | NSIS 실제 설치·프로토콜 등록·번들 Node·코어 9개 SHA 일치. Node installed URI 영수증 5 checks·정상 IPC·프로필 정리 통과. 최종 PS 영수증 passed/uninstalled/protocolRestoredToAbsent 모두 true |
+| [Ubuntu 117420497268](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497268) | 위 실제 .deb 설치 8조건 재통과. 코어 9개, Node 24.22.0 x64, 설치기가 선택한 root:root/0755 sandbox·앱별 AppArmor loaded. QA mode 변경 없음. purge·프로필·handler·AppArmor·opener·Temp 정리 모두 true |
+| [Mac 117420497541](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497541) | SIGTRAP으로 실패. ASCII 실행 파일명 분리·logging 보강도 해결하지 못했다. 원인은 미확정이며 설치 앱 OS URI 완료로 표시하지 않음 |
+
+Windows cold는 실제 ShellExecute의 정확한 OS 루트 슬래시 변형을 관측했다(`normalizedRootSlashObserved=true`, `rawExactMatch=false`). 원문 exact가 true인 것처럼 덮어쓰지 않았다. 가시 창·WM_CLOSE, warm의 다른 parser 오류·same PID/single main, 정상 quit IPC, ownedProcessesStopped/freshProfileRemoved와 errors=[]를 확인했다. ACL은 같은 현재 토큰의 소유 그룹임을 검증했다(`currentTokenOwner=true`, `currentUserOwner=false`, `administratorsOwner=true`); SID 원문은 기록하지 않는다. 경로·실제 경로·생성 시각·reparse 부재 검사도 통과했다. 자체 제거 뒤 handler 없음은 확인했으며 설치 폴더 Remove-Item은 명령 성공/job 종료 코드 0 근거다. 삭제 후 exists 별도 boolean은 없다.
+
+| 이번 CI에서 검증한 파일 | bytes | SHA256 |
+| --- | ---: | --- |
+| Windows NSIS unsigned QA artifact | 111584107 | `3e2b6669cb543d242f0f8a20c4724c96e6e048e95fc9bbbe5fbd67dd54297289` |
+| Ubuntu .deb amd64 | 영수증에서 별도 크기 미측정 | `85ede6d95ea984427dcd27a12e1f78af45b44e67a8f1156a702b14b39caff1dd` |
+
+Windows의 Authenticode 상태를 이 영수증에서 측정하지 않았으므로 서명 완료를 주장하지 않는다. CLI·실제 추론 0회이며 API ACK 전 parser 경계로 실행을 배제했다. main-process 네트워크는 독립 측정하지 않았다. Ubuntu의 URI 제목 토큰·원래 argv 미증명·읽기 가능한 `/proc` 범위, 실사용자 브라우저 승인·인증 페어링·재부팅/업데이트·Mac x64·Wayland·서명/공증·운영 미배포 한계는 유지한다. 설치본 CI 성공은 unpackaged 암호화 13조건이나 실사용자 검증을 대신하지 않는다.

@@ -45,18 +45,25 @@
         "connector/test/desktop-packaging-identity.test.mjs",
         "connector/core/security.mjs",
         "connector/test/security.test.mjs",
-        "lib/local-agent/PROTOCOL.md"
+        "lib/local-agent/PROTOCOL.md",
+        "connector/desktop/mac-builder.cjs",
+        "connector/scripts/mac-builder.test.mjs",
+        "connector/scripts/installed-smoke-support.mjs"
       ],
       "checks": [
         [
           "node",
           "--test",
           "connector/test/*.test.mjs"
+        ],
+        [
+          "node",
+          "connector/scripts/mac-builder.test.mjs"
         ]
       ],
       "started_at": "2026-10-17T22:14:52+0900",
-      "summary": "실제 설치본 URI 검증기를 macOS·Ubuntu·Windows hosted CI에 접합했다. 제품 연결기 130개 AC 통과. Mac 시작 직후 종료의 서명·crash·직접 자식 진단과 Windows native 실패·프로세스·프로필 진단은 원문을 출력하지 않는다. 미확인 Mac 진단 자식과 원래 OS PID의 정리 경계를 실패 테스트로 고쳤으며 원래 OS 실패 판정은 보존한다. Windows OS가 추가한 루트 슬래시는 엄격한 인자·토큰 검증을 유지해 같은 연결로 처리하고, 원문/루트슬래시 관측을 구분한다. PowerShell 자식의 PSModulePath만 제거해 상속 모듈 자동 로드 실패를 회복하며 읽을 수 없는 ACL은 계속 거절한다. 새 프로필 owner는 현재 사용자 또는 검증된 현재 토큰의 default owner와 일치해야 하고 cold 증거는 수락 시 고정한다. Mac 실행 이름만 분리해도 SIGTRAP이 재현돼 직접 진단 자식의 공식 console logging과 공개 native source 진단으로 원인을 분리한다. 실제 OS 통과 판정은 step2 원격 CI에 남긴다.",
-      "completed_at": "2026-10-17T23:30:15+0900"
+      "summary": "실제 설치본 URI 검증기를 macOS·Ubuntu·Windows hosted CI에 접합했다. 제품 연결기 137개 AC 통과. Mac 시작 직후 종료의 서명·crash·직접 자식 진단과 Windows native 실패·프로세스·프로필 진단은 원문을 출력하지 않는다. 미확인 Mac 진단 자식과 원래 OS PID의 정리 경계를 실패 테스트로 고쳤으며 원래 OS 실패 판정은 보존한다. Windows OS가 추가한 루트 슬래시는 엄격한 인자·토큰 검증을 유지해 같은 연결로 처리하고, 원문/루트슬래시 관측을 구분한다. PowerShell 자식의 PSModulePath만 제거해 상속 모듈 자동 로드 실패를 회복하며 읽을 수 없는 ACL은 계속 거절한다. 새 프로필 owner는 현재 사용자 또는 검증된 현재 토큰의 default owner와 일치해야 하고 cold 증거는 수락 시 고정한다. Windows 종료 관측은 일시 unknown만 제한 시간 안에 재조회하며 실제 gone 확인만 수락한다. 계속 unknown이면 실패·정리 보존, 완전한 identity 불일치·native 오류는 즉시 실패한다. Mac 전용 빌드의 내부 이름·Helper를 ASCII로 분리하고 표시명·runtime 제품명·기존 프로필을 유지하는 후보를 실제 builder 합성 번들 5개 AC로 검증했다. 설치 검증기는 실제 plist·Helper·ASAR metadata와 원래 프로필을 따로 확인한다. native 시작 오류가 해결됐다는 주장은 실제 Mac CI까지 유보한다. 실제 OS 통과 판정은 step2 원격 CI에 남긴다.",
+      "completed_at": "2026-10-17T23:46:09+0900"
     },
     {
       "step": 2,

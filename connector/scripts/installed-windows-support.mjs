@@ -135,15 +135,31 @@ export function sameWindowsProcess(row, identity) {
 
 export function classifyWindowsKnownProcess(observation, identity) {
   const unavailable = () => { throw Object.assign(new Error('Known installed process identity cannot be verified'), { code: 'PROCESS_OBSERVATION_UNAVAILABLE' }); };
+  const mismatch = () => { throw Object.assign(new Error('Known installed process identity does not match'), { code: 'PROCESS_IDENTITY_MISMATCH' }); };
   if (!observation || typeof observation.exists !== 'boolean') return unavailable();
   if (!observation.exists) return 'gone';
   const observed = creationStamp(observation.createdAt), original = creationStamp(identity.createdAt);
   if (!observed || !original) return unavailable();
   if (observed !== original) return 'gone';
-  try {
-    if (observation.pid !== identity.pid || observation.sid !== identity.sid || !sameWindowsPath(observation.executable, identity.executable)) return unavailable();
-  } catch { return unavailable(); }
+  if (!Number.isSafeInteger(observation.pid) || observation.pid <= 1 || !isCanonicalWindowsSid(observation.sid)
+    || typeof observation.executable !== 'string') return unavailable();
+  let pathMatches;
+  try { pathMatches = sameWindowsPath(observation.executable, identity.executable); }
+  catch { return unavailable(); }
+  if (observation.pid !== identity.pid || observation.sid !== identity.sid || !pathMatches) return mismatch();
   return 'running';
+}
+
+export function windowsOwnedProcessesStopped(rows, observations) {
+  assert.ok(Array.isArray(rows) && Array.isArray(observations), 'Installed process observations are required');
+  const states = observations.map(({ identity, observation }) => {
+    try { return classifyWindowsKnownProcess(observation, identity); }
+    catch (error) {
+      if (error.code === 'PROCESS_OBSERVATION_UNAVAILABLE') return 'pending';
+      throw error;
+    }
+  });
+  return rows.length === 0 && states.every(state => state === 'gone');
 }
 
 export function windowsProcessObservation(observation, { executable, uri }) {

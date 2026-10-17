@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLaunchUrl } from '../core/security.mjs';
 import { invokeWindowsNative } from '../scripts/ci-installed-windows.mjs';
-import { run } from '../scripts/installed-smoke-support.mjs';
+import { run, until } from '../scripts/installed-smoke-support.mjs';
 import {
   assertWindowsRunner, windowsSmokeLayout, assertOwnedWindowsInstallation, parseWindowsSmokeArguments,
   assertWindowsProcessIdentity, sameWindowsProcess, selectWindowsMain, assertWindowsRejectedState,
@@ -18,6 +18,7 @@ import {
   windowsControlledUriObservation,
   assertWindowsTokenContext,
   captureWindowsColdUriSnapshot,
+  windowsOwnedProcessesStopped,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from '../scripts/installed-windows-support.mjs';
 
@@ -244,9 +245,49 @@ test('a known PID with unavailable identity is unknown, never proof of process e
   assert.equal(classifyWindowsKnownProcess({ exists: false }, identity), 'gone');
   assert.equal(classifyWindowsKnownProcess({ ...processRow(), exists: true }, identity), 'running');
   assert.equal(classifyWindowsKnownProcess({ exists: true, createdAt: '2026-10-17T12:00:02.000Z' }, identity), 'gone');
-  for (const observation of [null, {}, { exists: true }, { exists: true, createdAt: 'unknown' }, { exists: true, createdAt: '2026' }, { ...processRow(), exists: true, executable: null }, { ...processRow(), exists: true, sid: null }, { ...processRow(), exists: true, executable: 'C:\\other.exe' }]) {
+  for (const observation of [null, {}, { exists: true }, { exists: true, createdAt: 'unknown' }, { exists: true, createdAt: '2026' }, { ...processRow(), exists: true, executable: null }, { ...processRow(), exists: true, sid: null }]) {
     assert.throws(() => classifyWindowsKnownProcess(observation, identity), error => error.code === 'PROCESS_OBSERVATION_UNAVAILABLE');
   }
+});
+
+test('Windows exit polling waits through an unavailable sample and passes only after observed disappearance', async () => {
+  const identity = assertWindowsProcessIdentity(processRow(), { installation, executable, sid, notBefore: startedAt });
+  const samples = [{ exists: true, createdAt: identity.createdAt, pid: identity.pid, executable: null, sid: null }, { exists: false }];
+  let observed = 0;
+  await until(() => windowsOwnedProcessesStopped([], [{ identity, observation: samples[observed++] }]), 'synthetic known process exit', 1000);
+  assert.equal(observed, 2);
+  assert.equal(windowsOwnedProcessesStopped([processRow()], [{ identity, observation: { exists: false } }]), false);
+  assert.equal(windowsOwnedProcessesStopped([], [{ identity, observation: { ...processRow(), exists: true } }]), false);
+});
+
+test('Windows exit polling rejects a complete identity mismatch instead of retrying it as unknown', () => {
+  const identity = assertWindowsProcessIdentity(processRow(), { installation, executable, sid, notBefore: startedAt });
+  for (const override of [{ pid: 1235 }, { executable: 'C:\\other.exe' }, { sid: 'S-1-5-21-111-222-333-1002' }]) {
+    assert.throws(() => windowsOwnedProcessesStopped([], [{ identity, observation: { ...processRow(override), exists: true } }]), error => error.code === 'PROCESS_IDENTITY_MISMATCH');
+  }
+});
+
+test('persistent unknown observations hit the actual polling deadline and never authorize cleanup', async () => {
+  const identity = assertWindowsProcessIdentity(processRow(), { installation, executable, sid, notBefore: startedAt });
+  let observations = 0, cleanupAuthorized = false;
+  const pending = until(() => {
+    observations++;
+    return windowsOwnedProcessesStopped([], [{ identity, observation: { exists: true, createdAt: identity.createdAt, pid: identity.pid, executable: null, sid: null } }]);
+  }, 'persistent synthetic unknown identity', 200).then(() => { cleanupAuthorized = true; });
+  await assert.rejects(pending, error => error.code === 'CONDITION_TIMEOUT');
+  assert.ok(observations >= 1); assert.equal(cleanupAuthorized, false);
+});
+
+test('a native observation error after an unknown sample propagates without authorizing cleanup', async () => {
+  const identity = assertWindowsProcessIdentity(processRow(), { installation, executable, sid, notBefore: startedAt });
+  const failure = Object.assign(new Error('Synthetic native failure'), { code: 'WINDOWS_NATIVE_FAILED' });
+  let observations = 0, cleanupAuthorized = false;
+  const pending = until(() => {
+    if (observations++ > 0) throw failure;
+    return windowsOwnedProcessesStopped([], [{ identity, observation: { exists: true } }]);
+  }, 'synthetic native failure after unknown', 1000).then(() => { cleanupAuthorized = true; });
+  await assert.rejects(pending, error => error === failure);
+  assert.equal(observations, 2); assert.equal(cleanupAuthorized, false);
 });
 
 test('cold selection observes one installed main and the exact OS-delivered URI argument', () => {

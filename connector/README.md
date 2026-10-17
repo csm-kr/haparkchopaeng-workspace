@@ -60,7 +60,7 @@ CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop ru
 CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop run package:linux
 ```
 
-각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. Ubuntu는 phase14의 격리 X11 CI에서 실제 .deb 설치·OS URI·정상 종료·제거 8조건을 통과했다. 제품 Mac·Windows의 실제 OS URI 흐름은 아직 완료하지 않았다. Windows 개발 설치본은 미서명이며 macOS Developer ID 서명·notarization, 실사용자의 설치 승인과 정식 배포는 별도다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 갱신하는 절차도 검증해야 한다. 실행별 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
+각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. Ubuntu는 phase14의 격리 X11 CI에서 실제 .deb 설치·OS URI·정상 종료·제거 8조건을 통과했다. Windows도 `730ad8d`에서 실제 설치·cold/warm URI·정상 종료·제거를 통과했다. 제품 Mac의 실제 OS URI 흐름은 아직 완료하지 않았다. Windows는 unsigned QA artifact이며 서명 완료를 검증하지 않았다. macOS Developer ID 서명·notarization, 실사용자의 설치 승인과 정식 배포도 별도다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 갱신하는 절차도 검증해야 한다. 실행별 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
 
 Electron의 Node 런타임을 앱에 포함한다. `desktop/node_modules`, `dist`, `artifacts`, 실제 환경의 `desktop/apps.generated.json`은 Git에 포함하지 않는다. CLI 로그인 토큰이나 OS 보안 저장소의 기기 키를 빌드·로그·저장소에 복사하지 않는다.
 
@@ -97,16 +97,16 @@ Ubuntu는 GUI 세션, 활성 Secret Service/keyring, 한국어 표시 글꼴, �
 
 ### phase14 실제 설치본 · 최신 확정 상태
 
-제품 소스 `4c74a19`의 [CI 39039821379](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39039821379)에서 Linux 설치 검증 8조건은 성공했고 Mac·Windows job은 실패했다. 아래 결과는 해당 실행 기준이며 과거 13조건 성공으로 실패를 덮어쓰지 않는다.
+최신 제품 소스 `730ad8d`의 [CI 39041064640](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640)는 Web·PostgreSQL·Windows·Linux job 성공, Mac 실패로 종료됐다. 웹 946개·별도 PG 13개·Chromium 8개·HTTP wire·pytest 60개·lint/build가 통과했다. 설치 영수증의 CI merge 소스는 `c926f9965458c089a2b38b4d0c4ceda631aea54c`다. 이전 `4c74a19`/CI 39039821379의 Mac·Windows 실패는 과거 기록이며, 최신 Windows 성공과 구분한다. 전체 CI 성공이나 정식 배포 완료를 뜻하지 않는다.
 
 | 환경 | 확인된 범위 | 남은 확인 |
 | --- | --- | --- |
 | 제품 Ubuntu 24.04 x64 | 실제 .deb 설치·코어 9개 SHA 대조·번들 Node·기본 URI handler·cold/warm 링크·가시 창·정상 닫기/quit IPC·purge/프로필/handler/AppArmor 정리 8조건 통과 | 격리 X11 CI 범위. 실사용자 GUI·인증 페어링·브라우저 승인·Wayland·재부팅·업데이트·정식 배포 |
-| 제품 macOS arm64 | DMG 생성과 과거 unpackaged 암호화 회귀는 별도 기록. 실제 설치 앱의 OS URI 완료는 미확인 | 실행 파일명을 ASCII로 분리한 뒤에도 SIGTRAP이 관측돼 해당 job 실패. 원인은 확정하지 않음. Finder·Developer ID·공증·운영 연결도 미검증 |
-| 제품 Windows x64 | 과거 NSIS 설치·등록·번들 런타임·제거 근거는 보존. 이번 OS URI job은 실패 | OS가 덧붙이는 루트 슬래시 처리와 PSModulePath 정리는 다음 CI 검증 대기이며 완료로 표시하지 않음 |
+| 제품 macOS arm64 | DMG 생성과 과거 unpackaged 암호화 회귀는 별도 기록. 실제 설치 앱의 OS URI 완료는 미확인 | ASCII 실행 파일명·logging 보강 후에도 SIGTRAP으로 해당 job 실패. 원인은 미확정. Finder·Developer ID·공증·운영 연결도 미검증 |
+| 제품 Windows x64 | [job 117420497431](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497431) 성공. 실제 NSIS 설치·등록·코어 9개 SHA·번들 Node·cold/warm URI·가시 창/WM_CLOSE·같은 PID·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 | unsigned QA artifact. 서명·실제 브라우저 승인·인증 페어링·실사용자 재부팅/업데이트·운영 연결은 미검증 |
 
 Ubuntu 설치본의 sandbox는 설치기가 선택한 root:root/0755·앱별 AppArmor loaded 상태이며 QA가 mode를 바꾸지 않았다. cold URI는 정확한 합성 process-title-token을 관측했으며 원래 argv는 미증명이다. 별도 직접 CDP 기동에서 browser/renderer native PID를 OS 실행 파일·UID·부모 트리와 대조하고 renderer Seccomp=2·NoNewPrivs=1을 확인했다. CLI·추론은 0회다. API ACK 이전 parser 경계로 해당 실행을 배제했으며 main-process 네트워크를 독립 측정한 것은 아니다. 설치본 8조건은 인증 페어링·OS 키 암호화를 다시 검증하지 않는다.
 
-구체적인 설치 해시는 직접 확인한 과거 `ec594c2` [Linux 영수증](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39038318920/job/117412530581)과 [VALIDATION.md](VALIDATION.md)의 phase14 절에서 실행별로 확인한다. 그 해시를 `4c74a19` 설치본 해시로 재사용하지 않는다. macOS Finder·Keychain 확인창·서명/공증, 운영 최초 연결과 OS 업데이트·앱 이동·재부팅 후 링크 복구도 남아 있다. CI unpackaged 13조건, 실제 설치본, 실사용자·운영 검증을 구분한다.
+최신 실행별 설치본 SHA256과 직접 확인한 과거 `ec594c2` 영수증은 [VALIDATION.md](VALIDATION.md)의 phase14 추가 절에서 구분한다. 이전 해시를 최신 산출물에 재사용하지 않는다. Windows cold URI는 OS가 추가한 정확한 루트 `/` 변형으로 확인했으며 원문 exact 값이 false인 사실도 보존했다. macOS Finder·Keychain 확인창·서명/공증, 운영 최초 연결과 OS 업데이트·앱 이동·재부팅 후 링크 복구도 남아 있다. CI unpackaged 13조건, 실제 설치본, 실사용자·운영 검증을 구분한다.
 
 다른 웹앱은 고유 appId·프로토콜·브랜드 자산·정적 HTTPS allowlist로 다시 구성하고 동일 REST 계약의 서버 어댑터를 제공한다. `parseLaunchUrl`과 암호화 저장소는 앱 ID별로 분리하지만, 사용자 입력 URI로 임의 origin을 추가하지 않는다. `scripts/configure-desktop.mjs`의 applications, 패키징 protocols, Windows `desktop/installer.nsh`의 프로토콜 키를 함께 변경한다. 이 폴더는 독립 Node 패키지이므로 별도 저장소로 추출할 수 있다.

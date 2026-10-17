@@ -9,6 +9,7 @@ import {
   loadConfiguration,
   matchesInstalledRendererUrl, selectInstalledProcessInfo,
 } from '../scripts/installed-smoke-support.mjs';
+import * as support from '../scripts/installed-smoke-support.mjs';
 
 const runner = { CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux', LOCAL_AGENT_INSTALL_QA: '1', GITHUB_WORKSPACE: '/work/repo', RUNNER_TEMP: '/work/_temp' };
 const options = { platform: 'linux', uid: 1001, workspace: '/work/repo' };
@@ -37,7 +38,7 @@ const build = { appId: 'org.example.connector', productName: '연구 연결기',
 
 test('configuration has no fallback app and cannot escape an installation filename', () => {
   assert.deepEqual(validateConfiguration(build), build);
-  for (const override of [{ appId: '' }, { productName: '../Escape' }, { productName: '.' }, { productName: 'a\\b' }, { macBundleName: '' }, { macBundleName: '../Escape' }, { macBundleName: 'a\\b' }, { scheme: 'https' }, { scheme: 'file' }, { scheme: 'x:../' }, { packageVersion: '' }]) {
+  for (const override of [{ appId: '' }, { productName: '../Escape' }, { productName: '.' }, { productName: 'a\\b' }, { macBundleName: '' }, { macBundleName: '../Escape' }, { macBundleName: 'a\\b' }, { runtimeProductName: '../Escape' }, { macInternalName: '../Escape' }, { macDisplayName: 'a\\b' }, { scheme: 'https' }, { scheme: 'file' }, { scheme: 'x:../' }, { packageVersion: '' }]) {
     assert.throws(() => validateConfiguration({ ...build, ...override }));
   }
 });
@@ -68,6 +69,10 @@ test('packaged QA uses the real portable production profile and refuses developm
     await save('builder.generated.json', { appId: build.appId, productName: build.productName, extraMetadata: { name: 'second-host-desktop' } });
     assert.deepEqual((await loadConfiguration(parent)).profileRelativePath, [build.appId, 'production']);
     assert.equal((await loadConfiguration(parent)).packageName, 'second-host-desktop');
+    const portable = await loadConfiguration(parent);
+    assert.equal(portable.macInternalName, build.productName);
+    assert.equal(portable.macDisplayName, build.productName);
+    assert.equal(portable.runtimeProductName, build.productName);
     await save('apps.generated.json', { ...runtime, development: true });
     await assert.rejects(loadConfiguration(parent));
   } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
@@ -162,6 +167,24 @@ test('macOS renderer URLs accept Unicode-equivalent file paths while retaining t
   }
 });
 
+test('Debian package identity stays separate from packaged runtime metadata', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'connector-package-identities-'));
+  try {
+    const desktop = join(parent, 'desktop'); await mkdir(desktop);
+    const save = (name, value) => writeFile(join(desktop, name), JSON.stringify(value));
+    await save('package.json', { name: 'source-desktop', version: '0.1.0' });
+    await save('apps.generated.json', { development: false, applications: [{ scheme: build.scheme }] });
+    await save('builder.generated.json', {
+      appId: build.appId, productName: build.productName,
+      deb: { packageName: 'research-debian-package' },
+      extraMetadata: { name: 'research-runtime-desktop' },
+    });
+    const config = await loadConfiguration(parent);
+    assert.equal(config.packageName, 'research-debian-package');
+    assert.equal(config.runtimePackageName, 'research-runtime-desktop');
+  } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
+});
+
 test('CDP process evidence keeps only validated native IDs and bounded process types', () => {
   const value = selectInstalledProcessInfo({ processInfo: [{ id: 100, type: 'browser', cpuTime: 1, token: 'private' }, { id: 101, type: 'renderer' }, { id: 102, type: 'private-token' }] });
   assert.deepEqual(value, [{ id: 100, type: 'browser' }, { id: 101, type: 'renderer' }, { id: 102, type: 'other' }]);
@@ -169,4 +192,19 @@ test('CDP process evidence keeps only validated native IDs and bounded process t
   for (const bad of [{}, { processInfo: [] }, { processInfo: [{ id: -1, type: 'browser' }] }, { processInfo: [{ id: 1.5, type: 'browser' }] }, { processInfo: [{ id: 100, type: 'browser' }, { id: 100, type: 'renderer' }] }]) {
     assert.throws(() => selectInstalledProcessInfo(bad));
   }
+});
+
+test('installed native names, OS display name, runtime metadata and Helper identities remain separate', () => {
+  const config = { ...build, productName: '연구 연결기', runtimeProductName: '연구 연결기',
+    macBundleName: 'research-connector', macInternalName: 'research-connector', macDisplayName: '연구 연결기' };
+  const observed = { internalName: config.macInternalName, displayName: config.macDisplayName,
+    executableName: config.macBundleName, runtimeProductName: config.runtimeProductName,
+    helpers: [{ bundleName: 'research-connector Helper.app', executableName: 'research-connector Helper' },
+      { bundleName: 'research-connector Helper (Renderer).app', executableName: 'research-connector Helper (Renderer)' }] };
+  assert.deepEqual(support.validateMacInstalledIdentity(config, observed), { helperCount: 2 });
+  for (const change of [{ internalName: config.productName }, { displayName: config.macInternalName },
+    { executableName: config.productName }, { runtimeProductName: config.macInternalName },
+    { helpers: [{ bundleName: '연구 연결기 Helper.app', executableName: '연구 연결기 Helper' }] },
+    { helpers: [{ bundleName: 'research-connector Helper.app', executableName: 'other' }] },
+    { helpers: [] }]) assert.throws(() => support.validateMacInstalledIdentity(config, { ...observed, ...change }));
 });

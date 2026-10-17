@@ -10,7 +10,7 @@ import {
 import {
   assertWindowsRunner, windowsSmokeLayout, assertOwnedWindowsInstallation, parseWindowsSmokeArguments,
   assertWindowsProcessIdentity, sameWindowsProcess, selectWindowsMain, assertWindowsRejectedState,
-  classifyWindowsKnownProcess,
+  windowsOwnedProcessesStopped,
   windowsNativeFailure,
   windowsProcessObservation,
   windowsProfileObservation,
@@ -277,12 +277,12 @@ async function observeWindowsInstallation(options, evidence) {
   const capture = async () => { const rows = await processes(); rows.forEach(remember); return rows; };
   const allOwnedStopped = async () => {
     const rows = await capture();
-    const states = await Promise.all([...owned.values()].map(async identity => {
+    const observations = await Promise.all([...owned.values()].map(async identity => {
       const observation = await native('identity', { identity });
       if (observation.executable) observation.executable = await realpath(observation.executable).catch(() => null);
-      return classifyWindowsKnownProcess(observation, identity);
+      return { identity, observation };
     }));
-    return rows.length === 0 && states.every(state => state === 'gone');
+    return windowsOwnedProcessesStopped(rows, observations);
   };
   const noInvalidFiles = async () => {
     assert.equal(await exists(join(profile, 'devices.enc.json')), false, 'Invalid URI created credentials');
