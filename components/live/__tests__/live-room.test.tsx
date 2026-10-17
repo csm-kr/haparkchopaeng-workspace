@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -158,6 +159,56 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("LiveRoom", () => {
+  it("이전 종료 요청이 늦게 끝나도 새로 시작한 라이브는 유지한다", async () => {
+    let resolveEnd!: (value: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/live/s1/end") return new Promise<Response>((resolve) => { resolveEnd = resolve; });
+      if (url === "/api/live/start") return Response.json({ data: {
+        session: { id: "s2", presenterId: "ha" }, token: "S2_TOKEN", url: "wss://lk.example",
+      } }, { status: 201 });
+      return Response.json({}, { status: 500 });
+    }));
+    function RemoteEnd() {
+      const { setLive } = useLive();
+      return <button onClick={() => setLive(false)}>종료 알림</button>;
+    }
+    render(<LiveProvider initialLive initialSessionId="s1">
+      <RemoteEnd />
+      <LiveRoom currentMemberId="ha" initialSession={{ id: "s1", presenterId: "ha", participantIds: [] }} members={members} shareablePresentations={[]} />
+    </LiveProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "라이브 종료" }));
+    fireEvent.click(screen.getByRole("button", { name: "종료할게요" }));
+    fireEvent.click(screen.getByRole("button", { name: "종료 알림" }));
+    fireEvent.click(await screen.findByRole("button", { name: "라이브 시작" }));
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    await act(async () => resolveEnd(Response.json({ data: {} })));
+
+    expect(screen.queryByTestId("livekit-room")).toBeInTheDocument();
+  });
+
+  it("종료 알림을 놓치고 새 세션 ID를 받으면 이전 연결을 교체한다", async () => {
+    const fetchMock = route((url) => {
+      if (url === "/api/live") return res(200, { data: { id: "s2", presenterId: "ha", participants: [] } });
+      if (url.endsWith("/join")) return res(200, { data: { token: url, url: "wss://lk.example" } });
+      return res(500, {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    function NewSession() {
+      const { setLive } = useLive();
+      return <button onClick={() => setLive(true, "s2")}>새 세션 알림</button>;
+    }
+    render(<LiveProvider initialLive initialSessionId="s1">
+      <NewSession />
+      <LiveRoom currentMemberId="jo" initialSession={{ id: "s1", presenterId: "ha", participantIds: [] }} members={members} shareablePresentations={[]} />
+    </LiveProvider>);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/live/s1/join", { method: "POST" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "새 세션 알림" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/live/s2/join", { method: "POST" }));
+  });
+
   it("팀 관리자는 발표자가 아니어도 라이브를 종료할 수 있다", async () => {
     const fetchMock = route((url) => {
       if (url.endsWith("/join"))

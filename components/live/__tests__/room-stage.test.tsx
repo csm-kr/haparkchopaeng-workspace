@@ -110,7 +110,7 @@ describe("발표 중 참가자 얼굴 창", () => {
     await within(pipWindow.document.body).findByText("하수현");
 
     ownShare.publication.track.mediaStreamTrack.readyState = "ended";
-    fireEvent(ownShare.publication.track.mediaStreamTrack, new Event("ended"));
+    act(() => { ownShare.publication.track.mediaStreamTrack.dispatchEvent(new Event("ended")); });
 
     expect(pipWindow.close).toHaveBeenCalledOnce();
     expect(pipWindow.document.querySelector("[data-identity]")).toBeNull();
@@ -243,7 +243,7 @@ describe("RoomStage 화면공유", () => {
     expect(container.querySelector("[data-face-strip]")).not.toBeNull();
 
     mediaStreamTrack.readyState = "ended";
-    fireEvent(mediaStreamTrack, new Event("ended"));
+    act(() => { mediaStreamTrack.dispatchEvent(new Event("ended")); });
 
     expect(container.querySelector("[data-face-strip]")).toBeNull();
     expect(container.querySelectorAll("[data-identity]")).toHaveLength(3);

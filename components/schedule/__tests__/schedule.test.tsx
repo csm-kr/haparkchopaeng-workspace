@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScheduleBoard } from "../schedule-board";
 import { FinesPanel } from "../fines-panel";
@@ -272,7 +273,7 @@ describe("FinesPanel — 설정 생성 + 장부 편집(관리자 전용)", () =>
   });
 
   it("관리자 + 설정 있음: 표를 편집해 저장하면 onUpdateLedger가 {year, rows}로 호출된다", async () => {
-    const onUpdateLedger = vi.fn(async () => fines);
+    const onUpdateLedger = vi.fn<ComponentProps<typeof FinesPanel>["onUpdateLedger"]>(async () => fines);
     renderFines({ fines, isAdmin: true, year: 2026, onUpdateLedger });
     // 표 전체 편집 모드 진입(금액 토글과 구분되는 "멤버 현황 수정").
     fireEvent.click(screen.getByRole("button", { name: "멤버 현황 수정" }));
