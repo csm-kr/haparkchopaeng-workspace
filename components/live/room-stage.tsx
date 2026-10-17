@@ -29,6 +29,7 @@ import {
   type DrawInput,
 } from "./annotation-overlay";
 import type { LiveMember, PresentState } from "./types";
+import { FloatingFaces } from "./floating-faces";
 
 // 룸 stage — LiveKit 컨텍스트 안에서 참가자 타일을 렌더한다.
 // 무대 우선순위: 발표자료 공유 > 화면공유 > 전원 그리드.
@@ -207,6 +208,21 @@ export function RoomStage({
     .slice(0, Math.min(visibleCount, visible.length))
     .map(renderTile);
 
+  const others = orderParticipantsForStrip(
+    participants.filter((p) => p.identity !== currentMemberId),
+    presenterId,
+  );
+  const faceWindowControl = isPresenterView &&
+    (present || screenShare?.participant?.identity === currentMemberId) ? (
+    <FloatingFaces>
+      {others.length ? others.map(renderTile) : (
+        <p className="py-4 text-center text-[12px] text-fg-subtle">
+          다른 참가자가 들어오면 얼굴이 여기에 보여요.
+        </p>
+      )}
+    </FloatingFaces>
+  ) : undefined;
+
   return (
     <div className="flex flex-col gap-3">
       {/* 음성 재생(트랙 구독). 화면엔 보이지 않는다. */}
@@ -224,6 +240,7 @@ export function RoomStage({
           onCountChange={setVisibleCount}
           pos={stripPos}
           onPosChange={setStripPos}
+          faceWindowControl={faceWindowControl}
           main={<PresentImage present={present} />}
           topCenter={
             <PageNav
@@ -246,6 +263,7 @@ export function RoomStage({
           onCountChange={setVisibleCount}
           pos={stripPos}
           onPosChange={setStripPos}
+          faceWindowControl={faceWindowControl}
           main={
             <VideoTrack trackRef={screenShare} className="size-full object-contain" />
           }
@@ -283,6 +301,7 @@ function StageShell({
   onCountChange,
   pos,
   onPosChange,
+  faceWindowControl,
   main,
   topCenter,
   children,
@@ -297,6 +316,8 @@ function StageShell({
   /** 전체화면 오버레이 스트립의 위치(px). null이면 기본 자리. */
   pos: { x: number; y: number } | null;
   onPosChange: (p: { x: number; y: number }) => void;
+  /** 발표자 전용: 다른 앱 위에도 보이는 참가자 얼굴 창. */
+  faceWindowControl?: React.ReactNode;
   /** 무대 중앙 콘텐츠 — 화면공유 영상 또는 발표자료 페이지 이미지. */
   main: React.ReactNode;
   /** 무대 상단 중앙 오버레이(발표자료 페이지 네비 등). 없으면 미표시. */
@@ -362,6 +383,7 @@ function StageShell({
         floating={isFs}
         pos={pos}
         onPosChange={onPosChange}
+        extraControl={faceWindowControl}
       >
         {children}
       </FaceStrip>
@@ -480,6 +502,7 @@ function FaceStrip({
   floating = false,
   pos,
   onPosChange,
+  extraControl,
   children,
 }: {
   count: number;
@@ -490,6 +513,7 @@ function FaceStrip({
   /** 오버레이 위치(px, 컨테이너 기준). null이면 기본 자리(우측 세로 중앙). */
   pos?: { x: number; y: number } | null;
   onPosChange?: (p: { x: number; y: number }) => void;
+  extraControl?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const clamped = Math.min(Math.max(0, count), Math.max(0, max));
@@ -617,6 +641,7 @@ function FaceStrip({
           </StepButton>
         </span>
       </div>
+      {extraControl}
       {/* 0명이면 목록 자체를 접는다 — 헤더(−/+)는 남겨야 다시 늘릴 수 있다. */}
       {clamped > 0 && (
         <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
