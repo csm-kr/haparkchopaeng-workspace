@@ -5,8 +5,10 @@ import { createSupabaseAdmin } from "@/lib/supabase/admin";
 // 클라이언트(LiveProvider)는 같은 채널을 구독해 배지·배너·룸을 동시 갱신한다(S4.5).
 // CRITICAL: service role 키는 서버 전용·호출 시점(admin.ts, R2). 클라는 anon 키만(browser.ts).
 
-/** 클라이언트와 공유하는 라이브 채널 이름(이 값만 클라가 import). */
-export const LIVE_CHANNEL = "live";
+/** 라이브 전이는 활성 팀 안에서만 전파한다(ADR-020/R37). */
+export function liveChannel(teamId: string): string {
+  return `live:${teamId}`;
+}
 
 export type LiveEvent = "live.started" | "live.ended";
 
@@ -18,11 +20,11 @@ export type LiveEvent = "live.started" | "live.ended";
  */
 export async function broadcastLive(
   event: LiveEvent,
-  payload: Record<string, unknown> = {},
+  payload: { teamId: string; sessionId: string },
 ): Promise<void> {
   try {
     const supabase = createSupabaseAdmin();
-    const channel = supabase.channel(LIVE_CHANNEL);
+    const channel = supabase.channel(liveChannel(payload.teamId));
     // 구독하지 않은 채널의 send는 HTTP broadcast로 전송된다(서버 fire-and-forget).
     await channel.send({ type: "broadcast", event, payload });
     await supabase.removeChannel(channel);
@@ -37,7 +39,7 @@ export async function broadcastLive(
 
 /**
  * 논문 분석 완료 채널(팀별). 클라이언트(PaperNotifyProvider)도 이 함수를 import해
- * 같은 채널을 구독한다 — server 전용 코드(createSupabaseAdmin)는 트리셰이킹으로 빠진다(LIVE_CHANNEL과 동일).
+ * 같은 채널을 구독한다 — server 전용 코드(createSupabaseAdmin)는 트리셰이킹으로 빠진다(liveChannel과 동일).
  */
 export function papersChannel(teamId: string): string {
   return `papers:${teamId}`;

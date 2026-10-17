@@ -82,7 +82,7 @@ export async function deleteRoom(sessionId: string): Promise<void> {
     const apiSecret = requireEnv("LIVEKIT_API_SECRET");
     // RoomServiceClient는 http(s) 호스트를 받는다 — wss://→https:// (ws://→http://).
     const host = livekitUrl().replace(/^ws/, "http");
-    const svc = new RoomServiceClient(host, apiKey, apiSecret);
+    const svc = new RoomServiceClient(host, apiKey, apiSecret, { requestTimeout: 5 });
     await svc.deleteRoom(roomName(sessionId));
   } catch (e) {
     console.warn("[livekit] deleteRoom 실패(무시):", e);

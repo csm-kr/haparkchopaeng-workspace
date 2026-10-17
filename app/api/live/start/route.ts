@@ -51,7 +51,7 @@ export async function POST(): Promise<Response> {
     });
 
     // 전이를 모든 구독 클라에 푸시(폴링 아님, R33). 실패는 무시(graceful) — 전파는 best-effort.
-    await broadcastLive("live.started", { sessionId: live.id });
+    await broadcastLive("live.started", { teamId: team.id, sessionId: live.id });
 
     return ok<LiveStartResponse>(
       {

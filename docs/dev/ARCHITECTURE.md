@@ -64,7 +64,7 @@ POST /api/papers → Paper 저장(analysisStatus=pending) + 잡 트리거 → �
 ### 실시간 동기화 (ADR-014→016) — `live`·알림
 `live`는 **모두에게 즉시** 일관돼야 한다(ADR-001). 폴링 대신 **Supabase Realtime**으로 전이를 브로드캐스트한다.
 ```
-Supabase Realtime 채널 ── live.started / live.ended / mention ──> 구독 중인 모든 클라
+팀별 Supabase Realtime 채널 live:{teamId} ── live.started / live.ended ──> 해당 팀 클라
   → 사이드바 LIVE 배지·홈 배너·meeting 룸을 동시에 갱신
 ```
 - broadcast 또는 `postgres_changes`(LiveSession 변화)로 구독. Vercel 서버리스/다중 리전에서도 성립(인-프로세스 버스 가정 금지).

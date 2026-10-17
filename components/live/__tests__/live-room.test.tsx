@@ -93,7 +93,7 @@ vi.mock("@livekit/components-react", async () => {
 // Realtime 구독은 graceful no-op(키 부재).
 vi.mock("@/lib/supabase/browser", () => ({ createBrowserSupabase: () => null }));
 
-const { LiveProvider } = await import("@/components/providers/live-provider");
+const { LiveProvider, useLive } = await import("@/components/providers/live-provider");
 const { LiveRoom } = await import("@/components/live/live-room");
 
 const members = [
@@ -120,6 +120,7 @@ function route(map: (url: string, method: string) => MockRes) {
 function renderRoom(props: {
   currentMemberId: string;
   initialLive: boolean;
+  canEnd?: boolean;
   initialSession: {
     id: string;
     presenterId: string;
@@ -133,6 +134,7 @@ function renderRoom(props: {
         initialSession={props.initialSession}
         members={members}
         shareablePresentations={[]}
+        canEnd={props.canEnd}
       />
     </LiveProvider>,
   );
@@ -156,6 +158,66 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("LiveRoom", () => {
+  it("팀 관리자는 발표자가 아니어도 라이브를 종료할 수 있다", async () => {
+    const fetchMock = route((url) => {
+      if (url.endsWith("/join"))
+        return res(200, { data: { token: "token", url: "wss://lk.example" } });
+      if (url.endsWith("/end")) return res(200, { data: {} });
+      return res(500, {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderRoom({
+      currentMemberId: "jo", initialLive: true, canEnd: true,
+      initialSession: { id: "s1", presenterId: "ha", participantIds: [] },
+    });
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "나가기" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "라이브 종료" }));
+    fireEvent.click(screen.getByRole("button", { name: "종료할게요" }));
+
+    expect(await screen.findByText(/아직 진행 중인 세미나가 없어요/)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/live/s1/end", { method: "POST" });
+  });
+
+  it("라이브 종료 후 새 세션이 시작되면 이전 룸 대신 새 룸에 입장한다", async () => {
+    const fetchMock = route((url, method) => {
+      if (url === "/api/live" && method === "GET")
+        return res(200, { data: { id: "s2", presenterId: "ha", participants: [] } });
+      if (url.endsWith("/join"))
+        return res(200, { data: { token: "token", url: "wss://lk.example" } });
+      return res(500, {});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    function Transitions() {
+      const { setLive } = useLive();
+      return <>
+        <button onClick={() => setLive(false)}>종료 이벤트</button>
+        <button onClick={() => setLive(true)}>새 시작 이벤트</button>
+      </>;
+    }
+    render(
+      <LiveProvider initialLive>
+        <Transitions />
+        <LiveRoom
+          currentMemberId="jo"
+          initialSession={{ id: "s1", presenterId: "ha", participantIds: [] }}
+          members={members}
+          shareablePresentations={[]}
+        />
+      </LiveProvider>,
+    );
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("종료 이벤트"));
+    expect(screen.queryByTestId("livekit-room")).toBeNull();
+    fireEvent.click(screen.getByText("새 시작 이벤트"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/live/s2/join", { method: "POST" },
+    ));
+    expect(await screen.findByTestId("livekit-room")).toBeInTheDocument();
+  });
+
   it("라이브 없음 → 빈 카피 + [라이브 시작] 노출", () => {
     vi.stubGlobal("fetch", vi.fn());
     renderRoom({ currentMemberId: "ha", initialLive: false, initialSession: null });

@@ -49,6 +49,7 @@ export default async function MeetingPage() {
         }
         members={members}
         shareablePresentations={shareablePresentations}
+        canEnd={team?.role === "owner" || team?.role === "admin"}
       />
     );
   } catch {

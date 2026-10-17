@@ -47,6 +47,8 @@ export interface LiveRoomProps {
   members: LiveRoomMember[];
   /** 공유 가능한 발표자료(PDF 자산 보유, 활성 팀). 발표자가 무대에 띄울 수 있다. */
   shareablePresentations: SharablePresentation[];
+  /** 활성 팀의 owner/admin 여부. 최종 종료 권한은 API가 다시 검사한다. */
+  canEnd?: boolean;
 }
 
 /** 라우트가 준 LiveKit 접속 정보(참가자별·단기). */
@@ -63,6 +65,7 @@ export function LiveRoom({
   initialSession,
   members,
   shareablePresentations,
+  canEnd = false,
 }: LiveRoomProps) {
   const { live, setLive } = useLive();
 
@@ -86,6 +89,21 @@ export function LiveRoom({
   const [confirmLeave, setConfirmLeave] = React.useState(false);
   // 발표자 이탈 시 /end를 단일 언로드에서 1회만 보내기 위한 가드(pagehide+beforeunload 중복 방지).
   const endSentRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (live) return;
+    // 종료된 세션의 토큰·입장 오류를 다음 라이브에 재사용하지 않는다.
+    setSession(null);
+    setConnection(null);
+    setConnected(false);
+    setRoomError(false);
+    setJoinError(false);
+    setLeft(false);
+    setConfirmEnd(false);
+    setConfirmLeave(false);
+    setEndError(false);
+    endSentRef.current = false;
+  }, [live]);
 
   const isPresenter = !!session && session.presenterId === currentMemberId;
 
@@ -350,14 +368,19 @@ export function LiveRoom({
     );
   }
 
-  const action = isPresenter ? (
-    <Button variant="danger" onClick={() => setConfirmEnd(true)}>
-      라이브 종료
-    </Button>
-  ) : left ? null : (
-    <Button variant="secondary" onClick={() => setConfirmLeave(true)}>
-      나가기
-    </Button>
+  const action = (
+    <div className="flex items-center gap-2">
+      {(isPresenter || canEnd) && (
+        <Button variant="danger" onClick={() => setConfirmEnd(true)}>
+          라이브 종료
+        </Button>
+      )}
+      {!isPresenter && !left && (
+        <Button variant="secondary" onClick={() => setConfirmLeave(true)}>
+          나가기
+        </Button>
+      )}
+    </div>
   );
 
   return (

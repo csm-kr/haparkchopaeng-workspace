@@ -113,8 +113,24 @@ export function RoomStage({
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
   const screenShare = tracks.find(
-    (t) => t.source === Track.Source.ScreenShare && t.publication,
+    (t) =>
+      t.source === Track.Source.ScreenShare &&
+      t.publication &&
+      !t.publication.isMuted &&
+      t.publication.track?.mediaStreamTrack.readyState === "live",
   );
+  // 브라우저의 공유 중지는 publication 해제보다 먼저 온다. 트랙이 끝나면 즉시
+  // 무대를 다시 계산해 검은 공유 화면 대신 기본 얼굴 그리드로 복귀한다.
+  const [, refreshShare] = React.useReducer((n: number) => n + 1, 0);
+  const shareMediaTrack = screenShare?.publication.track?.mediaStreamTrack;
+  React.useEffect(() => {
+    if (!shareMediaTrack) return;
+    const onEnded = () => refreshShare();
+    shareMediaTrack.addEventListener?.("ended", onEnded);
+    if (shareMediaTrack.readyState === "ended") onEnded();
+    return () => shareMediaTrack.removeEventListener?.("ended", onEnded);
+  }, [shareMediaTrack]);
+
   const cameraOf = (identity: string) =>
     tracks.find(
       (t) =>
