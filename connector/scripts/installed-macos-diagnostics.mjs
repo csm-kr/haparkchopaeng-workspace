@@ -79,6 +79,67 @@ function selectReport({ pid, executable, appId, format, exception, signal, names
   };
 }
 
+const systemImagePaths = new Set([
+  ...['libsystem_kernel.dylib', 'libsystem_c.dylib', 'libsystem_pthread.dylib', 'libsystem_platform.dylib',
+    'libsystem_malloc.dylib', 'libdispatch.dylib', 'libdyld.dylib'].map(name => `/usr/lib/system/${name}`),
+  '/usr/lib/dyld', '/usr/lib/libc++abi.dylib', '/usr/lib/libc++.1.dylib', '/usr/lib/libobjc.A.dylib',
+  ...['CoreFoundation', 'Foundation', 'AppKit'].map(name => `/System/Library/Frameworks/${name}.framework/Versions/A/${name}`),
+]);
+const systemSymbols = new Set(['__pthread_kill', '_pthread_kill', 'pthread_kill', '_pthread_start', 'pthread_start',
+  'thread_start', 'start_wqthread', 'start', '_start', 'abort', '_abort', '__abort_with_payload',
+  '__psynch_cvwait', '__psynch_mutexwait', '__ulock_wait', 'mach_msg2_trap', 'mach_msg2_internal',
+  'mach_msg_overwrite', 'mach_msg', '__CFRunLoopRun', '__CFRunLoopServiceMachPort', 'CFRunLoopRunSpecific',
+  'CFRunLoopRun', 'CFRunLoopRunInMode', 'NSApplicationMain', 'ElectronMain', 'ChromeMain']);
+
+function publicNativeFacts(value, ownership) {
+  const facts = {}, images = Array.isArray(value.usedImages) ? value.usedImages : [];
+  const threads = Array.isArray(value.threads) ? value.threads : [];
+  const faulting = Number.isInteger(value.faultingThread) && value.faultingThread >= 0
+    && value.faultingThread < threads.length;
+  const thread = faulting ? threads[value.faultingThread] : threads.find(entry => entry?.triggered === true);
+  if (thread) {
+    facts.nativeFrameSource = faulting ? 'faulting_thread' : 'triggered_thread';
+    facts.nativeFrames = [];
+    const bundle = ownership.executable.replace(/\/Contents\/MacOS\/[^/]+$/, '').normalize('NFC');
+    const electronPrefix = `${bundle}/Contents/Frameworks/Electron Framework.framework/Versions/`;
+    for (const frame of (Array.isArray(thread.frames) ? thread.frames : []).slice(0, 128)) {
+      const imagePath = Number.isInteger(frame?.imageIndex) && frame.imageIndex >= 0
+        ? images[frame.imageIndex]?.path : null;
+      if (typeof imagePath !== 'string' || imagePath.length > 8192) continue;
+      const normalized = imagePath.normalize('NFC');
+      const image = normalized.startsWith(electronPrefix)
+        && /^(?:[A-Z]|Current)\/Electron Framework$/.test(normalized.slice(electronPrefix.length)) ? 'electron_framework'
+        : systemImagePaths.has(normalized) ? 'system_library' : null;
+      if (!image || typeof frame.symbol !== 'string' || frame.symbol.length > 4096) continue;
+      // Argument lists can contain arbitrary text. Preserve only a public qualified function identifier.
+      const symbol = frame.symbol.split('(', 1)[0];
+      if (symbol.length > 180 || (!systemSymbols.has(symbol)
+        && !/^(?:electron|base|content|node|v8|crashpad|logging|dyld4)::[A-Za-z_~][A-Za-z0-9_~]*(?:::[A-Za-z_~][A-Za-z0-9_~]*)*$/.test(symbol))) continue;
+      if (!facts.nativeFrames.some(entry => entry.image === image && entry.symbol === symbol)) facts.nativeFrames.push({ image, symbol });
+      if (facts.nativeFrames.length === 8) break;
+    }
+  }
+  let fatalText = '';
+  const appendText = (entry, depth = 0) => {
+    if (fatalText.length >= 8192 || depth > 4) return;
+    if (typeof entry === 'string') fatalText += `\n${entry.slice(0, 8192 - fatalText.length)}`;
+    else if (entry && typeof entry === 'object') Object.values(entry).slice(0, 16).forEach(part => appendText(part, depth + 1));
+  };
+  appendText(value.asi); appendText(value.termination?.details);
+  appendText(value.termination?.indicator); appendText(value.termination?.reasons);
+  const categories = [
+    ['profile', /\bprofile(?:s|_dir|_path)?\b/i],
+    ['user_data', /\buser[_ -]?data(?:[_ -]?(?:dir|directory))?\b/i],
+    ['path_append', /\b(?:FilePath::)?Append(?:ASCII|RelativePath)?\b|IsPathAbsolute|IsAbsolute\(/],
+    ['check_failed', /\bCheck failed\b|\bD?CHECK(?:_[A-Z]+)?\s*(?:failed|failure|\()/i],
+    ['oom', /\bout of memory\b|\bOOM\b|allocation failed|heap limit/i],
+    ['dyld', /\bdyld\b|library not loaded|symbol not found/i],
+    ['code_signature', /code sign(?:ature|ing)|CODESIGNING/i],
+  ].filter(([, pattern]) => pattern.test(fatalText)).map(([name]) => name);
+  if (categories.length) facts.fatalCategories = categories;
+  return facts;
+}
+
 export function selectOwnedMacCrashDiagnostic(text, ownership) {
   if (typeof text !== 'string' || text.length > maximumReportLength || !Number.isSafeInteger(ownership?.pid)
     || ownership.pid <= 1 || typeof ownership.appId !== 'string' || typeof ownership.executable !== 'string') return null;
@@ -92,11 +153,14 @@ export function selectOwnedMacCrashDiagnostic(text, ownership) {
       JSON.parse(text.slice(0, separator));
       value = JSON.parse(text.slice(separator + 1));
     }
-    if (value && typeof value === 'object') return selectReport({
-      pid: value.pid, executable: value.procPath, appId: value.bundleInfo?.CFBundleIdentifier,
-      format: 'ips', exception: value.exception?.type, signal: value.exception?.signal,
-      namespace: value.termination?.namespace, code: value.termination?.code,
-    }, ownership);
+    if (value && typeof value === 'object') {
+      const report = selectReport({
+        pid: value.pid, executable: value.procPath, appId: value.bundleInfo?.CFBundleIdentifier,
+        format: 'ips', exception: value.exception?.type, signal: value.exception?.signal,
+        namespace: value.termination?.namespace, code: value.termination?.code,
+      }, ownership);
+      return report ? { ...report, ...publicNativeFacts(value, ownership) } : null;
+    }
   } catch { /* Older .crash files use a bounded, line-based text format. */ }
   const pid = Number(/^Process:\s*[^\r\n]*\[(\d+)\]\s*$/m.exec(text)?.[1]);
   const executable = /^Path:\s*([^\r\n]+)$/m.exec(text)?.[1]?.trim();

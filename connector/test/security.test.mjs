@@ -14,6 +14,28 @@ test('protocol accepts only registered app and exact bounded parameters', () => 
   }
 });
 
+test('the root slash inserted by Windows preserves a valid registered connection link', () => {
+  const windowsUri = uri.replace('connect?', 'connect/?');
+  assert.deepEqual(parseLaunchUrl(windowsUri, apps), parseLaunchUrl(uri, apps));
+});
+
+test('Windows root slash does not admit other paths, authorities or unvalidated parameters', () => {
+  const windowsUri = uri.replace('connect?', 'connect/?');
+  for (const bad of [
+    windowsUri.replace('connect/?', 'connect/path?'),
+    windowsUri.replace('connect/?', 'connect//?'),
+    windowsUri.replace('connect/?', 'connect/%2F?'),
+    windowsUri.replace('connect/?', 'other/?'),
+    windowsUri.replace('connect/?', 'user@connect/?'),
+    windowsUri.replace('connect/?', 'connect:443/?'),
+    windowsUri + '#fragment',
+    windowsUri + '&origin=https://other.example',
+    windowsUri + '&attemptId=duplicate',
+    windowsUri.replace(token, 'short'),
+    windowsUri.replace('attempt-1', '../private'),
+  ]) assert.throws(() => parseLaunchUrl(bad, apps));
+});
+
 test('origin rejects credentials, redirects, remote HTTP, URL paths and opaque protocols', async () => {
   assert.equal(normalizeOrigin('https://research.example/'), 'https://research.example');
   assert.equal(normalizeOrigin('http://localhost:3000', { development: true }), 'http://localhost:3000');

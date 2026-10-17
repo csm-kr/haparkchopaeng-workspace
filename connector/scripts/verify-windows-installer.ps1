@@ -12,6 +12,11 @@ function Test-QaOwnedCleanupAllowed([bool]$CiUriEnabled, $SmokeReceipt) {
   $qaDeferred = $SmokeReceipt.cleanup.deferred
   return ($qaStopped -is [bool] -and $qaStopped -and ($null -eq $qaDeferred -or ($qaDeferred -is [bool] -and -not $qaDeferred)))
 }
+function Test-QaControlledColdUriVerified($SmokeReceipt) {
+  $qaControlled = $SmokeReceipt.cold.controlledUriArgumentObserved
+  $qaClosed = $SmokeReceipt.cold.normalWindowCloseObserved
+  return ($qaControlled -is [bool] -and $qaControlled -and $qaClosed -is [bool] -and $qaClosed)
+}
 function Invoke-QaInstalledUriSmoke([switch]$Preflight) {
   $qaSmokeScript = Join-Path $qaConnectorRoot 'scripts\ci-installed-windows.mjs'
   $qaSmokeMode = if ($Preflight) { 'uri-preflight' } else { 'uri-smoke' }
@@ -80,7 +85,7 @@ try {
   if ($qaInstalledUriEnabled) {
     $qaEvidence.installedUriSmoke = Invoke-QaInstalledUriSmoke
     $qaEvidence.guiLaunched = [bool]$qaEvidence.installedUriSmoke.cold.visibleWindowObserved
-    $qaEvidence.installedColdUriVerified = [bool]($qaEvidence.installedUriSmoke.cold.exactUriArgumentObserved -and $qaEvidence.installedUriSmoke.cold.normalWindowCloseObserved)
+    $qaEvidence.installedColdUriVerified = Test-QaControlledColdUriVerified -SmokeReceipt $qaEvidence.installedUriSmoke
     $qaEvidence.installedWarmUriVerified = [bool]($qaEvidence.installedUriSmoke.warm.distinctParserErrorObserved -and $qaEvidence.installedUriSmoke.warm.sameMainPidObserved)
   }
 } finally {

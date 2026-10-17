@@ -174,7 +174,9 @@ export function selectWindowsMain(rows, options) {
   assert.ok(mains.length <= 1, 'More than one installed main process is running');
   if (!mains.length) return null;
   const identity = assertWindowsProcessIdentity(mains[0], options);
-  return !options.uri || mains[0].argv.includes(options.uri) ? identity : null;
+  const rootSlash = /^[a-z][a-z0-9+.-]{2,63}:\/\/connect\?attemptId=ci-package-cold$/.test(options.uri ?? '')
+    ? options.uri.replace('://connect?', '://connect/?') : null;
+  return !options.uri || mains[0].argv.includes(options.uri) || (rootSlash && mains[0].argv.includes(rootSlash)) ? identity : null;
 }
 
 export function windowsSmokeUris(layout) {

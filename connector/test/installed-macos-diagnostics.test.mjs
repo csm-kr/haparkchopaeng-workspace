@@ -151,3 +151,60 @@ test('reported main liveness preserves known PID reuse proof and treats unobserv
   assert.equal(diagnostics.classifyReportedMacMainState({ knownState: 'owned' }), 'owned');
   assert.equal(diagnostics.classifyReportedMacMainState({ knownState: 'unresolved' }), 'unresolved');
 });
+
+const framework = ownership.executable.replace(/\/Contents\/MacOS\/[^/]+$/, '')
+  + '/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework';
+const images = [
+  { name: 'Electron Framework', path: framework },
+  { name: 'libsystem_kernel.dylib', path: '/usr/lib/system/libsystem_kernel.dylib' },
+  { name: 'Electron Framework', path: '/private/private-token/Electron Framework' },
+];
+
+test('native crash facts use the faulting thread and public functions from owned Electron or known system images', () => {
+  const value = { ...report, usedImages: images, faultingThread: 1, threads: [
+    { triggered: true, frames: [{ imageIndex: 0, symbol: 'content::WrongThread()' }] },
+    { frames: [{ imageIndex: 0, symbol: 'base::FilePath::Append(std::string const&)' },
+      { imageIndex: 1, symbol: '__pthread_kill' },
+      { imageIndex: 2, symbol: 'electron::PrivateImage()' }] },
+  ] };
+  const selected = selectOwnedMacCrashDiagnostic(ips(value), ownership);
+  assert.equal(selected.nativeFrameSource, 'faulting_thread');
+  assert.deepEqual(selected.nativeFrames, [
+    { image: 'electron_framework', symbol: 'base::FilePath::Append' },
+    { image: 'system_library', symbol: '__pthread_kill' },
+  ]);
+});
+
+test('triggered-thread fallback rejects paths, private text, unknown namespaces and untrusted images', () => {
+  const value = { ...report, usedImages: images, threads: [{ triggered: true, frames: [
+    { imageIndex: 0, symbol: 'electron::BrowserMainParts::PreMainMessageLoopRun()' },
+    { imageIndex: 0, symbol: '/Users/private/private-token/main.cc' },
+    { imageIndex: 0, symbol: 'private-token private body' },
+    { imageIndex: 0, symbol: 'CustomerSecret::PrivateToken()' },
+    { imageIndex: 0, symbol: 'base::' + 'a'.repeat(181) },
+    { imageIndex: 1, symbol: 'private_token_value' },
+    { imageIndex: 2, symbol: 'base::FilePath::Append()' },
+  ] }] };
+  const selected = selectOwnedMacCrashDiagnostic(ips(value), ownership);
+  assert.equal(selected.nativeFrameSource, 'triggered_thread');
+  assert.deepEqual(selected.nativeFrames, [{ image: 'electron_framework', symbol: 'electron::BrowserMainParts::PreMainMessageLoopRun' }]);
+  assert.equal(JSON.stringify(selected).includes('private'), false);
+  assert.equal(JSON.stringify(selected).includes('/'), false);
+});
+
+test('public native frames remain bounded to eight function identifiers of at most 180 characters', () => {
+  const value = { ...report, usedImages: images, faultingThread: 0,
+    threads: [{ frames: Array.from({ length: 30 }, (_, index) => ({ imageIndex: 0, symbol: `base::Function${index}()` })) }] };
+  const selected = selectOwnedMacCrashDiagnostic(ips(value), ownership);
+  assert.equal(selected.nativeFrames.length, 8);
+  assert.ok(selected.nativeFrames.every(frame => frame.symbol.length <= 180 && !/[\s/\\]/.test(frame.symbol)));
+});
+
+test('application-specific and termination text becomes only fixed fatal categories', () => {
+  const value = { ...report, asi: { 'Electron Framework': ['Check failed: !IsPathAbsolute(path); profile user_data private-token'] },
+    termination: { ...report.termination, details: ['Out of memory. dyld library not loaded. Code signature invalid /private/private-token'] } };
+  const selected = selectOwnedMacCrashDiagnostic(ips(value), ownership);
+  assert.deepEqual(selected.fatalCategories, ['profile', 'user_data', 'path_append', 'check_failed', 'oom', 'dyld', 'code_signature']);
+  assert.equal(JSON.stringify(selected).includes('private'), false);
+  assert.equal(selectOwnedMacCrashDiagnostic(ips({ ...value, pid: 777 }), ownership), null);
+});

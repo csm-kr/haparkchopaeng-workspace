@@ -161,11 +161,14 @@ switch ($qaInput.operation) {
 }
 `;
 
-export async function invokeWindowsNative(operation, input = {}, { execute = run } = {}) {
+export async function invokeWindowsNative(operation, input = {}, { execute = run, environment = process.env } = {}) {
   const encodedInput = Buffer.from(JSON.stringify({ ...input, operation })).toString('base64');
   const command = `$qaInput = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedInput}')) | ConvertFrom-Json\n${WINDOWS_NATIVE_SCRIPT}`;
+  // A pwsh -> Node -> WinPS child must rebuild its own compatible module paths.
+  // Undefined is omitted by execFile; preserve every other inherited variable.
+  const env = Object.fromEntries(Object.keys(environment).filter(key => key.toUpperCase() === 'PSMODULEPATH').map(key => [key, undefined]));
   let result;
-  try { result = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { timeout: 15_000 }); }
+  try { result = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { timeout: 15_000, env }); }
   catch (error) {
     throw Object.assign(new Error('Windows native observation failed'), { code: 'WINDOWS_NATIVE_FAILED',
       nativeFailure: windowsNativeFailure(error, operation) });
@@ -289,7 +292,12 @@ async function observeWindowsInstallation(options, evidence) {
       if (!identity) return false;
       return owned.get(identity.pid);
     }, 'the OS cold URI in one installed main process', 30_000);
-    evidence.cold.installedPidObserved = true; evidence.cold.exactUriArgumentObserved = true;
+    const coldArguments = evidence.cold.uriArgumentObservation;
+    evidence.cold.installedPidObserved = true;
+    evidence.cold.exactUriArgumentObserved = coldArguments.rawExactMatch === true;
+    evidence.cold.normalizedRootSlashObserved = coldArguments.exactControlledUriWithSlash === true;
+    evidence.cold.controlledUriArgumentObserved = evidence.cold.exactUriArgumentObserved || evidence.cold.normalizedRootSlashObserved;
+    assert.equal(evidence.cold.controlledUriArgumentObserved, true);
     evidence.phase = 'windows_cold_visible_window';
     await until(async () => { const window = await native('window', { identity: cold }); return window.matched && window.visible; }, 'the installed cold application window', 30_000);
     evidence.cold.visibleWindowObserved = true;
@@ -382,7 +390,7 @@ export async function main(argv = process.argv.slice(2)) {
   let authorized = false;
   const evidence = { passed: false, mode: 'production-installed-windows-invalid-uri', phase: 'windows_runner_guard',
     source: /^[a-f0-9]{40}$/i.test(process.env.GITHUB_SHA ?? '') ? process.env.GITHUB_SHA : undefined, allowedSites: [], checks: [], actualInferenceRequests: 0,
-    cold: { shellExecuteRequested: false, installedPidObserved: false, exactUriArgumentObserved: false, visibleWindowObserved: false, rendererStateObserved: false, normalWindowCloseObserved: false },
+    cold: { shellExecuteRequested: false, installedPidObserved: false, exactUriArgumentObserved: false, controlledUriArgumentObserved: false, normalizedRootSlashObserved: false, visibleWindowObserved: false, rendererStateObserved: false, normalWindowCloseObserved: false },
     warm: { initialParserErrorObserved: false, shellExecuteRequested: false, distinctParserErrorObserved: false, sameMainPidObserved: false, singleMainObserved: false },
     normalQuitObserved: false, cleanup: { ownedProcessesStopped: false, freshProfileRemoved: false, errors: [] },
     limits: ['Cold renderer state is not observed; cold proof is OS dispatch, installed PID/argv and visible window.',

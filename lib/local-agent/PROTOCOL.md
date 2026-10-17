@@ -18,6 +18,8 @@
 
 `POST attempts` 취소 전 새 시도를 만들면 같은 세션/팀의 이전 미완료 시도는 취소된다. `deepLink`는 `hapark-connect://connect?attemptId=...&launchToken=...`이며 번호·쿠키·CLI 인증은 포함하지 않는다. 설치 후 연결기에는 허용한 서버 origin 설정이 이미 있어야 한다. URI에서 임의 서버 주소를 받아 fetch하지 않는다.
 
+Windows가 전용 링크의 authority 뒤에 루트 `/`를 추가할 수 있으므로 `hapark-connect://connect/?attemptId=...&launchToken=...`도 같은 연결로 해석한다. 등록한 scheme·`connect` host·빈 경로 또는 루트 경로만 허용하며, 사용자 정보·port·fragment·다른 경로·추가/중복 인자는 계속 거절한다. 토큰과 시도 ID 검증, 6자리 확인은 동일하다.
+
 번호는 웹에만 표시한다. 웹은 attempt를 약 1초 간격으로 관측하고 connected를 받으면 device ID를 보관한다. 이전 시도/버전의 늦은 응답은 무시한다. 숫자 TTL 5분, 오답 최대 5회, 일회성 원자 소비.
 
 ## 연결기 API

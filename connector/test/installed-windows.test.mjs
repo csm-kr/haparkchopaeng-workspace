@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLaunchUrl } from '../core/security.mjs';
 import { invokeWindowsNative } from '../scripts/ci-installed-windows.mjs';
+import { run } from '../scripts/installed-smoke-support.mjs';
 import {
   assertWindowsRunner, windowsSmokeLayout, assertOwnedWindowsInstallation, parseWindowsSmokeArguments,
   assertWindowsProcessIdentity, sameWindowsProcess, selectWindowsMain, assertWindowsRejectedState,
@@ -36,6 +40,42 @@ function syntheticWindowsPathExecutor(aclSetup) {
     return captured;
   };
 }
+
+async function removeModuleFixture(fixture, temporaryRoot) {
+  const resolved = await realpath(fixture), relative = path.relative(temporaryRoot, resolved);
+  assert.ok(path.isAbsolute(resolved) && relative && !relative.includes(path.sep) && relative.startsWith('connector-winps-modulepath-')
+    && path.dirname(resolved).toLowerCase() === temporaryRoot.toLowerCase() && !(await lstat(fixture)).isSymbolicLink(), 'Unsafe module fixture cleanup target');
+  await rm(resolved, { recursive: true });
+}
+
+test('native child removes every inherited PSModulePath casing without changing its parent environment', async () => {
+  const environment = { PSMODULEPATH: 'CORE_ONLY', PSModulePath: 'CORE_ONLY', psmodulepath: 'CORE_ONLY', PATH: 'PRESERVED_PATH', PRIVATE_VALUE: 'PRESERVED_VALUE' };
+  const before = JSON.stringify(environment);
+  let options;
+  await invokeWindowsNative('context', {}, { environment, execute: async (_file, _args, value) => { options = value; return { code: 0, stdout: '{}', stderr: '' }; } });
+  assert.ok(options.env && typeof options.env === 'object', 'The child module environment must be explicit');
+  assert.deepEqual(Object.keys(options.env).sort(), ['PSMODULEPATH', 'PSModulePath', 'psmodulepath'].sort());
+  assert.ok(Object.values(options.env).every(value => value === undefined));
+  assert.ok(JSON.stringify(environment) === before, 'The parent environment must stay intact');
+});
+
+test('native child rebuilds WinPS module defaults instead of loading an inherited incompatible Security module', { skip: process.platform !== 'win32' }, async () => {
+  const temporaryRoot = await realpath(tmpdir()), fixture = await mkdtemp(path.join(temporaryRoot, 'connector-winps-modulepath-'));
+  try {
+    const modules = path.join(fixture, 'modules'), moduleDirectory = path.join(modules, 'Microsoft.PowerShell.Security');
+    await mkdir(moduleDirectory, { recursive: true });
+    await writeFile(path.join(moduleDirectory, 'Microsoft.PowerShell.Security.psd1'), "@{ RootModule='Microsoft.PowerShell.Security.psm1'; ModuleVersion='7.0.0.0'; GUID='f96700c9-0f07-459c-8067-96f23839fc07'; CmdletsToExport=@('Get-Acl'); FunctionsToExport=@(); AliasesToExport=@() }");
+    await writeFile(path.join(moduleDirectory, 'Microsoft.PowerShell.Security.psm1'), "throw (New-Object InvalidOperationException('SYNTHETIC_MODULE_IMPORT_FAILURE'))");
+    const modulePath = modules + path.delimiter + (process.env.PSMODULEPATH ?? process.env.PSModulePath ?? '');
+    const environment = { ...process.env, PSMODULEPATH: modulePath, PSModulePath: modulePath, psmodulepath: modulePath };
+    const before = JSON.stringify(environment);
+    const result = await invokeWindowsNative('path', { path: fixture }, { environment,
+      execute: (file, args, options) => run(file, args, { ...options, env: { ...environment, ...options.env } }) });
+    assert.equal(result.exists, true); assert.equal(result.reparsePoint, false);
+    assert.ok(typeof result.sid === 'string' && /^S-\d+(?:-\d+)+$/.test(result.sid), 'An ACL SID must be observed without account-name lookup');
+    assert.ok(JSON.stringify(environment) === before, 'The poisoned parent environment must stay intact');
+  } finally { await removeModuleFixture(fixture, temporaryRoot); }
+});
 
 test('path ownership reads the descriptor SID even when its account name cannot be resolved', { skip: process.platform !== 'win32' }, async () => {
   const execute = syntheticWindowsPathExecutor(String.raw`
@@ -103,7 +143,7 @@ test('cold process diagnostics distinguish path matches, current-user mains and 
   for (const privateValue of [sid, executable, uri, 'argv', 'pid']) assert.equal(json.includes(privateValue), false);
 });
 
-test('controlled URI diagnostics distinguish OS canonicalization without disclosing or admitting another argument', () => {
+test('controlled URI diagnostics distinguish OS canonicalization without disclosing another argument', () => {
   const uri = windowsSmokeUris(layout()).cold;
   const normalized = uri.replace('://connect?', '://connect/?');
   const privateText = 'PRIVATE_ACCOUNT_PATH_AND_TOKEN';
@@ -116,7 +156,7 @@ test('controlled URI diagnostics distinguish OS canonicalization without disclos
   assert.equal(summary.queryKeysMatch, true); assert.equal(summary.attemptValueMatch, true);
   const schemeCase = windowsControlledUriObservation([processRow({ argv: [executable, uri.replace('research-connect:', 'RESEARCH-CONNECT:')] })], { executable, uri });
   assert.equal(schemeCase.rawExactMatch, false); assert.equal(schemeCase.caseFoldMatch, true); assert.equal(schemeCase.urlCanonicalMatch, true);
-  assert.equal(selectWindowsMain(rows, { installation, executable, sid, notBefore: startedAt, uri }), null);
+  assert.equal(selectWindowsMain(rows, { installation, executable, sid, notBefore: startedAt, uri }).pid, 1234);
   for (const privateValue of [privateText, sid, executable, uri, normalized, 'argv']) assert.equal(JSON.stringify(summary).includes(privateValue), false);
   assert.throws(() => windowsControlledUriObservation(rows, { executable, uri: 'research-connect://connect?launchToken=private' }));
 });
@@ -192,6 +232,18 @@ test('cold selection observes one installed main and the exact OS-delivered URI 
   assert.throws(() => selectWindowsMain([processRow({ argv: [executable, uri] }), processRow({ pid: 1236, argv: [executable, uri] })], args));
 });
 
+test('cold selection accepts only the exact controlled input or its observed OS root-slash form', () => {
+  const uri = windowsSmokeUris(layout()).cold, slash = uri.replace('://connect?', '://connect/?');
+  const options = { installation, executable, sid, notBefore: startedAt, uri };
+  assert.equal(selectWindowsMain([processRow({ argv: [executable, slash] })], options).pid, 1234);
+  for (const candidate of [
+    uri.replace('://connect?', '://connect/other?'), uri.replace('://connect?', '://connect//?'),
+    `${slash}&extra=1`, `${slash}&attemptId=ci-package-cold`, `${slash}#fragment`,
+    slash.replace('ci-package-cold', 'other'), slash.replace('attemptId', 'attemptid'),
+    slash.replace('ci-package-cold', 'ci-package%2Dcold'), slash.replace('research-connect', 'other-connect'),
+  ]) assert.equal(selectWindowsMain([processRow({ argv: [executable, candidate] })], options), null);
+});
+
 test('both synthetic URI cases are rejected by the shipping parser before identity/API work', () => {
   const { cold, warm } = windowsSmokeUris(layout());
   const applications = [{ id: 'research-notebook', scheme: layout().scheme, origin: 'https://research.example', allowedOrigins: ['https://research.example'] }];
@@ -230,6 +282,38 @@ test('profile diagnostics distinguish current-user and Administrators ownership 
 test('protocol command must contain only the quoted installed executable and URI placeholder', () => {
   assert.doesNotThrow(() => assertWindowsProtocolCommand(`"${executable}" "%1"`, executable));
   for (const command of [`"${executable}" --connector-qa "%1"`, `"${executable}"`, `cmd.exe /c "${executable}" "%1"`, `"C:\\other.exe" "%1"`]) assert.throws(() => assertWindowsProtocolCommand(command, executable));
+});
+
+test('installer cold proof accepts the controlled OS root slash while retaining exact-URI truth', { skip: process.platform !== 'win32' }, () => {
+  const file = fileURLToPath(new URL('../scripts/verify-windows-installer.ps1', import.meta.url));
+  const cases = [
+    { receipt: null, allowed: false }, { receipt: {}, allowed: false },
+    { receipt: { cold: { exactUriArgumentObserved: true, normalWindowCloseObserved: true } }, allowed: false },
+    { receipt: { cold: { exactUriArgumentObserved: false, controlledUriArgumentObserved: true, normalizedRootSlashObserved: true, normalWindowCloseObserved: true } }, allowed: true },
+    { receipt: { cold: { exactUriArgumentObserved: true, controlledUriArgumentObserved: true, normalizedRootSlashObserved: false, normalWindowCloseObserved: true } }, allowed: true },
+    { receipt: { cold: { controlledUriArgumentObserved: 'true', normalWindowCloseObserved: true } }, allowed: false },
+    { receipt: { cold: { controlledUriArgumentObserved: true, normalWindowCloseObserved: false } }, allowed: false },
+    { receipt: { cold: { controlledUriArgumentObserved: true, normalWindowCloseObserved: 'true' } }, allowed: false },
+  ];
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+$qaFile = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(file).toString('base64')}'))
+$qaTokens = $null; $qaErrors = $null
+$qaAst = [Management.Automation.Language.Parser]::ParseFile($qaFile, [ref]$qaTokens, [ref]$qaErrors)
+$qaFunction = $qaAst.Find({ param($qaNode) $qaNode -is [Management.Automation.Language.FunctionDefinitionAst] -and $qaNode.Name -eq 'Test-QaControlledColdUriVerified' }, $true)
+if (-not $qaFunction) { throw 'Pure controlled URI policy function missing' }
+. ([ScriptBlock]::Create($qaFunction.Extent.Text))
+$qaCases = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(JSON.stringify(cases)).toString('base64')}')) | ConvertFrom-Json
+foreach ($qaCase in $qaCases) {
+  $qaAllowed = Test-QaControlledColdUriVerified -SmokeReceipt $qaCase.receipt
+  if ($qaAllowed -isnot [bool] -or $qaAllowed -ne $qaCase.allowed) { throw 'Controlled URI receipt policy failed' }
+}
+'PURE_CONTROLLED_URI_POLICY_OK'
+`;
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { encoding: 'utf8', windowsHide: true, shell: false, timeout: 15_000 });
+  assert.equal(result.status, 0, 'The extracted pure controlled URI receipt policy failed');
+  assert.match(result.stdout, /PURE_CONTROLLED_URI_POLICY_OK/);
 });
 
 test('installer cleanup requires a completed full-smoke process-stop receipt even when JSON is missing', { skip: process.platform !== 'win32' }, () => {

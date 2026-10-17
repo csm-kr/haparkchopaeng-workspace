@@ -18,7 +18,8 @@ export function parseLaunchUrl(value, applications) {
   if (typeof value !== 'string' || value.length > 2048) throw new Error('연결 링크가 올바르지 않아요.');
   const url = new URL(value);
   const application = applications.find(app => `${app.scheme}:` === url.protocol);
-  if (!application || url.hostname !== 'connect' || url.pathname || url.username || url.password || url.port || url.hash) throw new Error('등록된 앱의 연결 링크를 사용해 주세요.');
+  // Windows ShellExecute can add the authority's root slash to a custom URI.
+  if (!application || url.hostname !== 'connect' || !['', '/'].includes(url.pathname) || url.username || url.password || url.port || url.hash) throw new Error('등록된 앱의 연결 링크를 사용해 주세요.');
   const keys = [...url.searchParams.keys()];
   if (keys.length !== 2 || new Set(keys).size !== 2 || !keys.every(key => ['attemptId', 'launchToken'].includes(key))) throw new Error('연결 링크에 허용되지 않은 정보가 있어요.');
   const attemptId = url.searchParams.get('attemptId');

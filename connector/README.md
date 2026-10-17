@@ -42,7 +42,7 @@ npm --prefix connector run qa:install
 
 UI 회귀는 사용자의 브라우저에 연결하지 않는다. 작업 전용 Electron의 CDP만 사용하고 실제 모델 작업을 적재하지 않는다. Windows 네이티브 닫기 검증은 소유한 앱 PID에만 WM_CLOSE를 전송한다. 산출물과 격리 프로필은 각각 무시되는 `artifacts/`와 작업별 임시 폴더에 둔다.
 
-설치 회귀는 GUID 임시 경로에 NSIS를 무인 설치하고 전용링크 등록 대상·최신 코어·번들 Node를 확인한 뒤 자체 제거해 기존 ‘등록 없음’ 상태로 복구한다. GUI·브라우저·모델 추론은 실행하지 않는다. Windows CI에서도 패키징 다음 `qa:install`을 통과했다. 세 OS의 `node connector/scripts/ci-desktop-smoke.mjs`는 실제 Electron·OS 암호화 저장소와 loopback API fixture로 첫 연결·정상 종료 후 재개·손상 복구를 검증한다. 키링을 모의 구현하거나 평문 저장을 허용하지 않으며 모델을 호출하지 않는다. Linux는 workflow의 가상 디스플레이·D-Bus·키링·공식 sandbox 준비가 필요하다.
+기존 기본 설치 회귀는 GUID 임시 경로에 NSIS를 무인 설치하고 전용링크 등록 대상·코어·번들 Node를 확인한 뒤 자체 제거해 기존 ‘등록 없음’ 상태로 복구했다. 그 범위에서는 GUI·브라우저·모델 추론을 실행하지 않았고 당시 Windows CI도 통과했다. 후속 phase14의 실제 설치 앱·OS URI 실행 결과는 아래 OS 표와 구분한다. 세 OS의 `node connector/scripts/ci-desktop-smoke.mjs`는 unpackaged Electron·실제 OS 암호화 저장소와 loopback API fixture로 첫 연결·정상 종료 후 재개·손상 복구 13조건을 검증한다. 키링을 모의 구현하거나 평문 저장을 허용하지 않으며 모델을 호출하지 않는다. Linux는 workflow의 가상 디스플레이·D-Bus·키링·공식 sandbox 준비가 필요하다.
 
 `scripts/smoke.mjs --infer`는 실제 구독 사용량을 소비한다. 자동 테스트와 UI 회귀에서는 호출하지 않는다.
 
@@ -60,7 +60,7 @@ CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop ru
 CONNECTOR_APP_ORIGIN=https://hapark.vercel.app npm --prefix connector/desktop run package:linux
 ```
 
-각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. 현재 Windows NSIS 개발 설치본은 서명되지 않았고, macOS 서명·notarization과 macOS/Ubuntu의 실제 패키지 설치 흐름은 완료하지 않았다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 업데이트한다. 최종 빌드 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
+각 OS에서 해당 빌드를 실행한다. 출력은 `connector/dist/`다. Linux 빌드 대상은 .deb만이다. Ubuntu는 phase14의 격리 X11 CI에서 실제 .deb 설치·OS URI·정상 종료·제거 8조건을 통과했다. 제품 Mac·Windows의 실제 OS URI 흐름은 아직 완료하지 않았다. Windows 개발 설치본은 미서명이며 macOS Developer ID 서명·notarization, 실사용자의 설치 승인과 정식 배포는 별도다. 자동 업데이트는 구현하지 않았으며 새 설치본으로 갱신하는 절차도 검증해야 한다. 실행별 해시와 실제 검증 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
 
 Electron의 Node 런타임을 앱에 포함한다. `desktop/node_modules`, `dist`, `artifacts`, 실제 환경의 `desktop/apps.generated.json`은 Git에 포함하지 않는다. CLI 로그인 토큰이나 OS 보안 저장소의 기기 키를 빌드·로그·저장소에 복사하지 않는다.
 
@@ -91,10 +91,22 @@ Codex는 read-only sandbox, 사용자 설정 무시, 임시 세션, 셸·이미�
 
 ## OS 범위와 다른 앱 적용
 
-Windows x64에서는 로컬 실제 CLI·UI·보안 저장소·NSIS 설치/제거를 검증했다. [CI 실행 39028900156](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156)에서는 Windows x64, macOS 15 arm64, Ubuntu 24.04 x64의 실제 Electron·OS 암호화 저장·정상 앱 종료 후 재개·손상 복구 13조건을 각각 통과했다. API는 loopback fixture이며 세 runner에는 CLI가 설치되지 않아 실제 모델 추론·운영 웹·브라우저 URI 실행 검증으로 확대하지 않는다. macOS DMG는 arm64/x64 모두 생성했지만 x64 네이티브 UI는 미검증이다.
+Windows x64에서는 로컬 실제 CLI·UI·보안 저장소·NSIS 설치/제거를 검증했다. 과거 [CI 실행 39028900156](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156)에서는 Windows x64, macOS 15 arm64, Ubuntu 24.04 x64의 unpackaged Electron·실제 OS 암호화 저장·정상 앱 종료 후 재개·손상 복구 13조건을 각각 통과했다. API는 loopback fixture이며 세 runner에는 CLI가 설치되지 않아 실제 모델 추론·운영 웹·설치 앱의 OS URI 검증으로 확대하지 않는다. macOS DMG는 arm64/x64 모두 생성했지만 x64 네이티브 UI는 미검증이다.
 
-Ubuntu는 GUI 세션, 활성 Secret Service/keyring, 한국어 표시 글꼴, 패키지별 URI 등록이 필요하다. CI의 Xvfb/D-Bus 세션에서는 공식 Electron sandbox를 root:root/4755로 준비해 샌드박스를 유지했다. 현재 캡처의 한글은 글꼴 부재로 네모여서 글꼴을 준비한 가독성 재검증이 남아 있다. .deb 생성은 통과했지만 일반 데스크톱 설치·제거·재부팅·Wayland는 미검증이며 .deb 설치를 우선 검증한다. 현재 builder의 기본 AppImage는 샌드박스 비활성화 인수 경로가 있어 빌드·배포 대상에서 제외했다. 이미 생성된 AppImage는 Git에서 제외한 개발 산출물로 보류하며 다운로드 목록에 등록하지 않는다. Wayland의 펫 위치·항상 위 표시에는 제약이 있어 자동 시작·펫을 필수로 삼지 않았다. Headless 서버 연결은 대상이 아니다.
+Ubuntu는 GUI 세션, 활성 Secret Service/keyring, 한국어 표시 글꼴, 패키지별 URI 등록이 필요하다. 초기 CI 39028900156의 unpackaged 실행은 공식 Electron sandbox를 root:root/4755로 준비했고 한글이 글꼴 부재로 네모였다. 이는 당시 기록이며, 후속 [CI 39029600751](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751)에서 CJK 글꼴을 준비한 캡처의 가독성을 확인했다. 현재의 실제 .deb 설치 결과는 다음 phase14 표를 따른다. AppImage는 builder의 샌드박스 비활성화 인수 경로 때문에 계속 빌드·배포 대상에서 제외한다. 이전 AppImage도 다운로드 목록에 등록하지 않는다. Wayland의 펫 위치·항상 위 표시에는 제약이 있어 자동 시작·펫을 필수로 삼지 않았다. Headless 서버 연결은 대상이 아니다.
 
-macOS Finder/설치·Keychain 확인창·서명/notarization, Ubuntu 패키지 설치와 브라우저 복귀, 운영 사이트의 최초 연결, OS 업데이트/앱 이동/재부팅 후 전용 링크 복구는 별도 검증 대상이다. CI의 unpackaged 앱 기동·종료와 설치된 앱의 사용자 흐름을 구분한다. 상세 근거와 남은 범위는 [VALIDATION.md](VALIDATION.md)를 따른다.
+### phase14 실제 설치본 · 최신 확정 상태
+
+제품 소스 `4c74a19`의 [CI 39039821379](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39039821379)에서 Linux 설치 검증 8조건은 성공했고 Mac·Windows job은 실패했다. 아래 결과는 해당 실행 기준이며 과거 13조건 성공으로 실패를 덮어쓰지 않는다.
+
+| 환경 | 확인된 범위 | 남은 확인 |
+| --- | --- | --- |
+| 제품 Ubuntu 24.04 x64 | 실제 .deb 설치·코어 9개 SHA 대조·번들 Node·기본 URI handler·cold/warm 링크·가시 창·정상 닫기/quit IPC·purge/프로필/handler/AppArmor 정리 8조건 통과 | 격리 X11 CI 범위. 실사용자 GUI·인증 페어링·브라우저 승인·Wayland·재부팅·업데이트·정식 배포 |
+| 제품 macOS arm64 | DMG 생성과 과거 unpackaged 암호화 회귀는 별도 기록. 실제 설치 앱의 OS URI 완료는 미확인 | 실행 파일명을 ASCII로 분리한 뒤에도 SIGTRAP이 관측돼 해당 job 실패. 원인은 확정하지 않음. Finder·Developer ID·공증·운영 연결도 미검증 |
+| 제품 Windows x64 | 과거 NSIS 설치·등록·번들 런타임·제거 근거는 보존. 이번 OS URI job은 실패 | OS가 덧붙이는 루트 슬래시 처리와 PSModulePath 정리는 다음 CI 검증 대기이며 완료로 표시하지 않음 |
+
+Ubuntu 설치본의 sandbox는 설치기가 선택한 root:root/0755·앱별 AppArmor loaded 상태이며 QA가 mode를 바꾸지 않았다. cold URI는 정확한 합성 process-title-token을 관측했으며 원래 argv는 미증명이다. 별도 직접 CDP 기동에서 browser/renderer native PID를 OS 실행 파일·UID·부모 트리와 대조하고 renderer Seccomp=2·NoNewPrivs=1을 확인했다. CLI·추론은 0회다. API ACK 이전 parser 경계로 해당 실행을 배제했으며 main-process 네트워크를 독립 측정한 것은 아니다. 설치본 8조건은 인증 페어링·OS 키 암호화를 다시 검증하지 않는다.
+
+구체적인 설치 해시는 직접 확인한 과거 `ec594c2` [Linux 영수증](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39038318920/job/117412530581)과 [VALIDATION.md](VALIDATION.md)의 phase14 절에서 실행별로 확인한다. 그 해시를 `4c74a19` 설치본 해시로 재사용하지 않는다. macOS Finder·Keychain 확인창·서명/공증, 운영 최초 연결과 OS 업데이트·앱 이동·재부팅 후 링크 복구도 남아 있다. CI unpackaged 13조건, 실제 설치본, 실사용자·운영 검증을 구분한다.
 
 다른 웹앱은 고유 appId·프로토콜·브랜드 자산·정적 HTTPS allowlist로 다시 구성하고 동일 REST 계약의 서버 어댑터를 제공한다. `parseLaunchUrl`과 암호화 저장소는 앱 ID별로 분리하지만, 사용자 입력 URI로 임의 origin을 추가하지 않는다. `scripts/configure-desktop.mjs`의 applications, 패키징 protocols, Windows `desktop/installer.nsh`의 프로토콜 키를 함께 변경한다. 이 폴더는 독립 Node 패키지이므로 별도 저장소로 추출할 수 있다.
