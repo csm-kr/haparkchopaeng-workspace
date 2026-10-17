@@ -1,6 +1,6 @@
 # 로컬 AI 연결
 
-운영 origin은 `https://hapark.vercel.app`이다. 웹의 **AI 연결** 버튼이 설치된 Electron 연결기를 `hapark-connect` 전용 링크로 연다. 연결기는 이 PC의 기존 Codex·Claude Code 로그인을 사용한다. 모델은 실제 CLI 목록에서 사용자가 선택하며 처음에는 비어 있다. 기존 Gemini/Inngest 논문 분석은 별도로 유지한다.
+운영 origin은 `https://hapark.vercel.app`이다. 웹의 **AI 연결** 버튼이 설치된 Electron 연결기를 `hapark-connect` 전용 링크로 연다. 연결기는 이 PC의 기존 Codex·Claude Code 로그인을 사용한다. 모델은 실제 CLI 목록에서 사용자가 선택하며 처음에는 비어 있다. [ADR-026](../agent/ADR.md#adr-026)에 따라 업로드는 Inngest에서 PDF 본문만 준비하며, 논문 분석과 `/ai-chat`은 사용자가 선택한 로컬 AI를 사용한다. Gemini 자동 분석은 실행하지 않는다.
 
 ## 처음 설치와 다시 연결
 

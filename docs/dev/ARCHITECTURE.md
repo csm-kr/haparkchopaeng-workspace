@@ -31,8 +31,10 @@
    │                 │
    ├──< 푸시 ────[Supabase Realtime]   (live 전이·@멘션 broadcast)
    │
-[외부 durable 잡 러너] ──> [Gemini API]  (분석; Vercel 함수 시간제한 밖)
-        ↑ 잡 적재(Job)            └──> [Supabase Storage]  (PDF·에셋·figure, 서명 URL)
+[Inngest durable 잡] ──> [Supabase Storage]  (PDF 본문 준비·Figure 렌더)
+        ↑ Job                 └──> [Supabase Postgres]  (결과 검증·최신 실행 저장)
+[승인한 PC 연결기] ──claim/result──> [Vercel API + LocalAgentJob DB 큐]
+        └──> [로컬 Codex·Claude Code]  (선택 모델 추론; 서버 API 키 없음)
 [브라우저] ──WebRTC──> [LiveKit SFU]  (다자간 영상·음성·화면공유 트랙; 채팅·반응은 데이터 채널)
 ```
 - **앱은 Vercel 서버리스.** "상시 Node 서버·SQLite 파일·인-프로세스 워커"를 가정하지 않는다(ADR-016이 ADR-010/012 개정).
@@ -51,15 +53,19 @@ CLAUDE.md "서버 로직은 route handler/서버에서만"을 RSC 시대에 맞�
 > 즉 **읽기는 서버에서 직접, 쓰기는 서버 액션/route handler.** 클라이언트 컴포넌트에서 fetch로 자체 API를 부르는 건 인터랙티브 섬에 한정한다.
 
 ### 백그라운드 작업 (ADR-013→016) — CRITICAL
-**분석·arXiv 가져오기·녹화 후처리는 요청 경로에서 인라인으로 돌리지 않는다.** 이유: Gemini 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다([`./ENV.md`](./ENV.md)).
+**본문 준비·분석 후처리는 요청 경로에서 인라인으로 돌리지 않는다.** 긴 추론은 승인한 PC의 CLI에서 실행하고, Inngest는 짧은 준비·조회·저장 단계와 durable sleep을 담당한다. 서버리스 요청이나 메모리 Promise를 PC 응답까지 유지하지 않는다([`./ENV.md`](./ENV.md), ADR-026).
 ```
-POST /api/papers → Paper 저장(analysisStatus=pending) + 잡 트리거 → 즉시 201 응답
-                                              │
-외부 durable 잡 러너 ──> Gemini 분석 ──> Analysis/Figure 저장, analysisStatus=ready|failed
-클라이언트는 Realtime 또는 재조회로 ready 전환을 받는다 (/reanalyze로 재시도)
+POST /api/papers → Paper 저장 + 본문 준비 트리거 → 즉시 201(AI 호출 0회)
+Inngest → sourceText/sourceDigest 준비 → analysisStatus=awaiting_ai
+사용자 PC·모델 선택 → POST /reanalyze → Job(prepare_local_analysis) → 즉시 202
+Inngest → LocalAgentJob(paper_analysis) 적재 → 승인한 PC의 CLI가 claim/result
+Inngest → durable sleep/짧은 DB 조회 → strict JSON·페이지/인용 검증·Figure 렌더
+  → 최신 analysisRequestId CAS → Analysis 두 관점/Figure 저장 → ready|failed
+클라이언트는 완료 알림·재조회로 갱신한다 (GET/POST/DELETE /reanalyze)
 ```
-- 실행 주체는 **외부 durable 잡 러너**(Inngest/Trigger.dev/QStash 등). `Job` 모델(멱등·재시도·실패 보존)은 큐의 상태 미러로 유지([`./DB.md`](./DB.md)).
+- `Job`은 준비·후처리의 실행 원장이고 `LocalAgentJob`은 PC 실행 큐다. 실행 선택·소유자·팀·세션은 서버에서 고정하며 원문이나 context를 클라이언트 입력으로 받지 않는다([`./DB.md`](./DB.md)).
 - **업로드 성공 ≠ 분석 성공**을 아키텍처로 강제한다(분리된 잡).
+- Gemini 자동 실행·자동 원격 API 대체는 없다. 현재 CLI는 텍스트 전용이므로 Figure 해석은 본문·캡션 기반 추론이고 외부 저장소는 미검증이다. 논문 상세의 research/repro와 공통 Figure 하단은 유지한다.
 
 ### 실시간 동기화 (ADR-014→016) — `live`·알림
 `live`는 **모두에게 즉시** 일관돼야 한다(ADR-001). 폴링 대신 **Supabase Realtime**으로 전이를 브로드캐스트한다.
@@ -147,3 +153,13 @@ src/
 ## 로컬 CLI 연결 (ADR-025)
 
 `lib/local-agent`와 인증된 `app/api/local-agent`가 페어링·45초 허가·DB 큐를 담당하고 `connector/` 설치앱이 기존 CLI를 실행한다. 웹은 자체 API만 호출한다. 질문은 적재 후 202로 끝나며 연결기가 claim/result를 전송한다. 앱 heartbeat는 웹 허가를 갱신하지 못한다. 서버리스 함수에서 CLI나 지속 WebSocket을 띄우지 않는다. 인증된 짧은 상태 조회로 연결을 동기화하며 기존 live Realtime의 역할은 유지한다. [상세](./LOCAL_AGENT.md).
+
+## 개인 연구 채팅과 결과 수명 (ADR-026)
+
+기존 분석 논문에 원문 캐시가 없으면 `POST /api/research-chat/sources {paperIds}`가 활성 팀·Origin을 확인하고 본문이 없는 1~3개 논문만 Inngest 본문 준비에 적재한다. 202 `{preparing,ready}`로 응답하며 CLI·모델 없이 원문만 준비하고 기존 분석 결과를 보존한다.
+
+별도 작업 공간 `/ai-chat`은 `ResearchConversation`과 `LocalAgentJob(purpose=chat)`을 사용한다. 활성 팀 논문 1~3개를 서버에서 조회해 원문을 구성하고, 작성자 개인 이력을 반환한다. 같은 대화의 행 잠금과 `(conversationId, conversationTurn)` 고유 제약으로 동시 턴을 하나로 제한한다. 현재 명시적으로 선택한 모델을 사용하며 기존 연결·한도 UI를 재사용한다. 부분 답변은 짧은 자체 API 조회로 누적 표시하고 취소·오프라인·세션 오류를 구분한다.
+
+새 로그인은 소유자+활성 팀으로 개인 기록을 읽을 수 있으나 과거 grant로 실행하거나 이전 세션의 작업을 취소하지 못한다. 화면은 최근 50턴·목록 100개이며, 모델에는 완료된 최근 8턴과 원문을 합해 최대 20만 자를 전달하고 생략 여부를 표시한다. 대화 결과는 기존 논문 분석·팀 노트를 자동 변경하지 않는다.
+
+유효 grant 중 서버가 이미 `completed`로 접수한 결과의 검증·렌더·영속은 로그아웃 뒤에도 마친다. 이후 신규/계속 추론과 미접수 결과는 거절하며 Inngest가 웹 허가를 갱신하지 않는다. 최종 분석 저장은 현재 멤버십·팀·최신 실행 CAS를 다시 확인한다. 운영 스키마는 아직 미적용이며 [수동 적용 단계](./DB.md#local-ai-schema)와 추가 전체 품질 검증을 완료해야 한다.

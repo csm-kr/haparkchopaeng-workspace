@@ -59,6 +59,11 @@
     },
     {
       "dir": "12-local-agent-connection",
+      "status": "completed",
+      "completed_at": "2026-10-17T21:17:54+0900"
+    },
+    {
+      "dir": "13-local-ai-research-chat",
       "status": "pending"
     }
   ]

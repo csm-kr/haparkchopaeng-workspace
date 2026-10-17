@@ -4,9 +4,10 @@ import { Download } from "lucide-react";
 import { Topbar } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { AnalysisView, DeletePaperButton, PaperTitleEditable } from "@/components/analyzer";
+import { LocalPaperAnalysis } from "@/components/local-agent/paper-analysis";
 import { getSession } from "@/lib/auth";
 import { getActiveTeam } from "@/lib/active-team";
-import { getExpectedAnalysisMs, getPaperDetail } from "@/lib/papers";
+import { getPaperDetail } from "@/lib/papers";
 import { prisma } from "@/lib/prisma";
 import { addNote, deleteNote } from "./actions";
 
@@ -88,11 +89,8 @@ export default async function PaperDetailPage({ params }: PageProps) {
 
   const { paper } = detail;
 
-  // 진행률 바의 예상 시간은 pending일 때만 필요 — 그때만 팀 평균을 조회한다(R37 팀 스코프).
-  const expectedMs =
-    paper.analysisStatus === "pending"
-      ? await getExpectedAnalysisMs(team.id)
-      : undefined;
+  // 실행 상태는 LocalPaperAnalysis가 표시한다. 재분석 중에도 저장된 결과는 읽을 수 있다.
+  const hasStoredResults = detail.research !== null || detail.repro !== null || detail.figures.length > 0 || detail.notes.length > 0;
 
   // 작성자 표기에 쓸 현재 사용자(노트 낙관적 추가 시 표시). 인증은 위에서 보장(session).
   const me = session
@@ -149,11 +147,10 @@ export default async function PaperDetailPage({ params }: PageProps) {
             </p>
           </header>
 
-          <AnalysisView
+          <LocalPaperAnalysis key={paper.id} paperId={paper.id} initialStatus={paper.analysisStatus} />
+          {hasStoredResults && <AnalysisView
             paperId={paper.id}
-            analysisStatus={paper.analysisStatus}
-            analysisStartedAt={paper.analysisStartedAt}
-            expectedMs={expectedMs}
+            analysisStatus="ready"
             research={detail.research}
             repro={detail.repro}
             figures={detail.figures}
@@ -161,7 +158,7 @@ export default async function PaperDetailPage({ params }: PageProps) {
             currentUser={currentUser}
             addNote={addNote}
             deleteNote={deleteNote}
-          />
+          />}
         </div>
       </div>
     </>

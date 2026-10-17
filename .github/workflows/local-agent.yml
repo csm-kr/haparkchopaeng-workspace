@@ -2,6 +2,11 @@ name: Local agent validation
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: Store captures and unsigned installers when Actions storage is available
+        type: boolean
+        default: false
   pull_request:
     branches: [main]
   push:
@@ -37,20 +42,40 @@ jobs:
           python -m pytest scripts/test_execute.py -q
           node --test scripts/local-agent-verify.test.mjs scripts/local-agent-pg-guard.test.mjs
       - name: Harness gate — isolated regression, lint and production build
-        run: python scripts/execute.py 12-local-agent-connection --verify --step 4
+        run: python scripts/execute.py 13-local-ai-research-chat --verify --step 0
+      - name: Summarize captured quality evidence
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          path = Path('phases/13-local-ai-research-chat/step0-output.json')
+          lines = ['## Local research quality checks']
+          if path.is_file():
+              for check in json.loads(path.read_text(encoding='utf-8'))['checks']:
+                  lines.append(f"- `{' '.join(check['argv'])}`: exit {check['exitCode']}")
+                  clean = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', check['stdout'])
+                  lines.extend(f'  - {line.strip()}' for line in clean.splitlines() if re.match(r'^\s*(Test Files|Tests\s+\d|Duration\s+\d)', line))
+          else:
+              lines.append('- Harness output was not produced; inspect the preceding failed step.')
+          summary = '\n'.join(lines) + '\n'
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as target:
+              target.write(summary)
+          PY
       - run: npx playwright install --with-deps chromium
       - name: Web flow in Chromium
         run: npm run test:local-agent:e2e
       - name: Real HTTP connector contract and cookie loss
         run: npm run test:local-agent:wire
       - uses: actions/upload-artifact@v7.0.2
-        if: always()
+        if: always() && inputs.upload_artifacts == true
         with:
           name: web-evidence
           path: |
             test-results/
             playwright-report/
-            phases/12-local-agent-connection/step4-output.json
+            phases/13-local-ai-research-chat/step0-output.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -160,7 +185,7 @@ jobs:
             node connector/scripts/ci-desktop-smoke.mjs
           '
       - uses: actions/upload-artifact@v7.0.2
-        if: always()
+        if: always() && inputs.upload_artifacts == true
         with:
           name: native-smoke-${{ matrix.platform }}
           path: |
@@ -213,13 +238,14 @@ jobs:
         if: matrix.platform == 'win'
         run: npm --prefix connector run qa:install
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && matrix.platform == 'win'
+        if: always() && matrix.platform == 'win' && inputs.upload_artifacts == true
         with:
           name: windows-install-evidence
           path: connector/artifacts/windows-installer-qa.json
           if-no-files-found: ignore
           retention-days: 14
       - uses: actions/upload-artifact@v7.0.2
+        if: inputs.upload_artifacts == true
         with:
           name: connector-${{ matrix.platform }}-unsigned
           path: |

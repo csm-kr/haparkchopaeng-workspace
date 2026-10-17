@@ -1,0 +1,69 @@
+{
+  "project": "hapark",
+  "phase": "13-local-ai-research-chat",
+  "execution": "Collaborative TDD with explicit file ownership; isolated databases only.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "local-research-and-chat",
+      "status": "completed",
+      "paths": [
+        "lib/local-ai",
+        "lib/research-chat",
+        "app/api/research-chat",
+        "components/research-chat",
+        "app/(app)/ai-chat",
+        "worker/analyze-paper.ts"
+      ],
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "lint"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "build"
+        ]
+      ],
+      "summary": "?? ????? ?? ??? ?? ???? ?? ???? ????. ?? ?? ?? ?? 120 suites/946 tests, lint, production build? ????. PG ?? 13?? ?? PostgreSQL 16 CI?? ????. ?? 2? PDF? ?? Codex ?? ???? ?? ?? ??? ?? Zod ?? ???? ???? ?? ? ????? ?? ?? 1? ????. ?? ?? 2? ?? ??? ???? ?? DB?API fallback? 0??.",
+      "started_at": "2026-10-17T21:32:35+0900",
+      "completed_at": "2026-10-17T21:35:41+0900"
+    },
+    {
+      "step": 1,
+      "name": "web-and-release-review",
+      "status": "pending",
+      "paths": [],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "scripts/local-agent-verify.test.mjs",
+          "scripts/local-agent-pg-guard.test.mjs"
+        ],
+        [
+          "python",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ]
+      ],
+      "summary": "UI·빌드·PostgreSQL·기존 연결기 회귀 및 수동 운영 SQL 경계를 검증한다."
+    }
+  ],
+  "created_at": "2026-10-17T21:32:35+0900",
+  "overallGoalComplete": false,
+  "operationalGates": [
+    "?? SQL 2? ?? ??",
+    "?? OS ?? ???macOS ??????? ??",
+    "?? ??worker ?? ? ?? ??? ?? ??"
+  ]
+}

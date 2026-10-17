@@ -36,6 +36,7 @@ function ymd(iso: string): string {
 
 /** 분석 상태가 ready가 아니면 가벼운 표시(SCREENS §화면별 상태). */
 function statusLabel(status: AnalysisStatus): string | null {
+  if (status === "awaiting_ai") return "AI 분석 대기";
   if (status === "pending") return "분석 중";
   if (status === "failed") return "분석 실패";
   return null;
@@ -48,7 +49,7 @@ export function PaperList({ papers }: PaperListProps) {
       <EmptyState
         icon={<BookText size={20} />}
         title="아직 올라온 논문이 없어요"
-        description="첫 PDF를 올리면 두 관점 분석으로 바뀌어요."
+        description="PDF를 올리고 연결한 AI로 두 관점 분석을 시작해보세요."
       />
     );
   }

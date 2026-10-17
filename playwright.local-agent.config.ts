@@ -7,7 +7,7 @@ if (process.env.HAPARK_ISOLATED_TESTS !== "1" || !process.env.DATABASE_URL?.star
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "local-agent.spec.ts",
+  testMatch: ["local-agent.spec.ts", "research-chat.spec.ts", "local-analysis.spec.ts"],
   fullyParallel: false,
   workers: 1,
   retries: 0,

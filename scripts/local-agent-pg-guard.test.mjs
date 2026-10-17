@@ -58,11 +58,16 @@ test('requires the connected server itself to confirm the dedicated database and
   }
 });
 
-test('builds the application base schema without exactly the five LocalAgent models and Team reverse relations', async () => {
+test('builds the application base before the five LocalAgent models and the exact local analysis additions', async () => {
   const source = await readFile(new URL('../prisma/schema.prisma', import.meta.url), 'utf8');
   const base = verifier.postgresBaseSchema(source);
-  const paper = source.match(/^model Paper \{[\s\S]*?^\}/m)?.[0];
-  assert.ok(paper && base.includes(paper), 'unrelated application model is preserved verbatim');
+  const analysis = source.match(/^model Analysis \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(analysis && base.includes(analysis), 'unrelated application model is preserved verbatim');
+  const paper = base.match(/^model Paper \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(paper?.includes('pdfUrl') && paper.includes('analysisDurationMs'), 'existing Paper data remains in the base');
+  assert.doesNotMatch(paper, /^\s*(sourceText|sourceDigest|analysisRequestId|analysisError)\s/m);
+  assert.doesNotMatch(base, /^model ResearchConversation\b/m);
+  assert.doesNotMatch(base, /^\s*researchConversations\s+ResearchConversation/m);
   assert.equal(/^model LocalAgent/m.test(base), false);
   assert.equal(/^\s*localAgent\w+\s+LocalAgent/m.test(base), false);
   for (const broken of [
@@ -70,6 +75,11 @@ test('builds the application base schema without exactly the five LocalAgent mod
     `${source}\nmodel LocalAgentSurprise {\n id String @id\n}\n`,
     source.replace(/^\s*localAgentJobs LocalAgentJob\[\]\s*$/m, ''),
     `${source}\nmodel UnexpectedReference {\n id String @id\n device LocalAgentDevice\n}\n`,
+    source.replace(/^model ResearchConversation \{[\s\S]*?^\}/m, ''),
+    source.replace(/^\s*researchConversations\s+ResearchConversation\[\].*$/m, ''),
+    source.replace(/^\s*sourceDigest\s+String\?.*$/m, ''),
+    source.replace('sourceText        String?', 'sourceText        Int?'),
+    `${source}\nmodel UnexpectedConversation {\n id String @id\n conversation ResearchConversation\n}\n`,
   ]) assert.throws(() => verifier.postgresBaseSchema(broken));
 });
 
@@ -85,6 +95,32 @@ test('accepts only the reviewed additive LocalAgent SQL and refuses changes to e
   ]) assert.throws(() => verifier.assertLocalAgentSql(broken));
 });
 
+test('accepts exactly the reviewed local analysis columns, conversation table, two indexes and two foreign keys', async () => {
+  const sql = await readFile(new URL('../docs/dev/sql/20261017-local-ai-research-chat.sql', import.meta.url), 'utf8');
+  assert.doesNotThrow(() => verifier.assertLocalAiSql(sql));
+  assert.doesNotThrow(() => verifier.assertLocalAiSql(sql.replace(/ADD COLUMN\s+/g, 'ADD /* reviewed spacing */ COLUMN ')));
+  assert.throws(() => verifier.assertLocalAgentSql(sql), 'the five-table phase12 whitelist remains unchanged');
+  for (const broken of [
+    `${sql}\nDROP TABLE "Paper";`, `${sql}\nDELETE FROM "Paper";`,
+    `${sql}\nUPDATE "Paper" SET "title" = 'changed';`, `${sql}\nTRUNCATE "Team";`,
+    `${sql}\nALTER TABLE "Team" ADD COLUMN "unsafe" TEXT;`,
+    `${sql}\nALTER TABLE "Paper" ADD COLUMN "unsafe" TEXT;`,
+    `${sql}\nCREATE TABLE "Other" ("id" TEXT);`, `${sql}\nSET search_path = other;`,
+    `${sql}\nCREATE INDEX "Unexpected" ON "ResearchConversation"("title");`,
+    `${sql}\nCREATE INDEX "ResearchConversation_memberId_teamId_updatedAt_idx" ON "ResearchConversation"("memberId", "teamId", "updatedAt");`,
+    sql.replace('"analysisError" TEXT', '"analysisError" INTEGER'),
+    sql.replace('ADD COLUMN     "sourceDigest" TEXT,', ''),
+    sql.replace("DEFAULT 'question'", "DEFAULT 'chat'"),
+    sql.replace('"paperIds" JSONB NOT NULL', '"paperIds" TEXT NOT NULL'),
+    sql.replace('CREATE TABLE "ResearchConversation"', 'CREATE TABLE "DifferentConversation"'),
+    sql.replace('CREATE UNIQUE INDEX "LocalAgentJob_conversationId_conversationTurn_key"', 'CREATE INDEX "LocalAgentJob_conversationId_conversationTurn_key"'),
+    sql.replace('ON DELETE SET NULL', 'ON DELETE CASCADE'),
+    sql.replace('REFERENCES "Team"', 'REFERENCES "Member"'),
+    sql.replace("DEFAULT 'question'", "DEFAULT 'quest''ion'"),
+    `${sql}\n/* unterminated`,
+  ]) assert.throws(() => verifier.assertLocalAiSql(broken));
+});
+
 test('requires a new empty disposable database rather than mutating an earlier or application schema', () => {
   assert.doesNotThrow(() => verifier.assertEmptyPostgresDatabase([{ tables: 0 }]));
   for (const rows of [[], [{ tables: 1 }], [{ tables: '0' }], [{ tables: -1 }]]) {
@@ -92,13 +128,13 @@ test('requires a new empty disposable database rather than mutating an earlier o
   }
 });
 
-test('creates only the base schema, applies the actual SQL, checks schema drift, then runs the PostgreSQL scenarios', async () => {
+test('creates only the base schema, applies phase12 then phase13 SQL, checks drift, then runs the PostgreSQL scenarios', async () => {
   const calls = [];
   await verifier.runPostgresVerification(valid(), {
     command: async (args, env) => { calls.push({ args, env }); },
     assertDisposableServer: async () => { calls.push({ identity: true }); },
   });
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 7);
   assert.equal(calls[0].args[1], 'generate');
   assert.equal(calls[1].identity, true);
   assert.deepEqual(calls[2].args.slice(1, 4), ['db', 'push', '--skip-generate']);
@@ -108,9 +144,13 @@ test('creates only the base schema, applies the actual SQL, checks schema drift,
   assert.equal(base.includes('env("DATABASE_URL")'), false);
   assert.deepEqual(calls[3].args.slice(1, 4), ['db', 'execute', '--file']);
   assert.ok(calls[3].args[4].endsWith('20261017-local-agent-connection.sql'));
-  assert.deepEqual(calls[4].args.slice(1, 3), ['migrate', 'diff']);
-  assert.ok(calls[4].args.includes('--exit-code'));
-  assert.ok(calls[5].args.some(value => value.endsWith('postgres.integration.test.ts')));
+  assert.deepEqual(calls[4].args.slice(1, 4), ['db', 'execute', '--file']);
+  assert.ok(calls[4].args[4].endsWith('20261017-local-ai-research-chat.sql'));
+  assert.deepEqual(calls[5].args.slice(1, 3), ['migrate', 'diff']);
+  assert.ok(calls[5].args.includes('--exit-code'));
+  assert.ok(calls[6].args.some(value => value.endsWith('postgres.integration.test.ts')));
+  assert.doesNotMatch(base, /^model ResearchConversation\b/m);
+  assert.doesNotMatch(base.match(/^model Paper \{[\s\S]*?^\}/m)?.[0] ?? '', /^\s*(sourceText|sourceDigest|analysisRequestId|analysisError)\s/m);
   for (const call of calls.filter(call => call.args)) {
     assert.equal(call.env.LOCAL_AGENT_PG_TEST_URL, url);
     assert.equal(call.env.DATABASE_URL, undefined);

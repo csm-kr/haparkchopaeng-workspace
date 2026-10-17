@@ -47,12 +47,15 @@
 | GET | `/api/papers/:id/notes` | 섹션 노트 목록 | 🔒 |
 | POST | `/api/papers/:id/notes` | 섹션 노트 추가 `{sectionId, lens, title, body}` | 🔒 |
 | DELETE | `/api/notes/:id` | 노트 삭제 | ✍️ |
-| POST | `/api/papers/:id/reanalyze` | 분석 재시도(실패/대기 시) | 🔒 |
+| GET | `/api/papers/:id/reanalyze` | 본문 준비·최신 분석 상태·취소 가능 여부 | 🔒 |
+| POST | `/api/papers/:id/reanalyze` | 명시적 로컬 모델 분석 `{deviceId,provider,model,requestId}` → 202 | 🔒 |
+| DELETE | `/api/papers/:id/reanalyze` | 이 로그인에서 시작한 분석 중단 | 🔒 |
 | DELETE | `/api/papers/:id` | 논문 삭제(분석·figure·노트·원문 PDF 정리) | ✍️ |
 
 - **CRITICAL: 업로드는 `application/pdf`만 허용.** 그 외 Content-Type → `415`. arXiv URL은 서버가 PDF를 가져온다.
 - **CRITICAL: 비용 가드(POST /api/papers).** ① **30쪽 초과 PDF 거부** → `413`(읽을 수 없는 PDF는 `400`). 파일 경로는 초과 시 업로드된 객체를 정리한다. ② **인당 주간 업로드 한도**(이번 주=월요일 00:00 KST 이후, 매주 리셋, 기본 운영 20편 — `PAPER_WEEKLY_LIMIT`로 조정, 0 이하=무제한) 초과 → `429`. 두 경로(파일·arXiv) 모두 적용. (reanalyze는 새 Paper를 만들지 않아 한도에 들지 않는다. 관리자 예외는 추후.)
-- **CRITICAL: 업로드 성공과 분석 성공을 분리한다.** `POST /api/papers`는 분석이 실패해도 `Paper`를 저장하고 `analysisStatus: pending|failed`로 응답한다. UI는 논문을 열고 분석 섹션만 재시도 상태로 보인다(→ [`./ENV.md`](./ENV.md), [`../design/SCREENS.md`](../design/SCREENS.md)). 원문 PDF 다운로드는 분석 상태와 무관하게 동작.
+- **CRITICAL: 업로드 성공과 분석 성공을 분리한다.** `POST /api/papers`는 `Paper` 저장 후 본문 준비만 트리거하고 AI를 호출하지 않는다. 준비 중은 `pending`, 본문 준비 완료는 `awaiting_ai`, 실패는 `failed`다. PC·실제 모델을 선택한 명시적 `/reanalyze` 요청만 로컬 추론을 시작한다. 원문 PDF 다운로드는 분석 상태와 무관하게 동작(ADR-026).
+- `/reanalyze` POST의 `provider`는 `codex|claude`, `requestId`는 UUID다. 다른 팀·기기·등록되지 않은 모델을 거절하며 동일 요청 재전송은 멱등이다. GET은 `{id,analysisStatus,analysisError,runId,sourceReady,canCancel}`을 반환한다. 장기 추론을 요청 안에서 기다리지 않는다. Gemini·다른 제공자로 자동 전환하지 않는다.
 - **노트 작성자**는 서버가 세션에서 강제 주입한다. 클라이언트가 보낸 `authorId`는 신뢰하지 않는다.
 - `lens`는 `sectionId === "figures"`일 때 서버가 `any`로 강제한다(ADR-005).
 - **CRITICAL: 활성 팀 스코핑(ADR-020, R37).** 목록은 활성 팀의 논문만 반환하고, `POST /api/papers`는 활성 팀 `teamId`를 주입한다. `:id` 접근은 그 논문이 활성 팀 소유일 때만 — 아니면 `403`.
@@ -132,14 +135,15 @@
 ### 내부 / 웹훅 (인증은 서명 검증)
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| — | (현재 없음) | 녹화 웹훅 폐기 — LiveKit 전환(ADR-019). 녹화는 미결(ISSUES) |
+| GET / POST / PUT | `/api/inngest` | Inngest 함수 등록·실행 핸들러. 운영 실행 서명은 SDK와 `INNGEST_SIGNING_KEY`로 검증 |
+| — | (녹화 웹훅 미구현) | 녹화 웹훅 폐기 — LiveKit 전환(ADR-019). 녹화는 미결(ISSUES) |
 
 ## 외부 연동
 
 - **LiveKit(SFU):** 앱은 입장 토큰 발급·권한 체크·룸 정리만 담당하고, 영상·음성·화면공유 트랙 라우팅은 LiveKit에 위임(ADR-019). 토큰 서명 키(`LIVEKIT_API_SECRET`)는 서버 환경변수. 화면공유 grant는 발표자에게만.
 - **파일 스토리지:** 원문 PDF·발표 에셋·figure 이미지. 업로드는 **프리사인 직접 업로드**, 다운로드는 **서명 URL**(직접 공개 버킷 금지 → SECURITY).
 - **arXiv:** **워커**가 `arxiv.org/pdf/{id}` PDF를 가져와 스토리지에 저장(요청 경로 아님, ADR-013). SSRF 화이트리스트.
-- **Gemini(`@google/genai`):** 논문 분석. **Inngest 잡에서만** 호출(분 단위, ADR-013→016 → [`./ENV.md`](./ENV.md)).
+- **로컬 Codex·Claude Code:** 서버의 인증된 DB 큐를 승인한 PC가 claim하고 실제 선택 모델로 실행한다. Inngest는 원문 준비·결과 검증·후처리를 맡는다. 현재 제품 경로는 Gemini를 호출하거나 원격 API로 자동 대체하지 않는다(ADR-026, [`ENV`](./ENV.md)).
 
 ## 상태 코드 → UX 매핑
 
@@ -156,10 +160,34 @@
 | 429 | 주간 업로드 한도 초과 | "이번 주 분석 한도(20편)를 다 썼어요. 다음 주에 다시 올려주세요." |
 | 5xx | 서버/외부 오류 | "잠시 후 다시 시도해주세요" + 다시 시도 |
 
-- 분석 실패는 HTTP 에러가 아니라 `Paper.analysisStatus`로 표현 — 논문은 정상 응답(위 reanalyze 참조).
+- 접수 뒤 분석 실패는 `Paper.analysisStatus/analysisError`로 표현하며 논문·원문은 보존한다. 분석 시작 전 인증·모델·요청 검증과 잡 전달 실패는 일반 HTTP 오류로 반환한다(위 reanalyze 참조).
 
 ## 로컬 AI 연결 — `/api/local-agent` (ADR-025)
 
 웹은 로그인 세션·활성 팀을 서버에서 해소한다. 변이 요청은 정확한 Origin을 요구한다. `GET status`, `POST attempts`, `GET/DELETE attempts/:id`, `POST web-heartbeat`, `DELETE devices/:id`, `POST jobs`, `GET jobs/:id`, `POST jobs/:id/cancel`, `GET downloads`를 제공한다. 작업 생성은 큐 적재 후 202로 응답한다.
 
 설치앱은 `desktop/ack`, `desktop/pair`, `desktop/heartbeat`, `desktop/claim`, `desktop/result`에 POST한다. ack/pair는 짧은 launch credential, 나머지는 기기 bearer와 `X-Local-Agent-Device`로 인증한다. 번호는 웹에만 반환한다. 앱 heartbeat는 웹 grant를 연장하지 못한다. 응답은 `no-store, private`이며 자격 증명·작업 내용은 공개 Realtime에 방송하지 않는다. 실제 DTO·상태코드·주기는 `lib/local-agent/PROTOCOL.md`와 [LOCAL_AGENT](./LOCAL_AGENT.md)를 따른다.
+
+## 개인 연구 채팅 — `/api/research-chat` (ADR-026)
+
+작업 공간 경로는 `/ai-chat`이다. 아래 API는 모두 웹 로그인·활성 팀을 서버에서 주입하며 변이는 정확한 Origin을 검사한다. 대화는 소유자 개인에게만 반환한다. `teamId/memberId/context/purpose`를 본문으로 보내면 거절한다.
+
+| 메서드 | 경로 | 요청·응답 |
+|---|---|---|
+| GET | `/api/research-chat/papers` | 팀 논문 최근 100개 `{id,title,sourceReady,sourceError}` |
+| POST | `/api/research-chat/sources` | `{paperIds}` → 202 `{preparing,ready}` (각 논문 ID 배열), 본문만 준비 |
+| GET | `/api/research-chat/conversations` | 소유자 대화 최근 100개 |
+| POST | `/api/research-chat/conversations` | `{requestId,paperIds,title?}` → 201 대화 1개 |
+| GET | `/api/research-chat/conversations/:id` | `{conversation,papers,turns,hasEarlierTurns}` |
+| POST | `/api/research-chat/conversations/:id/turns` | `{requestId,deviceId,provider,model,prompt}` → 202 턴 1개 |
+| POST | `/api/research-chat/conversations/:id/turns/:jobId/cancel` | `{}` → 200 갱신된 턴 1개 |
+
+`/sources`는 선택한 논문 1~3개가 모두 활성 팀에 속하는지 검사하고 하나라도 없으면 404다. 원문 캐시가 없는 논문만 `paper/analyze{paperId}`로 적재하며 CLI 연결·모델 선택 없이 본문을 준비한다. 기존 분석 결과는 다시 추론하거나 변경하지 않는다.
+
+`paperIds`는 같은 팀의 서로 다른 논문 1~3개다. 대화의 근거는 고정하며 변경은 새 대화로 진행한다. `requestId`는 UUID로, 대화·질문 모두 동일 payload 재전송은 같은 결과를 반환하고 다른 payload 재사용은 `409 REQUEST_ID_REUSED`다. 질문은 공백 제거 후 1~12,000자, 제공자는 `codex|claude`만 허용한다. 모델·기기·현재 웹 grant와 큐 상한을 다시 검사하며 과거 이력 조회로 허가를 갱신하지 않는다.
+
+대화 상세는 최근 50턴을 시간순으로 반환하고 `hasEarlierTurns`로 이전 생략을 알린다. 턴은 기존 작업 DTO에 `conversationId/conversationTurn/canCancel/contextTruncated`를 더한다. `prompt/response/status/error/version`으로 부분 답변과 상태를 짧게 조회하며 별도 장기 SSE 요청을 유지하지 않는다. 실제 타입은 [research-chat DTO](../../types/research-chat.ts)를 따른다.
+
+논문 목록과 상세의 `papers`는 `sourceReady`와 nullable `sourceError`를 제공한다. 후자는 본문 추출 모듈이 소유한 고정 오류 문구만 반환한다. `/sources`는 기존 분석을 재실행하지 않고 PDF 본문만 준비하며, 재시도 시 해당 본문 오류만 지운다. 실패한 스캔·페이지/텍스트 한도와 기존 분석 결과를 구분한다.
+
+본문 미준비는 `409 SOURCE_NOT_READY`, 같은 대화의 진행 중 턴은 `409 CONVERSATION_BUSY`다. 모델 문맥은 서버 원문과 완료된 최근 8턴만으로 최대 20만 자를 구성하며 잘림을 표시한다. 원문/이전 대화는 클라이언트에서 받지 않는다. 새 세션도 개인 이력을 읽을 수 있으나 새 실행과 취소는 현재 세션의 권한을 따른다. 유효 grant 중 서버에 이미 접수된 `completed` 결과의 후처리는 로그아웃 뒤 허용하고, 미접수 결과·새 추론은 거절한다. 최종 분석 저장 시 멤버십을 재검증한다.

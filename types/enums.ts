@@ -25,7 +25,7 @@ export type Availability = "active" | "vacation";
 export type WeekStatus = "done" | "upcoming";
 
 /** 논문 분석 상태 — 업로드≠분석 분리 (UX, DB.md) */
-export type AnalysisStatus = "pending" | "ready" | "failed";
+export type AnalysisStatus = "pending" | "awaiting_ai" | "ready" | "failed";
 
 /** 백그라운드 잡 종류 (ADR-013) */
 export type JobType = "analyze_paper" | "fetch_arxiv" | "process_recording";

@@ -29,15 +29,30 @@ export function postgresSchema(source, output) {
     .replace(/generator client\s*\{[\s\S]*?\}/, block => `${block.slice(0, -1).replace(/^\s*output\s*=.*$/m, '')}  output = ${JSON.stringify(output.replaceAll('\\', '/'))}\n}`);
 }
 
-/** Keep every existing model intact; the reviewed SQL must be what creates the new tables. */
+/** Remove only the two reviewed phases; their SQL must create every new table and column. */
 export function postgresBaseSchema(source) {
   const removed = [];
-  let teamCount = 0;
+  let teamCount = 0, paperCount = 0, conversationCount = 0;
   const base = source.replace(/^model\s+(\w+)\s*\{[\s\S]*?^\}/gm, (block, name) => {
+    if (name === 'ResearchConversation') {
+      if (++conversationCount !== 1) throw new Error('Unexpected repeated ResearchConversation model.');
+      return '';
+    }
     if (name.startsWith('LocalAgent')) {
       if (!localAgentModels.includes(name) || removed.includes(name)) throw new Error('Unexpected or repeated LocalAgent model in the canonical schema.');
       removed.push(name);
       return '';
+    }
+    if (name === 'Paper') {
+      paperCount++;
+      const fields = [];
+      const paper = block.replace(/^\s*(sourceText|sourceDigest|analysisRequestId|analysisError)\s+String\?[^\S\r\n]*(?:\/\/[^\r\n]*)?\r?$/gm, (_, field) => {
+        if (fields.includes(field)) throw new Error('Unexpected repeated Paper analysis field.');
+        fields.push(field);
+        return '';
+      });
+      if (fields.length !== 4) throw new Error('Expected exactly the four nullable Paper analysis fields.');
+      return paper;
     }
     if (name !== 'Team') return block;
     teamCount++;
@@ -48,9 +63,12 @@ export function postgresBaseSchema(source) {
       return '';
     });
     if (relations.length !== localAgentModels.length) throw new Error('Expected exactly the five Team LocalAgent reverse relations.');
-    return team;
+    let conversations = 0;
+    const withoutConversations = team.replace(/^\s*researchConversations\s+ResearchConversation\[\][^\S\r\n]*(?:\/\/[^\r\n]*)?\r?$/gm, () => { conversations++; return ''; });
+    if (conversations !== 1) throw new Error('Expected exactly one Team ResearchConversation reverse relation.');
+    return withoutConversations;
   });
-  if (removed.length !== localAgentModels.length || teamCount !== 1 || /\bLocalAgent\w+\b/.test(base.replace(/\/\/[^\r\n]*/g, ''))) {
+  if (removed.length !== localAgentModels.length || teamCount !== 1 || paperCount !== 1 || conversationCount !== 1 || /\b(?:LocalAgent\w+|ResearchConversation)\b/.test(base.replace(/\/\/[^\r\n]*/g, ''))) {
     throw new Error('Could not safely isolate the application base schema.');
   }
   return base;
@@ -74,6 +92,47 @@ export function assertLocalAgentSql(source) {
     throw new Error('Only additive LocalAgent tables, indexes and foreign keys are allowed in the reviewed SQL.');
   }
   if (tables.length !== localAgentModels.length) throw new Error('The reviewed SQL must create exactly the five LocalAgent tables.');
+}
+
+function reviewedSqlStatements(source) {
+  // Preserve quoted contents while ignoring comments/spacing. Unknown SQL tokens
+  // remain in the statement and therefore cannot match the reviewed whitelist.
+  const tokens = source.match(/--[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:[^"]|"")*"|'(?:[^']|'')*'|[A-Za-z_]\w*|\d+|[(),;]|\S/g) ?? [];
+  const statements = [], current = [];
+  for (const token of tokens) {
+    if (token.startsWith('--') || token.startsWith('/*')) continue;
+    if (token === ';') {
+      if (current.length) statements.push(current.splice(0).join(' '));
+    } else current.push(/^["']/.test(token) ? token : token.toUpperCase());
+  }
+  if (current.length) statements.push(current.join(' '));
+  return statements;
+}
+
+/** Phase13 is a separate exact whitelist; phase12 never gains ALTER privileges. */
+export function assertLocalAiSql(source) {
+  const expected = new Set(reviewedSqlStatements(`
+    ALTER TABLE "Paper" ADD COLUMN "analysisError" TEXT,
+      ADD COLUMN "analysisRequestId" TEXT, ADD COLUMN "sourceDigest" TEXT, ADD COLUMN "sourceText" TEXT;
+    ALTER TABLE "LocalAgentJob" ADD COLUMN "conversationId" TEXT,
+      ADD COLUMN "conversationTurn" INTEGER, ADD COLUMN "purpose" TEXT NOT NULL DEFAULT 'question';
+    CREATE TABLE "ResearchConversation" (
+      "id" TEXT NOT NULL, "teamId" TEXT NOT NULL, "memberId" TEXT NOT NULL,
+      "title" TEXT NOT NULL, "paperIds" JSONB NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+      CONSTRAINT "ResearchConversation_pkey" PRIMARY KEY ("id")
+    );
+    CREATE INDEX "ResearchConversation_memberId_teamId_updatedAt_idx" ON "ResearchConversation"("memberId", "teamId", "updatedAt");
+    CREATE UNIQUE INDEX "LocalAgentJob_conversationId_conversationTurn_key" ON "LocalAgentJob"("conversationId", "conversationTurn");
+    ALTER TABLE "LocalAgentJob" ADD CONSTRAINT "LocalAgentJob_conversationId_fkey"
+      FOREIGN KEY ("conversationId") REFERENCES "ResearchConversation"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    ALTER TABLE "ResearchConversation" ADD CONSTRAINT "ResearchConversation_teamId_fkey"
+      FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  `));
+  const statements = reviewedSqlStatements(source);
+  if (statements.length !== expected.size || statements.some(statement => !expected.delete(statement)) || expected.size) {
+    throw new Error('Only the exact reviewed seven local analysis columns, conversation table, two indexes and two foreign keys are allowed.');
+  }
 }
 
 export function postgresEnvironment(inherited, clientModule) {
@@ -132,7 +191,9 @@ export async function runPostgresVerification(environment, operations) {
   const source = await readFile(join(root, 'prisma/schema.prisma'), 'utf8');
   const baseSource = postgresBaseSchema(source);
   const sql = join(root, 'docs/dev/sql/20261017-local-agent-connection.sql');
+  const analysisSql = join(root, 'docs/dev/sql/20261017-local-ai-research-chat.sql');
   assertLocalAgentSql(await readFile(sql, 'utf8'));
+  assertLocalAiSql(await readFile(analysisSql, 'utf8'));
   const parent = join(root, 'node_modules/.cache');
   await mkdir(parent, { recursive: true });
   const directory = await mkdtemp(join(parent, 'hapark-local-agent-pg-'));
@@ -148,6 +209,7 @@ export async function runPostgresVerification(environment, operations) {
   // Dedicated URL, actual PG16 identity and empty DB were checked. No reset/seed/accept-data-loss.
   await operations.command([prisma, 'db', 'push', '--skip-generate', '--schema', baseSchema], env);
   await operations.command([prisma, 'db', 'execute', '--file', sql, '--schema', schema], env);
+  await operations.command([prisma, 'db', 'execute', '--file', analysisSql, '--schema', schema], env);
   // Read-only drift check proves the reviewed SQL matches the full canonical Prisma schema.
   await operations.command([prisma, 'migrate', 'diff', '--from-schema-datasource', schema, '--to-schema-datamodel', schema, '--exit-code'], env);
   await operations.command([join(root, 'node_modules/vitest/vitest.mjs'), 'run', 'lib/local-agent/__tests__/postgres.integration.test.ts', '--reporter=basic'], env);

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
 import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
 import { ATTEMPT_MS, DESKTOP_HEARTBEAT_SECONDS, LEASE_MS, MAX_JOB_MS, MAX_PAIR_FAILURES, SNAPSHOT_FRESH_MS, WEB_HEARTBEAT_SECONDS, assertGrantUsable, hashCredential, pairingCode, sameCredential, validateDeviceToken } from "./security";
-import { ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
+import { JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
 
 type Database = Prisma.TransactionClient;
 export interface LocalAgentScope { memberId: string; teamId: string; sessionKey: string; sessionExpiresAt: Date }
@@ -271,14 +271,54 @@ async function paperContext(db: Database, paperId: string, teamId: string): Prom
   return JSON.stringify({ title: paper.title, authors: paper.authors, abstract: paper.abstract, analyses: paper.analyses, figures: paper.figures }).slice(0, 100_000);
 }
 
-function existingRequestView(job: LocalAgentJob, input: LocalAgentJobCreateInput): LocalAgentJobView {
-  if (job.deviceId !== input.deviceId || job.paperId !== input.paperId || job.provider !== input.provider || job.model !== input.model || job.prompt !== input.prompt) throw new HttpError(409, "REQUEST_ID_REUSED", "다른 질문에는 새 요청 번호가 필요해요.");
+interface JobIntent {
+  purpose: "question" | "paper_analysis" | "chat";
+  context?: string;
+  conversationId?: string;
+  conversationTurn?: number;
+}
+export interface PreparedJobOptions {
+  purpose: "paper_analysis" | "chat";
+  conversationId?: string;
+  conversationTurn?: number;
+  /** Internal transaction only. Never parsed from a web request. */
+  transaction?: Database;
+}
+
+function existingRequestView(job: LocalAgentJob, input: LocalAgentJobCreateInput, intent: JobIntent): LocalAgentJobView {
+  if (job.deviceId !== input.deviceId || job.paperId !== input.paperId || job.provider !== input.provider || job.model !== input.model || job.prompt !== input.prompt ||
+      (job.purpose ?? "question") !== intent.purpose || (job.conversationId ?? null) !== (intent.conversationId ?? null) ||
+      (job.conversationTurn ?? null) !== (intent.conversationTurn ?? null) || (intent.context !== undefined && job.context !== intent.context)) throw new HttpError(409, "REQUEST_ID_REUSED", "다른 질문에는 새 요청 번호가 필요해요.");
   return jobView(job);
 }
 
+/** Validates execution authority without creating work, presence or a refreshed lease. */
+export async function assertJobTarget(scope: LocalAgentScope, input: Pick<LocalAgentJobCreateInput, "deviceId" | "provider" | "model">): Promise<void> {
+  await assertMembership(prisma, scope.memberId, scope.teamId);
+  const device = await prisma.localAgentDevice.findFirst({ where: { id: input.deviceId, memberId: scope.memberId, teamId: scope.teamId, revokedAt: null } });
+  if (!device) throw new HttpError(403, "PAIRING_REQUIRED", "먼저 내 PC를 연결해주세요.");
+  const grant = await prisma.localAgentGrant.findFirst({ where: { ...scopeWhere(scope), deviceId: input.deviceId, revokedAt: null } });
+  if (!grant) throw new HttpError(403, "PAIRING_REQUIRED", "먼저 내 PC를 연결해주세요.");
+  assertGrantUsable(grant);
+  await assertUsableModel(prisma, input.deviceId, input.provider, input.model, new Date());
+}
+
 export async function createJob(scope: LocalAgentScope, input: LocalAgentJobCreateInput): Promise<LocalAgentJobView> {
-  try {
-    return await prisma.$transaction(async (tx) => {
+  return enqueueJob(scope, input, { purpose: "question" });
+}
+
+/** Only server-prepared source text can enter the inference queue through this seam. */
+export async function createPreparedJob(scope: LocalAgentScope, input: LocalAgentJobCreateInput, context: string, options: PreparedJobOptions): Promise<LocalAgentJobView> {
+  if (!JobCreateSchema.safeParse(input).success || typeof context !== "string" || !context.trim() || context.length > 250_000 ||
+      !["paper_analysis", "chat"].includes(options.purpose) ||
+      (options.purpose === "chat" ? !options.conversationId || !Number.isInteger(options.conversationTurn) || (options.conversationTurn ?? 0) < 1 : options.conversationId !== undefined || options.conversationTurn !== undefined)) {
+    throw new HttpError(400, "BAD_REQUEST", "준비한 논문 문맥과 실행 요청을 확인해주세요.");
+  }
+  return enqueueJob(scope, input, { purpose: options.purpose, context, conversationId: options.conversationId, conversationTurn: options.conversationTurn }, options.transaction);
+}
+
+async function enqueueJob(scope: LocalAgentScope, input: LocalAgentJobCreateInput, intent: JobIntent, transaction?: Database): Promise<LocalAgentJobView> {
+  const admit = async (tx: Database) => {
     // One admission lock per physical device covers request-id deduplication and
     // the device-wide queue cap, even across different active browser grants.
     // A no-op value update acquires the row without pretending the CLI was seen.
@@ -286,7 +326,8 @@ export async function createJob(scope: LocalAgentScope, input: LocalAgentJobCrea
     if (!deviceLock.count) throw new HttpError(403, "PAIRING_REQUIRED", "먼저 내 PC를 연결해주세요.");
     await assertMembership(tx, scope.memberId, scope.teamId);
     const existing = await tx.localAgentJob.findUnique({ where: { teamId_memberId_sessionKey_requestId: { ...scopeWhere(scope), requestId: input.requestId } } });
-    if (existing) return existingRequestView(existing, input);
+    if (existing) return existingRequestView(existing, input, intent);
+    if (intent.conversationId && !(await tx.researchConversation.findFirst({ where: { id: intent.conversationId, teamId: scope.teamId, memberId: scope.memberId }, select: { id: true } }))) throw new HttpError(404, "NOT_FOUND", "연구 대화를 찾을 수 없어요.");
     const grant = await tx.localAgentGrant.findFirst({ where: { ...scopeWhere(scope), deviceId: input.deviceId, device: { revokedAt: null } } });
     if (!grant) throw new HttpError(403, "PAIRING_REQUIRED", "먼저 내 PC를 연결해주세요.");
     const grantLock = await tx.localAgentGrant.updateMany({ where: { id: grant.id, ...scopeWhere(scope), revokedAt: null, leaseExpiresAt: { gt: new Date() } }, data: { revokedAt: null } });
@@ -296,10 +337,15 @@ export async function createJob(scope: LocalAgentScope, input: LocalAgentJobCrea
     await assertUsableModel(tx, input.deviceId, input.provider, input.model, now);
     const active = await tx.localAgentJob.count({ where: { deviceId: input.deviceId, status: { in: activeJobStatuses } } });
     if (active >= 5) throw new HttpError(429, "QUEUE_FULL", "진행 중인 질문이 많아요. 답변을 받은 뒤 다시 보내주세요.");
-    const context = await paperContext(tx, input.paperId, scope.teamId);
-    const job = await tx.localAgentJob.create({ data: { ...scopeWhere(scope), deviceId: input.deviceId, grantId: grant.id, paperId: input.paperId, provider: input.provider, model: input.model, prompt: input.prompt, requestId: input.requestId, context, expiresAt: new Date(now.getTime() + MAX_JOB_MS) } });
+    if (intent.context !== undefined && !(await tx.paper.findFirst({ where: { id: input.paperId, teamId: scope.teamId }, select: { id: true } }))) throw new HttpError(404, "PAPER_NOT_FOUND", "이 팀에서 논문을 찾을 수 없어요.");
+    const context = intent.context ?? await paperContext(tx, input.paperId, scope.teamId);
+    const job = await tx.localAgentJob.create({ data: { ...scopeWhere(scope), deviceId: input.deviceId, grantId: grant.id, paperId: input.paperId, provider: input.provider, model: input.model, prompt: input.prompt, requestId: input.requestId, context, purpose: intent.purpose, conversationId: intent.conversationId ?? null, conversationTurn: intent.conversationTurn ?? null, expiresAt: new Date(now.getTime() + MAX_JOB_MS) } });
     return jobView(job);
-    });
+  };
+  // The caller must catch a database conflict only after its outer transaction rolls back.
+  if (transaction) return admit(transaction);
+  try {
+    return await prisma.$transaction(admit);
   } catch (error) {
     // Generated clients/bundles can carry distinct runtime constructors.
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "P2002") throw error;
@@ -309,7 +355,7 @@ export async function createJob(scope: LocalAgentScope, input: LocalAgentJobCrea
     await assertMembership(prisma, scope.memberId, scope.teamId);
     const existing = await prisma.localAgentJob.findUnique({ where: { teamId_memberId_sessionKey_requestId: { ...scopeWhere(scope), requestId: input.requestId } } });
     if (!existing) throw error;
-    return existingRequestView(existing, input);
+    return existingRequestView(existing, input, intent);
   }
 }
 

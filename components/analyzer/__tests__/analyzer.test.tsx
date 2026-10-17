@@ -177,19 +177,22 @@ describe("AnalysisView 재구현 — GitHub 구조·모델 구조", () => {
 });
 
 describe("AnalysisView Figure 분석", () => {
-  it("연구 관점에서만 figure가 보이고 재구현 관점에선 사라진다", () => {
+  it("연구·재구현 양쪽에 같은 Figure와 lens:any 노트가 보인다", () => {
     renderView();
-    // 연구 관점에서 figure 노출.
+    // 사용자 AGENTS 제품 규칙: Figure와 lens:any 노트는 두 관점 공통이다.
     expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
     expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
+    expect(screen.getByText("피규어 노트 본문")).toBeInTheDocument();
 
-    // 재구현으로 토글하면 figure 섹션이 사라진다.
     fireEvent.click(screen.getByRole("button", { name: /재구현 분석/ }));
-    expect(screen.queryByText("Figure 1 — 개요")).toBeNull();
-    expect(screen.queryByText("원문 PDF p.3에서 추출")).toBeNull();
-    // 대신 GitHub 구조·모델 구조가 보인다.
+    expect(screen.getByText("Figure 1 — 개요")).toBeInTheDocument();
+    expect(screen.getByText("원문 PDF p.3에서 추출")).toBeInTheDocument();
+    expect(screen.getByText("피규어 노트 본문")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "GitHub 구조" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "모델 구조" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /연구 분석/ }));
+    expect(screen.getAllByText("Figure 1 — 개요")).toHaveLength(1);
+    expect(screen.getAllByText("피규어 노트 본문")).toHaveLength(1);
   });
 });
 

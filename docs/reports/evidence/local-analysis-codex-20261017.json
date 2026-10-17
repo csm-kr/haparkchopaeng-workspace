@@ -1,0 +1,101 @@
+{
+  "mode": "synthetic-pdf-real-cli-strict-payload",
+  "synthetic": true,
+  "provider": "codex",
+  "model": "gpt-6-luna",
+  "manualInferenceCalls": 3,
+  "successes": 1,
+  "failures": 2,
+  "automaticRetries": 0,
+  "productionDbConnections": 0,
+  "apiFallbacks": 0,
+  "externalEvents": 0,
+  "notValidated": [
+    "published-paper accuracy",
+    "full browser-to-production-to-native flow",
+    "Claude structured analysis",
+    "visual figure analysis"
+  ],
+  "diagnosis": {
+    "observedRun": 2,
+    "jsonDecoded": true,
+    "strictFieldsRejected": [
+      "research.io.outputs item was string rather than typed object",
+      "repro.data.rows item omitted highlight",
+      "repro.diagram.edges item omitted label"
+    ],
+    "firstRunRawPayloadRetained": false,
+    "fix": "Derive the model output contract from the strict Zod Bundle instead of an incomplete example."
+  },
+  "runs": [
+    {
+      "checkedAt": "2026-10-17T12:28:51.627Z",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "synthetic-pdf-real-cli-strict-payload",
+      "synthetic": true,
+      "productionDbConnections": 0,
+      "serverQueue": "covered separately by isolated database suites",
+      "externalEvents": 0,
+      "modelInferenceCalls": 1,
+      "apiFallbacks": 0,
+      "pageCount": 2,
+      "sourceDigest": "b9c3d030a7b44fd449fe0d885fe461ce8f6f38bb18a2f6b8282357869f6a6764",
+      "sourceCharacters": 492,
+      "metadataReady": true,
+      "exactModelAvailable": true,
+      "passed": false,
+      "errorCode": "INFERENCE_OR_PAYLOAD_VALIDATION_FAILED",
+      "responseCharacters": 1619,
+      "productPayloadSha256": "26db3ab1e7cebd1e045dbc7b0279b4687b1952b9400230980407bfc2f014476a"
+    },
+    {
+      "checkedAt": "2026-10-17T12:29:36.338Z",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "synthetic-pdf-real-cli-strict-payload",
+      "synthetic": true,
+      "productionDbConnections": 0,
+      "serverQueue": "covered separately by isolated database suites",
+      "externalEvents": 0,
+      "modelInferenceCalls": 1,
+      "apiFallbacks": 0,
+      "pageCount": 2,
+      "sourceDigest": "75b88914ec7518f51f5f299d043b3c5b94df096681deeea390551c7c6e5f2f0b",
+      "sourceCharacters": 492,
+      "metadataReady": true,
+      "exactModelAvailable": true,
+      "passed": false,
+      "errorCode": "INFERENCE_OR_PAYLOAD_VALIDATION_FAILED",
+      "responseCharacters": 1534,
+      "validationMessage": "AI 분석 결과의 형식이 맞지 않아요. 모델을 바꾸거나 다시 분석해주세요.",
+      "productPayloadSha256": "26db3ab1e7cebd1e045dbc7b0279b4687b1952b9400230980407bfc2f014476a"
+    },
+    {
+      "checkedAt": "2026-10-17T12:32:37.495Z",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "synthetic-pdf-real-cli-strict-payload",
+      "synthetic": true,
+      "productionDbConnections": 0,
+      "serverQueue": "covered separately by isolated database suites",
+      "externalEvents": 0,
+      "modelInferenceCalls": 1,
+      "apiFallbacks": 0,
+      "pageCount": 2,
+      "sourceDigest": "89d251ae56e0d7bd4cd3abb7421625ddf3d25dc26f5875b03f69f92c927ba096",
+      "sourceCharacters": 492,
+      "metadataReady": true,
+      "exactModelAvailable": true,
+      "passed": true,
+      "validatedLenses": [
+        "research",
+        "repro"
+      ],
+      "figureCount": 0,
+      "responseCharacters": 2343,
+      "responseSha256": "30fa4b5c92d118f7d554d22301dc9a293e9602c1c2a10720b2029596a81ebefc",
+      "productPayloadSha256": "7c6918b701f42bbf4c8fb75cc090583662daf34d2f35244826d6a6cc6cc1183a"
+    }
+  ]
+}

@@ -148,12 +148,12 @@ export async function verify(mode) {
     await command([prismaCli, "db", "push", "--skip-generate", "--schema", schemaPath], env);
     env.LOCAL_AGENT_TEST_CLIENT_MODULE = join(clientPath, "index.js");
     if (mode === "unit") {
-      await command([vitestCli, "run", "lib/local-agent", "lib/__tests__/local-agent-releases.test.ts", "components/local-agent", "app/api/local-agent"], env);
+      await command([vitestCli, "run", "--no-file-parallelism", "lib/local-agent", "lib/local-ai", "lib/research-chat", "lib/__tests__/local-agent-releases.test.ts", "components/local-agent", "components/research-chat", "app/api/local-agent", "app/api/research-chat"], env);
     } else {
       // Canonical seed only runs after the fresh SQLite-only guard above.
       assertIsolatedDatabase(directory, env.DATABASE_URL);
       await command([join(root, "node_modules/tsx/dist/cli.mjs"), "prisma/seed.ts"], env);
-      if (mode === "all") await command([vitestCli, "run"], env);
+      if (mode === "all") await command([vitestCli, "run", "--no-file-parallelism"], env);
       else {
         await command([join(root, "scripts/local-agent-fixture.mjs")], env);
         const port = mode === "wire" ? 3210 : mode === "e2e" ? 3211 : 3000;

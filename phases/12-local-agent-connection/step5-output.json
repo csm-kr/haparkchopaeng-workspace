@@ -1,0 +1,30 @@
+{
+  "mode": "verification",
+  "step": 5,
+  "checks": [
+    {
+      "argv": [
+        "node",
+        "connector/scripts/ci-desktop-smoke.mjs",
+        "--self-test"
+      ],
+      "exitCode": 0,
+      "stdout": "✔ ready native runtime skips installer (1.6681ms)\n✔ fresh npm package prepares native runtime before resolving its path (0.4628ms)\n✔ missing executable is repaired even if path metadata exists (0.4806ms)\n✔ installer failure stops instead of returning a nonexistent runtime (0.8812ms)\n✔ fatal sandbox exit diagnostics retain the signal and never copy sensitive stderr (1.3209ms)\n✔ display, shared-library and unknown startup failures have fixed diagnostic categories (0.6407ms)\n✔ unknown diagnostic metadata cannot carry paths, credentials or arbitrary signal strings (0.1995ms)\nℹ tests 7\nℹ suites 0\nℹ pass 7\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 16.2294\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "gh",
+        "run",
+        "watch",
+        "39029600751",
+        "--repo",
+        "csm-kr/haparkchopaeng-workspace",
+        "--exit-status"
+      ],
+      "exitCode": 0,
+      "stdout": "Run Local agent validation (39029600751) has already completed with 'success'\n",
+      "stderr": ""
+    }
+  ]
+}
