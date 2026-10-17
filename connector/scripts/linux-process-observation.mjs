@@ -40,6 +40,26 @@ export function inspectLinuxCommandLine(raw) {
     argvEmptyCount: fields.filter(field => field.length === 0).length };
 }
 
+export function observeSyntheticUri(commandLine, uri) {
+  assert.ok(typeof uri === 'string' && uri.length > 0 && !/\s/.test(uri));
+  const exactCmdlineField = commandLine.argv.includes(uri);
+  // Linux permits a process to replace its command line with a display title.
+  // Record an exact synthetic token without interpreting title words as argv.
+  const titleToken = commandLine.argv.some(field => {
+    let offset = field.indexOf(uri);
+    while (offset !== -1) {
+      const end = offset + uri.length;
+      if ((offset === 0 || /\s/.test(field[offset - 1]))
+        && (end === field.length || /\s/.test(field[end]))) return true;
+      offset = field.indexOf(uri, offset + 1);
+    }
+    return false;
+  });
+  return { observed: exactCmdlineField || titleToken,
+    source: exactCmdlineField ? 'nul-delimited-cmdline-field' : titleToken ? 'process-title-token' : 'unobserved',
+    exactCmdlineField, originalArgvProven: false };
+}
+
 export function readLinuxProcessStat(text) {
   const closing = text.lastIndexOf(')');
   const fields = text.slice(closing + 2).trim().split(/\s+/);
@@ -87,4 +107,45 @@ export function inspectInstalledProcessTree(entries, executable) {
     argvEmptyCount: entry.commandLine.argvEmptyCount, embeddedTypeCount: entry.commandLine.embeddedTypeCount,
   }));
   return { mains, renderers, diagnostics };
+}
+
+export function verifyLinuxCdpRenderers(entries, { executable, mainPid, uid }, nativeProcesses) {
+  assert.ok(Number.isSafeInteger(mainPid) && mainPid > 0 && Number.isSafeInteger(uid) && uid > 0);
+  assert.ok(Array.isArray(nativeProcesses));
+  const seen = new Set();
+  for (const process of nativeProcesses) {
+    assert.ok(Number.isSafeInteger(process.id) && process.id > 0 && !seen.has(process.id)
+      && typeof process.type === 'string', 'Invalid native process observations.');
+    seen.add(process.id);
+  }
+  const browsers = nativeProcesses.filter(process => process.type === 'browser');
+  assert.equal(browsers.length, 1, 'Exactly one CDP browser process is required.');
+  assert.equal(browsers[0].id, mainPid, 'CDP browser must be the directly launched installed process.');
+  const observed = inspectInstalledProcessTree(entries, executable);
+  assert.equal(observed.mains.length, 1);
+  assert.equal(observed.mains[0].pid, mainPid);
+  assert.equal(observed.diagnostics.disconnectedSameExecutable, 0);
+  assert.equal(observed.diagnostics.cycleProcesses, 0);
+  const byPid = new Map(entries.map(entry => [entry.pid, entry]));
+  const assertOwner = entry => {
+    assert.ok(entry && entry.executable === executable, 'CDP process must match the installed executable.');
+    assert.equal(Number(/^Uid:\s+(\d+)/m.exec(entry.status)?.[1]), uid, 'CDP process must match the OS owner.');
+  };
+  assertOwner(byPid.get(mainPid));
+  const renderers = nativeProcesses.filter(process => process.type === 'renderer');
+  assert.ok(renderers.length > 0, 'CDP must report at least one native renderer process.');
+  return renderers.map(process => {
+    const entry = byPid.get(process.id);
+    assertOwner(entry);
+    let ancestor = entry;
+    const ancestors = new Set([entry.pid]);
+    while (ancestor.pid !== mainPid) {
+      ancestor = byPid.get(ancestor.parentPid);
+      assert.ok(ancestor && !ancestors.has(ancestor.pid), 'Native renderer must descend from the owned browser.');
+      ancestors.add(ancestor.pid);
+    }
+    assert.equal(/^Seccomp:\s+(\d+)/m.exec(entry.status)?.[1], '2');
+    assert.equal(/^NoNewPrivs:\s+(\d+)/m.exec(entry.status)?.[1], '1');
+    return entry;
+  });
 }

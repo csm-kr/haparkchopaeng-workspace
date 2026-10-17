@@ -1,0 +1,141 @@
+import assert from 'node:assert/strict';
+import { win32 as path } from 'node:path';
+
+export const WINDOWS_COLD_ERROR = '연결 링크에 허용되지 않은 정보가 있어요.';
+export const WINDOWS_WARM_ERROR = '등록된 앱의 연결 링크를 사용해 주세요.';
+
+export function windowsAbsolute(value) {
+  assert.ok(typeof value === 'string' && path.isAbsolute(value) && path.parse(value).root.length > 1 && !/[\p{Cc}\p{Cf}]/u.test(value), 'A fully qualified Windows path is required');
+  return path.resolve(value);
+}
+
+export function sameWindowsPath(first, second) {
+  return typeof first === 'string' && typeof second === 'string'
+    && windowsAbsolute(first).toLowerCase() === windowsAbsolute(second).toLowerCase();
+}
+
+export function windowsInside(candidate, parent) {
+  const resolved = windowsAbsolute(candidate), relative = path.relative(windowsAbsolute(parent), resolved);
+  assert.ok(relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), 'Windows path escaped its exact owner');
+  return resolved;
+}
+
+export function assertWindowsRunner(env, { platform, workspace }) {
+  assert.equal(platform, 'win32', 'Installed Windows URI smoke requires native Windows');
+  assert.equal(env.CI, 'true'); assert.equal(env.GITHUB_ACTIONS, 'true');
+  assert.equal(env.RUNNER_ENVIRONMENT, 'github-hosted', 'A disposable hosted runner is required');
+  assert.equal(env.RUNNER_OS, 'Windows'); assert.equal(env.LOCAL_AGENT_INSTALL_QA, '1');
+  const runnerTemp = windowsAbsolute(env.RUNNER_TEMP), actualWorkspace = windowsAbsolute(workspace);
+  assert.ok(sameWindowsPath(env.GITHUB_WORKSPACE, actualWorkspace), 'Unexpected workspace');
+  assert.notEqual(runnerTemp, path.parse(runnerTemp).root, 'Runner temp cannot be a drive root');
+  assert.ok(!sameWindowsPath(runnerTemp, actualWorkspace), 'Runner temp must be separate');
+  const fromWorkspace = path.relative(actualWorkspace, runnerTemp);
+  assert.ok(path.isAbsolute(fromWorkspace) || fromWorkspace === '..' || fromWorkspace.startsWith(`..${path.sep}`), 'Runner temp cannot be inside the workspace');
+  return { workspace: actualWorkspace, runnerTemp };
+}
+
+export function parseWindowsSmokeArguments(argv) {
+  let installation, preflight = false;
+  for (let index = 0; index < argv.length; index++) {
+    if (argv[index] === '--installation' && installation === undefined && typeof argv[index + 1] === 'string' && !argv[index + 1].startsWith('--')) installation = argv[++index];
+    else if (argv[index] === '--preflight' && !preflight) preflight = true;
+    else assert.fail('Only an owned installation and optional preflight are accepted');
+  }
+  assert.ok(installation, 'Explicit installation is required');
+  windowsAbsolute(installation);
+  return { installation, preflight };
+}
+
+export function windowsSmokeLayout(configuration, { applicationId, executableName } = {}) {
+  assert.match(applicationId ?? '', /^[a-z][a-z0-9-]{0,80}$/);
+  assert.match(configuration?.appId ?? '', /^[a-zA-Z][a-zA-Z0-9.-]{3,180}$/);
+  assert.ok(!configuration.appId.includes('..') && !configuration.appId.endsWith('.'));
+  assert.match(configuration.scheme ?? '', /^[a-z][a-z0-9+.-]{2,63}$/);
+  assert.ok(!['http', 'https', 'file', 'data', 'javascript'].includes(configuration.scheme));
+  const filename = executableName ?? configuration.productName;
+  assert.ok(typeof filename === 'string' && filename.length > 0 && filename.length <= 120
+    && !/[<>:"/\\|?*\p{Cc}\p{Cf}]/u.test(filename) && filename.trim() === filename
+    && !filename.endsWith('.') && !filename.toLowerCase().endsWith('.exe') && !['.', '..'].includes(filename)
+    && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(filename), 'Unsafe Windows executable name');
+  const relative = configuration.profileRelativePath;
+  assert.ok(Array.isArray(relative));
+  if (relative.length) assert.deepEqual(relative, [configuration.appId, 'production']);
+  const profileRelativePath = relative.length ? [...relative] : [configuration.productName];
+  assert.ok(profileRelativePath.every(value => typeof value === 'string' && value && path.basename(value) === value && !/[<>:"/\\|?*\p{Cc}\p{Cf}]/u.test(value) && !['.', '..'].includes(value)));
+  return { appId: configuration.appId, productName: configuration.productName, scheme: configuration.scheme,
+    executableFilename: `${filename}.exe`, profileRelativePath, installationPrefix: `${applicationId}-connector-install-` };
+}
+
+export function assertOwnedWindowsInstallation(installation, runnerTemp, prefix) {
+  assert.match(prefix, /^[a-z][a-z0-9-]{0,80}-connector-install-$/);
+  const resolved = windowsInside(installation, runnerTemp), child = path.relative(windowsAbsolute(runnerTemp), resolved);
+  assert.ok(!child.includes(path.sep) && child.startsWith(prefix) && /^[a-f0-9]{32}$/i.test(child.slice(prefix.length)), 'Only the exact host GUID installation can be inspected');
+  return resolved;
+}
+
+function creationStamp(value) {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,7}))?Z$/.exec(value);
+  return match ? `${match[1]}.${(match[2] ?? '').padEnd(7, '0')}Z` : null;
+}
+
+export function assertWindowsProcessIdentity(row, { installation, executable, sid, notBefore }) {
+  assert.ok(row && Number.isSafeInteger(row.pid) && row.pid > 1 && Array.isArray(row.argv));
+  windowsInside(row.executable, installation);
+  if (executable) assert.ok(sameWindowsPath(row.executable, executable), 'Not the exact installed executable');
+  assert.ok(typeof sid === 'string' && /^S-1-5-21-\d+-\d+-\d+-\d+$/.test(sid) && row.sid === sid, 'Not the current runner user');
+  assert.ok(creationStamp(row.createdAt) && Number.isFinite(notBefore)
+    && Date.parse(row.createdAt) >= notBefore - 2_000, 'A prior or unknown process must be preserved');
+  return { pid: row.pid, executable: row.executable, sid: row.sid, createdAt: row.createdAt };
+}
+
+export function sameWindowsProcess(row, identity) {
+  return !!row && row.pid === identity.pid && row.sid === identity.sid && creationStamp(row.createdAt) && creationStamp(row.createdAt) === creationStamp(identity.createdAt)
+    && sameWindowsPath(row.executable, identity.executable);
+}
+
+export function classifyWindowsKnownProcess(observation, identity) {
+  const unavailable = () => { throw Object.assign(new Error('Known installed process identity cannot be verified'), { code: 'PROCESS_OBSERVATION_UNAVAILABLE' }); };
+  if (!observation || typeof observation.exists !== 'boolean') return unavailable();
+  if (!observation.exists) return 'gone';
+  const observed = creationStamp(observation.createdAt), original = creationStamp(identity.createdAt);
+  if (!observed || !original) return unavailable();
+  if (observed !== original) return 'gone';
+  try {
+    if (observation.pid !== identity.pid || observation.sid !== identity.sid || !sameWindowsPath(observation.executable, identity.executable)) return unavailable();
+  } catch { return unavailable(); }
+  return 'running';
+}
+
+export function selectWindowsMain(rows, options) {
+  const mains = rows.filter(row => sameWindowsPath(row.executable, options.executable) && Array.isArray(row.argv) && !row.argv.some(arg => arg.startsWith('--type=')));
+  assert.ok(mains.length <= 1, 'More than one installed main process is running');
+  if (!mains.length) return null;
+  const identity = assertWindowsProcessIdentity(mains[0], options);
+  return !options.uri || mains[0].argv.includes(options.uri) ? identity : null;
+}
+
+export function windowsSmokeUris(layout) {
+  return { cold: `${layout.scheme}://connect?attemptId=ci-package-cold`, warm: `${layout.scheme}://invalid` };
+}
+
+export function assertWindowsRejectedState(state, description) {
+  assert.equal(state.stage, 'error'); assert.equal(state.description, description);
+  assert.equal(state.attemptId, null); assert.deepEqual(state.providers, []);
+  assert.equal(state.autoStart, false); assert.equal(state.pet, false);
+}
+
+export function assertFreshWindowsProfile(descriptor, { appData, profile, sid, notBefore, existedBefore }) {
+  assert.equal(existedBefore, false, 'Existing profiles must be preserved');
+  windowsInside(profile, appData);
+  assert.ok(sameWindowsPath(descriptor.path, profile), 'Unexpected profile cleanup target');
+  if (!descriptor.exists) return;
+  assert.ok(descriptor.directory && !descriptor.reparsePoint && sameWindowsPath(descriptor.realPath, profile), 'A redirected profile must be preserved');
+  assert.equal(descriptor.sid, sid, 'The profile is not owned by this runner');
+  assert.ok(Number.isFinite(Date.parse(descriptor.createdAt)) && Date.parse(descriptor.createdAt) >= notBefore - 2_000, 'A prior profile must be preserved');
+}
+
+export function assertWindowsProtocolCommand(command, executable) {
+  windowsAbsolute(executable);
+  assert.ok(typeof command === 'string' && command.toLowerCase() === `"${executable}" "%1"`.toLowerCase(), 'The OS protocol must point only to the exact installed executable and URI');
+}

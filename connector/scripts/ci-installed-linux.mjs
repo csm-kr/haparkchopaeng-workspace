@@ -3,10 +3,11 @@ import { lstat, readFile, readdir, readlink, realpath, rm } from 'node:fs/promis
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, relative } from 'node:path';
 import {
-  assertInside, connectInstalledApp, createOwnedDirectory, fileHash,
+  assertInside, connectInstalledApp, createOwnedDirectory, fileHash, getInstalledBrowserProcesses,
   reserveDebugPort, run, start, until, verifyInstalledCore,
 } from './installed-smoke-support.mjs';
-import { createLinuxProcessTracker, inspectInstalledProcessTree, inspectLinuxCommandLine, readLinuxProcessStat } from './linux-process-observation.mjs';
+import { createLinuxProcessTracker, inspectInstalledProcessTree, inspectLinuxCommandLine, readLinuxProcessStat,
+  observeSyntheticUri, verifyLinuxCdpRenderers } from './linux-process-observation.mjs';
 
 const processTracker = createLinuxProcessTracker();
 
@@ -145,7 +146,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
   const details = evidence.linux = { packageName, version, architecture, packageSha256 };
   evidence.cleanup ??= {};
   evidence.limits ??= [];
-  evidence.limits.push('Linux cold URI: installed PID/argv/window/screenshot observed; cold renderer state is not inspected by CDP.',
+  evidence.limits.push('Linux cold URI: installed PID, exact synthetic URI cmdline field/title token, window and screenshot are observed; mutable process titles do not prove original argv, and cold renderer state is not inspected by CDP.',
     'Process observations cover matched installed executables/UIDs and the readable /proc scope, not every sandbox descendant; loss of access to a previously confirmed owned PID defers cleanup to runner disposal.',
     'Production API and CLI inference are excluded by invalid-URI parser control flow before credentials/ACK/adapters; independent network-wire measurement is not performed.',
     'Packaged URI tests do not verify real pairing, credential encryption, AI inference or Wayland.');
@@ -215,7 +216,8 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
 
     evidence.phase = 'linux_cold_pid';
     const coldUri = `${scheme}://connect?attemptId=ci-package-cold`;
-    details.cold = { launchedBy: 'xdg-open', installedBinary: false, uriArgumentObserved: false,
+    details.cold = { launchedBy: 'xdg-open', installedBinary: false, uriTokenObserved: false,
+      originalArgvProven: false,
       visibleWindowObserved: false, rendererStateObserved: false, closeRequested: false,
       processExitObserved: false, mainExitCodeObserved: false, peakMainProcesses: 0 };
     coldOpener = start('xdg-open', [coldUri]); openers.push(coldOpener);
@@ -223,12 +225,15 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
       const entries = await processes(installation), observed = inspectInstalledProcessTree(entries, executable);
       const mains = observed.mains;
       details.cold.lastProcessCounts = observed.diagnostics;
-      details.cold.lastProcessCounts.exactUriArgumentProcesses = entries.filter(entry => entry.argv.includes(coldUri)).length;
+      const uriObservations = entries.map(entry => observeSyntheticUri(entry.commandLine, coldUri));
+      details.cold.lastProcessCounts.exactUriCmdlineFieldProcesses = uriObservations.filter(value => value.exactCmdlineField).length;
+      details.cold.lastProcessCounts.exactUriTitleTokenProcesses = uriObservations.filter(value => value.source === 'process-title-token').length;
       details.cold.peakMainProcesses = Math.max(details.cold.peakMainProcesses, mains.length);
+      details.cold.uriObservation = mains.length === 1 ? observeSyntheticUri(mains[0].commandLine, coldUri) : null;
       return mains.length === 1 && observed.diagnostics.disconnectedSameExecutable === 0
-        && observed.diagnostics.cycleProcesses === 0 && mains[0].argv.includes(coldUri) ? mains[0] : false;
+        && observed.diagnostics.cycleProcesses === 0 && details.cold.uriObservation.observed ? mains[0] : false;
     }, 'cold xdg-open to launch the installed binary');
-    details.cold.installedBinary = true; details.cold.uriArgumentObserved = true;
+    details.cold.installedBinary = true; details.cold.uriTokenObserved = true;
     evidence.phase = 'linux_cold_visible_window';
     const windowId = await until(async () => {
       const result = await run('xdotool', ['search', '--onlyvisible', '--pid', String(cold.pid)], { allowFailure: true, timeout: 2_000 });
@@ -261,7 +266,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     const openerExit = await coldOpener.done;
     assert.equal(openerExit.code, 0, 'Cold desktop URI opener failed');
     assert.equal(openerExit.signal, null, 'Cold desktop URI opener was terminated');
-    evidence.checks.push('linux_unmodified_desktop_cold_uri_binary_argv_window_and_close');
+    evidence.checks.push('linux_unmodified_desktop_cold_uri_binary_title_token_window_and_close');
 
     evidence.phase = 'linux_packaged_cdp';
     const port = await reserveDebugPort();
@@ -270,19 +275,19 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     const rejected = '연결 링크에 허용되지 않은 정보가 있어요.';
     await until(async () => { const state = await client.state(); return state.stage === 'error' && state.description === rejected; }, 'packaged cold URI rejection');
     assertRejected(await client.state(), rejected);
-    const directObservation = inspectInstalledProcessTree(await processes(installation), executable);
-    const originalMain = directObservation.mains;
+    evidence.phase = 'linux_packaged_cdp_native_processes';
+    const nativeProcesses = await getInstalledBrowserProcesses(port);
+    const directEntries = await processes(installation);
+    const directObservation = inspectInstalledProcessTree(directEntries, executable);
     details.sandbox.processObservation = directObservation.diagnostics;
-    assert.equal(originalMain.length, 1); assert.equal(originalMain[0].pid, launched.pid);
-    assert.equal(directObservation.diagnostics.disconnectedSameExecutable, 0);
-    assert.equal(directObservation.diagnostics.cycleProcesses, 0);
-    const renderers = directObservation.renderers;
-    assert.ok(renderers.length > 0);
+    details.sandbox.nativeProcesses = nativeProcesses;
+    details.sandbox.processTypeEvidence = 'cdp-browser-target-SystemInfo.getProcessInfo';
+    const renderers = verifyLinuxCdpRenderers(directEntries,
+      { executable, mainPid: launched.pid, uid: process.getuid() }, nativeProcesses);
     details.sandbox.renderers = renderers.map(entry => {
-      assert.equal(/^Seccomp:\s+(\d+)/m.exec(entry.status)?.[1], '2');
-      assert.equal(/^NoNewPrivs:\s+(\d+)/m.exec(entry.status)?.[1], '1');
       assert.ok(!entry.argv.some(arg => forbidden.test(arg)));
-      return { seccomp: 2, noNewPrivileges: true };
+      return { pid: entry.pid, nativeType: 'renderer', ownedBrowserAncestor: true,
+        exactInstalledExecutable: true, matchingUid: true, seccomp: 2, noNewPrivileges: true };
     });
     evidence.checks.push('linux_packaged_renderer_cdp_parser_rejection_and_live_sandbox');
 

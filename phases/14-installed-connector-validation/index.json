@@ -29,19 +29,26 @@
       "status": "completed",
       "paths": [
         "connector/scripts/ci-installed-smoke.mjs",
+        "connector/scripts/ci-installed-linux.mjs",
+        "connector/scripts/ci-installed-macos.mjs",
+        "connector/scripts/ci-installed-windows.mjs",
+        "connector/scripts/verify-windows-installer.ps1",
         "connector/test/installed-smoke.test.mjs",
+        "connector/test/installed-windows.test.mjs",
+        "connector/test/installed-macos-identity.test.mjs",
+        "connector/test/linux-process-observation.test.mjs",
         ".github/workflows/local-agent.yml"
       ],
       "checks": [
         [
           "node",
           "--test",
-          "connector/test/installed-smoke.test.mjs"
+          "connector/test/*.test.mjs"
         ]
       ],
       "started_at": "2026-10-17T22:14:52+0900",
-      "summary": "일회용 hosted runner 전용 macOS DMG·Ubuntu deb 설치 검증기를 구현했다. 경로·기존 설치·프로필·core SHA·sandbox·OS URI·소유 제거를 검사하며 packaged QA 우회는 없다. 가드 9개 RED→GREEN, 전체 연결기 55개와 Node 5파일·YAML·Linux shell 구문, harness pytest 60개를 통과했다. 실제 OS 결과는 아직 미검증이다.",
-      "completed_at": "2026-10-17T22:21:16+0900"
+      "summary": "실제 설치본 URI 검증기를 macOS·Ubuntu·Windows hosted CI에 접합했다. 제품 연결기 89개·공통 연결기 115개와 하네스 pytest 60개를 통과했다. 프로세스 소유권·정상 종료·관측 실패 시 정리 보류, macOS 번들·Unicode 경로, Linux CDP PID/sandbox를 검증한다. 실제 OS 통과 판정은 step2 원격 CI에 남긴다.",
+      "completed_at": "2026-10-17T22:50:53+0900"
     },
     {
       "step": 2,

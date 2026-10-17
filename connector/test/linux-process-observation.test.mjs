@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLinuxProcessTracker, inspectLinuxCommandLine, inspectInstalledProcessTree, readLinuxProcessStat } from '../scripts/linux-process-observation.mjs';
+import { createLinuxProcessTracker, inspectLinuxCommandLine, inspectInstalledProcessTree, readLinuxProcessStat,
+  observeSyntheticUri, verifyLinuxCdpRenderers } from '../scripts/linux-process-observation.mjs';
 
 test('real NUL argv keeps URI boundaries; a flattened title is only an embedded-type observation', () => {
   const raw = Buffer.from('/opt/fixture/app\0--type=renderer\0private://connect?token=private\0');
@@ -90,4 +91,36 @@ test('access denial of a confirmed owned PID is not disappearance; changed start
   assert.throws(() => tracker.readDenied(10), { code: 'OWNED_PROC_UNOBSERVABLE' });
   tracker.forget(10);
   assert.equal(tracker.readDenied(10), null, 'A confirmed disappeared process loses its ownership record');
+});
+
+test('a synthetic URI token in a flattened process title is distinct from an original argv claim', () => {
+  const uri = 'fixture-connect://connect?attemptId=ci-package-cold';
+  const flattened = inspectLinuxCommandLine(`/opt/fixture/app ${uri}\0`);
+  assert.deepEqual(observeSyntheticUri(flattened, uri), {
+    observed: true, source: 'process-title-token', exactCmdlineField: false, originalArgvProven: false,
+  });
+  assert.equal(observeSyntheticUri(inspectLinuxCommandLine(`/opt/app\0${uri}\0`), uri).source, 'nul-delimited-cmdline-field');
+  for (const changed of [`prefix${uri}`, `${uri}-other`, `${uri}&extra=1`, `"${uri}"`, uri.slice(0, -1)]) {
+    assert.equal(observeSyntheticUri(inspectLinuxCommandLine(`/opt/app ${changed}\0`), uri).observed, false);
+  }
+});
+
+test('CDP native renderer IDs need the exact browser PID plus owned OS UID, executable, ancestry and Seccomp', () => {
+  const status = 'Uid:\t1001\t1001\t1001\t1001\nSeccomp:\t2\nNoNewPrivs:\t1\n';
+  const entries = [entry(10, 1, '/opt/fixture/app fixture-connect://connect\0'),
+    entry(11, 10, '/opt/fixture/app --type=zygote\0'),
+    entry(12, 11, '/opt/fixture/app --type=renderer\0')].map(value => ({ ...value, status }));
+  const native = [{ id: 10, type: 'browser' }, { id: 12, type: 'renderer' }];
+  const ownership = { executable: '/opt/fixture/app', mainPid: 10, uid: 1001 };
+  assert.equal(inspectInstalledProcessTree(entries, ownership.executable).renderers.length, 0);
+  assert.deepEqual(verifyLinuxCdpRenderers(entries, ownership, native).map(value => value.pid), [12]);
+  for (const changed of [[], [{ id: 20, type: 'browser' }, native[1]], [native[0]],
+    [native[0], { id: 99, type: 'renderer' }]]) {
+    assert.throws(() => verifyLinuxCdpRenderers(entries, ownership, changed));
+  }
+  for (const override of [{ parentPid: 1 }, { executable: '/opt/foreign/app' },
+    { status: status.replace(/1001/g, '1002') }, { status: status.replace('Seccomp:\t2', 'Seccomp:\t0') },
+    { status: status.replace('NoNewPrivs:\t1', 'NoNewPrivs:\t0') }]) {
+    assert.throws(() => verifyLinuxCdpRenderers(entries.map(value => value.pid === 12 ? { ...value, ...override } : value), ownership, native));
+  }
 });

@@ -421,7 +421,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
         return fields.includes(`p${launched.pid}`) && addresses.length > 0
           && addresses.every(address => address === `127.0.0.1:${port}` || address === `[::1]:${port}`);
       }, 'installed main PID owns only a loopback CDP listener', 30_000);
-      connection = await connectInstalledApp(port, renderer);
+      const targetDiagnostic = {};
+      (metadata.rendererTargets ??= []).push(targetDiagnostic);
+      connection = await connectInstalledApp(port, renderer, { diagnostics: targetDiagnostic });
       evidence.phase = sequence === 1 ? 'macos_cold_uri_rejection' : 'macos_restarted_uri_rejection';
       await errorState('등록된 앱의 연결 링크를 사용해 주세요.');
       const current = (await swift('identity', String(launched.pid))).application;

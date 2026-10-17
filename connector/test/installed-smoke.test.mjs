@@ -7,6 +7,7 @@ import {
   validateRunnerContext, assertInside, validateConfiguration, selectPackageName,
   createOwnedDirectory, verifyInstalledCore, diagnostic,
   loadConfiguration,
+  matchesInstalledRendererUrl, selectInstalledProcessInfo,
 } from '../scripts/installed-smoke-support.mjs';
 
 const runner = { CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux', LOCAL_AGENT_INSTALL_QA: '1', GITHUB_WORKSPACE: '/work/repo', RUNNER_TEMP: '/work/_temp' };
@@ -145,5 +146,27 @@ test('native assertion diagnostics expose only the verifier filename and numeric
   const error = { code: 'ERR_ASSERTION', stack: 'Error: private-token\n at verify (file:///private/secret/ci-installed-macos.mjs:188:12)' };
   assert.deepEqual(diagnostic(error, 'macos_bundle'), { phase: 'macos_bundle', code: 'ERR_ASSERTION', site: { file: 'ci-installed-macos.mjs', line: 188, column: 12 } });
   assert.equal(JSON.stringify(diagnostic(error, 'macos_bundle')).includes('private'), false);
+  assert.deepEqual(diagnostic({ code: 'ERR_ASSERTION', stack: 'Error: private\n at verify (file:///private/ci-installed-windows.mjs:250:14)' }, 'windows_cold'),
+    { phase: 'windows_cold', code: 'ERR_ASSERTION', site: { file: 'ci-installed-windows.mjs', line: 250, column: 14 } });
   assert.deepEqual(diagnostic({ code: 'ERR_ASSERTION', stack: 'Error: private\n at credential (/private/secrets/user.mjs:17:22)' }, 'macos_bundle'), { phase: 'macos_bundle', code: 'ERR_ASSERTION' });
+});
+
+test('macOS renderer URLs accept Unicode-equivalent file paths while retaining the exact installed file boundary', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const file = join(tmpdir(), '하박조팽 연결기.app', 'Contents', 'Resources', 'app.asar', 'renderer', 'index.html');
+  const native = pathToFileURL(file).href, decomposed = pathToFileURL(file.normalize('NFD')).href;
+  assert.equal(matchesInstalledRendererUrl(decomposed, file, { platform: 'darwin' }), true);
+  assert.equal(matchesInstalledRendererUrl(native, file), true);
+  for (const bad of [native + '?other=1', native + '#other', 'https://example.test/index.html', pathToFileURL(join(tmpdir(), 'another.app', 'index.html')).href]) {
+    assert.equal(matchesInstalledRendererUrl(bad, file, { platform: 'darwin' }), false);
+  }
+});
+
+test('CDP process evidence keeps only validated native IDs and bounded process types', () => {
+  const value = selectInstalledProcessInfo({ processInfo: [{ id: 100, type: 'browser', cpuTime: 1, token: 'private' }, { id: 101, type: 'renderer' }, { id: 102, type: 'private-token' }] });
+  assert.deepEqual(value, [{ id: 100, type: 'browser' }, { id: 101, type: 'renderer' }, { id: 102, type: 'other' }]);
+  assert.equal(JSON.stringify(value).includes('private'), false);
+  for (const bad of [{}, { processInfo: [] }, { processInfo: [{ id: -1, type: 'browser' }] }, { processInfo: [{ id: 1.5, type: 'browser' }] }, { processInfo: [{ id: 100, type: 'browser' }, { id: 100, type: 'renderer' }] }]) {
+    assert.throws(() => selectInstalledProcessInfo(bad));
+  }
 });

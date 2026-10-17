@@ -275,12 +275,16 @@ jobs:
           retention-days: 14
       - name: Windows install, protocol registration and uninstall
         if: matrix.platform == 'win'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
         run: npm --prefix connector run qa:install
       - uses: actions/upload-artifact@v7.0.2
         if: always() && matrix.platform == 'win' && inputs.upload_artifacts == true
         with:
           name: windows-install-evidence
-          path: connector/artifacts/windows-installer-qa.json
+          path: |
+            connector/artifacts/windows-installer-qa.json
+            connector/artifacts/windows-installed-uri-qa.json
           if-no-files-found: ignore
           retention-days: 14
       - uses: actions/upload-artifact@v7.0.2

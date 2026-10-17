@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export function assertInside(candidate, parent) {
   const syntax = candidate.startsWith('/') && parent.startsWith('/') ? path.posix : path;
@@ -108,7 +108,7 @@ export async function verifyInstalledCore(resourcesDir, sourceCoreDir) {
 export function diagnostic(error, phase) {
   const result = { phase: /^[a-z][a-z0-9_]{0,59}$/.test(phase ?? '') ? phase : 'unknown',
     code: /^[A-Z][A-Z0-9_]{1,59}$/.test(error?.code ?? '') ? error.code : 'UNKNOWN' };
-  const site = typeof error?.stack === 'string' && /\n\s+at[^\n]*[/\\](ci-installed-(?:linux|macos|smoke)\.mjs|installed-smoke-support\.mjs):([1-9]\d{0,5}):([1-9]\d{0,4})/.exec(error.stack.slice(0, 20_000));
+  const site = typeof error?.stack === 'string' && /\n\s+at[^\n]*[/\\](ci-installed-(?:linux|macos|windows|smoke)\.mjs|installed-smoke-support\.mjs):([1-9]\d{0,5}):([1-9]\d{0,4})/.exec(error.stack.slice(0, 20_000));
   if (site) result.site = { file: site[1], line: Number(site[2]), column: Number(site[3]) };
   return result;
 }
@@ -157,19 +157,33 @@ export async function reserveDebugPort() {
   return port;
 }
 
-export async function connectInstalledApp(port, rendererFile) {
+export function matchesInstalledRendererUrl(value, rendererFile, { platform = process.platform } = {}) {
+  try {
+    if (typeof value !== 'string' || !path.isAbsolute(rendererFile)) return false;
+    const url = new URL(value);
+    if (url.protocol !== 'file:' || url.hostname || url.search || url.hash) return false;
+    const actual = fileURLToPath(url), expected = path.resolve(rendererFile);
+    return platform === 'darwin' ? actual.normalize('NFC') === expected.normalize('NFC') : actual === expected;
+  } catch { return false; }
+}
+
+export function selectInstalledProcessInfo(value) {
+  assert.ok(Array.isArray(value?.processInfo) && value.processInfo.length > 0 && value.processInfo.length <= 1000);
+  const ids = new Set(), types = new Set(['browser', 'renderer', 'GPU', 'gpu', 'gpu-process', 'utility', 'network-service', 'worker']);
+  return value.processInfo.map(entry => {
+    assert.ok(Number.isSafeInteger(entry?.id) && entry.id > 0 && entry.id <= 0xffffffff && !ids.has(entry.id));
+    ids.add(entry.id);
+    return { id: entry.id, type: types.has(entry.type) ? entry.type : 'other' };
+  });
+}
+
+async function connectInstalledDebugger(webSocketDebuggerUrl, port) {
   assert.ok(Number.isInteger(port) && port > 0 && port < 65536);
-  const expected = pathToFileURL(rendererFile).href;
-  const target = await until(async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) });
-      if (!response.ok) return false;
-      return (await response.json()).find(value => value.type === 'page' && value.url === expected) ?? false;
-    } catch { return false; }
-  }, 'the exact installed renderer CDP target', 30_000);
-  const debuggerUrl = new URL(target.webSocketDebuggerUrl);
+  const debuggerUrl = new URL(webSocketDebuggerUrl);
   assert.equal(debuggerUrl.protocol, 'ws:'); assert.equal(debuggerUrl.hostname, '127.0.0.1');
   assert.equal(debuggerUrl.port, String(port)); assert.ok(!debuggerUrl.username && !debuggerUrl.password);
+  assert.ok(!debuggerUrl.search && !debuggerUrl.hash);
+  assert.match(debuggerUrl.pathname, /^\/devtools\/(?:page|browser)\/[a-zA-Z0-9-]+$/);
   const socket = new WebSocket(debuggerUrl);
   let nextId = 0, closed = false;
   const pending = new Map();
@@ -196,12 +210,45 @@ export async function connectInstalledApp(port, rendererFile) {
     const timer = setTimeout(() => { pending.delete(id); reject(Object.assign(new Error('CDP command timed out'), { code: 'CDP_TIMEOUT' })); }, 10_000);
     pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
   });
+  return { command, close: () => socket.close() };
+}
+
+export async function getInstalledBrowserProcesses(port) {
+  assert.ok(Number.isInteger(port) && port > 0 && port < 65536);
+  const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(3000) });
+  assert.ok(response.ok);
+  const version = await response.json();
+  assert.ok(new URL(version.webSocketDebuggerUrl).pathname.startsWith('/devtools/browser/'));
+  const socket = await connectInstalledDebugger(version.webSocketDebuggerUrl, port);
+  try { return selectInstalledProcessInfo(await socket.command('SystemInfo.getProcessInfo', {})); }
+  finally { socket.close(); }
+}
+
+export async function connectInstalledApp(port, rendererFile, { diagnostics = {} } = {}) {
+  assert.ok(Number.isInteger(port) && port > 0 && port < 65536);
+  const expected = pathToFileURL(rendererFile).href;
+  const target = await until(async () => {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) });
+      diagnostics.httpStatus = response.status;
+      if (!response.ok) return false;
+      const values = await response.json();
+      assert.ok(Array.isArray(values));
+      const pages = values.filter(value => value.type === 'page');
+      diagnostics.pageTargets = pages.length;
+      diagnostics.exactUrlMatched = pages.some(value => value.url === expected);
+      diagnostics.installedFileMatched = pages.some(value => matchesInstalledRendererUrl(value.url, rendererFile));
+      return pages.find(value => matchesInstalledRendererUrl(value.url, rendererFile)) ?? false;
+    } catch { return false; }
+  }, 'the exact installed renderer CDP target', 30_000);
+  const client = await connectInstalledDebugger(target.webSocketDebuggerUrl, port);
+  const command = client.command;
   const evaluate = async expression => {
     const result = await command('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     assert.ok(!result.exceptionDetails, 'Installed renderer evaluation failed');
     return result.result.value;
   };
-  return { evaluate, close: () => socket.close(),
+  return { evaluate, close: client.close,
     state: () => evaluate(`(async()=>{const s=await window.connector.state();return {stage:s.stage,title:s.title,description:s.description,attemptId:s.attemptId,providers:s.providers.map(p=>({provider:p.provider,status:p.status})),autoStart:s.autoStart,pet:s.pet}})()`),
     async quit() { try { await evaluate('void window.connector.quit(); true'); } catch (error) { if (error.code !== 'APP_CLOSED') throw error; } },
   };
