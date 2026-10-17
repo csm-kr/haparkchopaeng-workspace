@@ -23,8 +23,8 @@
 
 | 환경 | 확인된 근거 | 정식 배포 전 남은 확인 |
 | --- | --- | --- |
-| Windows x64 | 과거 암호화·재개·손상 복구에 더해 730ad8d의 실제 NSIS 설치·등록·cold/warm URI·가시 창/WM_CLOSE·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 통과 | unsigned QA artifact. 게시자 서명, 실사용자 브라우저 승인·인증 페어링·재부팅/업데이트·운영 연결 |
-| macOS arm64 | 과거 CI 암호화·재개·손상 복구, arm64 DMG 생성. 최신 제품 설치 URI job은 SIGTRAP 실패·원인 미확정 | ASCII 실행 파일명·logging으로 해결되지 않음. 제품 설치 URI 완료, Developer ID·공증·실사용자·운영 검증 |
+| Windows x64 | 과거 암호화·재개·손상 복구에 더해 `9eeccee`의 실제 NSIS 설치·등록·cold/warm URI·가시 창/WM_CLOSE·정상 IPC·프로필 정리·자체 제거·handler 없음 복구 통과 | unsigned QA artifact. 게시자 서명, 실사용자 브라우저 승인·인증 페어링·재부팅/업데이트·운영 연결 |
+| macOS arm64 | `9eeccee` 실제 DMG 설치·ASCII 번들/Helper 4개·한글 표시/런타임/새 프로필 위치·cold/warm·정상 IPC 두 회차·제거 9 checks 통과. 이전 `730ad8d`의 SIGTRAP은 당시 실패로 보존 | ad hoc 서명·strict verify exit1 unknown·Gatekeeper 미통과. 기존 기기 키 이전, Developer ID·공증·실사용자·운영 검증 |
 | macOS x64 | x64 DMG 생성 | x64 네이티브 실행·암호화·재개 및 최종 설치 흐름 |
 | Ubuntu GUI x64 | 기존 암호화·재개·손상 복구 13조건과 별도로, phase14에서 실제 .deb 설치·전용 링크 cold/warm 실행·샌드박스·정상 종료·제거 8조건 통과 | 최종 배포본으로 실제 사용자 브라우저 승인·인증 페어링·GUI 설치 경험, 업데이트·재부팅·Wayland |
 
@@ -34,13 +34,21 @@ Ubuntu는 GUI와 안전한 키링, 한국어 표시가 가능한 글꼴이 필�
 
 Ubuntu 배포 후보는 .deb만이다. builder의 기본 AppImage launcher에서 샌드박스 비활성화 경로를 확인해 AppImage를 빌드·배포 대상에서 제외했다. 이전 CI가 만든 AppImage는 Git에서 제외한 개발 산출물로 보류하고 `LOCAL_AGENT_RELEASES`에 등록하지 않는다. 안전한 AppImage 대안 개발은 이번 배포 범위 밖이다.
 
-### phase14 최신 설치본 CI — 730ad8d
+### phase14 최근 완료한 설치본 CI — 730ad8d
 
 [CI 39041064640](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640)는 Web·PostgreSQL·Windows·Linux 성공, Mac 실패다. [Windows job 117420497431](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497431)의 cold OS 루트 슬래시·가시 창/WM_CLOSE·warm same PID/다른 오류·정상 quit IPC·프로필 정리와 자체 제거·handler 없음 복구가 통과했다. raw exact=false를 보존했고 ACL은 현재 토큰의 소유 그룹임을 확인했다. [Ubuntu job 117420497268](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497268)도 실제 설치 8조건을 재통과했다. Mac은 SIGTRAP이며 원인을 확정하지 않았다.
 
 동일 730ad8d에서 웹 946개·별도 PG 13개·Chromium 8개·HTTP wire·pytest 60개·lint/build도 통과했다. 운영 적용이나 전체 CI 성공의 근거로 확대하지 않는다.
 
 Windows unsigned QA artifact는 **111,584,107 bytes**, SHA256 `3e2b6669cb543d242f0f8a20c4724c96e6e048e95fc9bbbe5fbd67dd54297289`다. Authenticode 완료 검증은 없다. Ubuntu .deb SHA256은 `85ede6d95ea984427dcd27a12e1f78af45b44e67a8f1156a702b14b39caff1dd`다. 설치 폴더 삭제는 명령 성공으로 확인했으며 삭제 후 exists 별도 boolean은 없다. 상세는 [연결기 최신 영수증](../../connector/VALIDATION.md)을 따른다. 이전 로컬 파일·아래 초기 Ubuntu 해시와 구분하고 서명본 재빌드 뒤 다시 확인한다.
+
+### 새 제품 Mac·Windows 설치와 별도 공통 저장소 성공
+
+제품 `9eeccee5aa75ed4ef3c14ae9cd95344a49134ef2`의 [CI 39042209763](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763)는 **5개 job 모두 success**로 종료됐다. Mac 설치 [117423809065](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809065)의 실제 9 checks, Windows 설치 [117423809100](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809100)·Ubuntu 설치 8 checks·별도 PG 13개와 schema difference 없음, 웹 946개·Chromium 8개(24.4초)·HTTP wire·lint/build·하네스 guards가 성공했다. 로컬 pure 137/137·실제 builder 구현 회귀 5/5는 이 실제 기동과 별도다. Mac CFBundleName·Helper는 ASCII, 표시 이름·ASAR 런타임과 새로 생성한 프로필 위치는 한글로 유지함을 확인했다. 기존 기기 키 이전과 이전 SIGTRAP의 정확한 원인은 확정하지 않았다.
+
+새 제품 arm64 DMG는 128,089,217 bytes·SHA256 `1e932a93fa2e8bbbab6aa48aba574ff0725572c53af8449fd827c47e993572d9`, Windows CI unsigned NSIS는 111,584,104 bytes·SHA256 `86b2ff18f8f949d94ed23053e1c6c6715f5cece2587eef983cf3d3bea78d1499`, Ubuntu .deb는 SHA256 `42a5b76906854f2a22fd322c5865b98aeb3362c56c4ba633dcd4d9734d8c44dc`다. Mac x64 DMG는 생성만 확인했고 native 설치·기동은 미검증이다. 서명·공증·Gatekeeper는 통과하지 않았다. 상세는 [제품 검증 기록](../../connector/VALIDATION.md)의 새 소스 절을 따른다.
+
+공통 저장소 `e5e6a612`의 [CI 39041845705](https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705)는 Windows·Mac·Ubuntu 3개 job 모두 성공했다. 실제 설치 URI는 Windows preflight 2/full 5, Mac 9, Ubuntu 8 checks이며 정리도 통과했다. 이는 Research Notebook 설정의 결과로 제품 Mac의 배포 gate를 대신하지 않는다. 공통 Windows unsigned QA 설치본은 110,619,701 bytes·SHA256 `de9b6abbdf398b4e37fa47f08e659a599eb75791e5244c6077ec8fb04986c99cd`다. 자세한 실행별 범위는 [공통 검증 기록](https://github.com/csm-kr/local-agent-connector/blob/main/connector/VALIDATION.md)을 따른다. 서명·공증·실브라우저 승인·실사용자 재부팅/업데이트·운영 배포 gate는 유지한다.
 
 ### phase14 초기 Ubuntu 실제 설치 CI — 보존 기록
 

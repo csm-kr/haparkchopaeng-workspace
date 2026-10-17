@@ -185,6 +185,52 @@ test('Debian package identity stays separate from packaged runtime metadata', as
   } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
 });
 
+test('a selected portable Mac wrapper preserves the registered runtime and production profile', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'connector-portable-mac-'));
+  try {
+    const desktop = join(parent, 'desktop'); await mkdir(desktop);
+    const save = (name, value) => writeFile(join(desktop, name), JSON.stringify(value));
+    await save('package.json', { name: 'kit-desktop', version: build.packageVersion,
+      scripts: { 'package:mac': 'electron-builder --config mac-builder.cjs --mac dmg' } });
+    await save('apps.generated.json', { development: false, applications: [{ scheme: build.scheme }] });
+    await save('builder.generated.json', { appId: build.appId, productName: build.productName,
+      executableName: 'research-native-connector', extraMetadata: { name: 'research-runtime-desktop' } });
+    await writeFile(join(desktop, 'mac-builder.cjs'), `
+      const build = require('./builder.generated.json');
+      module.exports = { ...build, productName: build.executableName,
+        extraMetadata: { ...build.extraMetadata, productName: build.productName },
+        mac: { extendInfo: { CFBundleDisplayName: build.productName } } };
+    `);
+    const config = await loadConfiguration(parent);
+    assert.equal(config.productName, build.productName);
+    assert.equal(config.runtimeProductName, build.productName);
+    assert.equal(config.macDisplayName, build.productName);
+    assert.equal(config.macInternalName, 'research-native-connector');
+    assert.equal(config.macBundleName, 'research-native-connector');
+    assert.equal(config.runtimePackageName, 'research-runtime-desktop');
+    assert.deepEqual(config.profileRelativePath, [build.appId, 'production']);
+  } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
+});
+
+test('a portable Mac wrapper cannot change the registered app ID or runtime product name', async () => {
+  for (const change of [{ appId: 'org.other.connector' }, { extraMetadata: { productName: 'Different profile' } }]) {
+    const parent = await mkdtemp(join(tmpdir(), 'connector-portable-mac-invalid-'));
+    try {
+      const desktop = join(parent, 'desktop'); await mkdir(desktop);
+      const save = (name, value) => writeFile(join(desktop, name), JSON.stringify(value));
+      await save('package.json', { name: 'kit-desktop', version: build.packageVersion,
+        scripts: { 'package:mac': 'electron-builder --config mac-builder.cjs --mac dmg' } });
+      await save('apps.generated.json', { development: false, applications: [{ scheme: build.scheme }] });
+      await save('builder.generated.json', { appId: build.appId, productName: build.productName });
+      await writeFile(join(desktop, 'mac-builder.cjs'), `module.exports = ${JSON.stringify({
+        appId: build.appId, productName: 'research-native-connector',
+        extraMetadata: { productName: build.productName }, ...change,
+      })};`);
+      await assert.rejects(loadConfiguration(parent));
+    } finally { assertInside(parent, tmpdir()); await rm(parent, { recursive: true, force: true }); }
+  }
+});
+
 test('CDP process evidence keeps only validated native IDs and bounded process types', () => {
   const value = selectInstalledProcessInfo({ processInfo: [{ id: 100, type: 'browser', cpuTime: 1, token: 'private' }, { id: 101, type: 'renderer' }, { id: 102, type: 'private-token' }] });
   assert.deepEqual(value, [{ id: 100, type: 'browser' }, { id: 101, type: 'renderer' }, { id: 102, type: 'other' }]);

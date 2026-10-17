@@ -67,7 +67,7 @@ export async function loadConfiguration(connectorRoot) {
   assert.equal(runtime.applications?.length, 1);
   const productName = build.productName ?? pkg.productName;
   let macBuild = build;
-  if (!portableProfile && /--config mac-builder\.cjs\b/.test(pkg.scripts?.['package:mac'] ?? '')) {
+  if (/--config mac-builder\.cjs\b/.test(pkg.scripts?.['package:mac'] ?? '')) {
     const file = path.join(desktop, 'mac-builder.cjs'), stat = await lstat(file);
     assert.ok(stat.isFile() && !stat.isSymbolicLink());
     macBuild = createRequire(pathToFileURL(file))(file);

@@ -1,6 +1,6 @@
 # 연결기 검증 기록 — 2026-10-17
 
-> 기존 절은 각 실행 당시의 검증 기록을 보존한다. 최신 설치본 상태는 맨 아래 **phase14 최신 설치본 CI — 730ad8d** 절을 따른다. 초기 Ubuntu 영수증도 별도 보존하며 이전 절의 설치 미검증 표기는 당시 범위다.
+> 기존 절은 각 실행 당시의 검증 기록을 보존한다. 최신 실제 결과는 맨 아래 **phase14 제품 설치본 CI — 9eeccee** 절을 따른다. `730ad8d`·초기 Ubuntu 영수증과 이전 설치 미검증 표기는 당시 범위로 보존한다.
 
 ## 검증 범위
 
@@ -158,7 +158,7 @@ macOS arm64의 CI Keychain 사용과 Ubuntu의 CI Secret Service 사용은 통�
 
 이번 8조건은 인증 페어링·OS 키 암호화·실제 모델 응답을 검증하지 않는다. 앞선 unpackaged 암호화 13조건과 별개다. 정식 배포, 실사용자의 브라우저 승인·GUI 설치 경험, Wayland, 재부팅, 서명·업데이트는 미검증이며 Windows·macOS의 별도 진행 상태는 유지한다. AppImage는 계속 빌드·배포 대상에서 제외한다.
 
-## phase14 최신 설치본 CI — 730ad8d
+## phase14 제품 설치본 CI — 730ad8d · 당시 실패 보존
 
 제품 소스 `730ad8d0ee418b623634288636e44a47fe8e4331`의 [CI 39041064640](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640)는 **Web·PostgreSQL·Windows·Linux 성공, Mac 실패**로 종료됐다. 설치 영수증 source는 CI merge `c926f9965458c089a2b38b4d0c4ceda631aea54c`다. 과거 `ec594c2`의 해시·검증 수와 합산하지 않는다.
 
@@ -178,3 +178,17 @@ Windows cold는 실제 ShellExecute의 정확한 OS 루트 슬래시 변형을 �
 | Ubuntu .deb amd64 | 영수증에서 별도 크기 미측정 | `85ede6d95ea984427dcd27a12e1f78af45b44e67a8f1156a702b14b39caff1dd` |
 
 Windows의 Authenticode 상태를 이 영수증에서 측정하지 않았으므로 서명 완료를 주장하지 않는다. CLI·실제 추론 0회이며 API ACK 전 parser 경계로 실행을 배제했다. main-process 네트워크는 독립 측정하지 않았다. Ubuntu의 URI 제목 토큰·원래 argv 미증명·읽기 가능한 `/proc` 범위, 실사용자 브라우저 승인·인증 페어링·재부팅/업데이트·Mac x64·Wayland·서명/공증·운영 미배포 한계는 유지한다. 설치본 CI 성공은 unpackaged 암호화 13조건이나 실사용자 검증을 대신하지 않는다.
+
+## phase14 제품 설치본 CI — 9eeccee
+
+제품 소스 `9eeccee5aa75ed4ef3c14ae9cd95344a49134ef2`의 [CI 39042209763](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763)는 **completed/success, 5개 job 모두 성공**이다. Web [117423809238](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809238)의 120 suites·946 tests·Chromium 8개(24.4초)·실제 HTTP 쿠키 유실 회귀·lint/build·하네스 guards와 별도 PG 13개, Mac·Windows·Ubuntu 설치를 통과했다. 설치 영수증의 checkout merge는 `a4aef36f072196d06a69531b2ca56cd9a0033a55`다. 로컬 connector pure **137/137**과 설치된 electron-builder의 실제 구현을 합성 번들·ASAR에 적용한 **5/5**도 통과했다. 이 빌더 회귀 자체는 앱을 기동하지 않으며 아래 실제 Mac 검증과 별도다.
+
+Mac [job 117423809065](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809065)의 실제 설치 **9 checks**가 통과했다. CFBundleName·bundle/main 실행 이름은 `hapark-connector`, Helper 4개도 ASCII이며 CFBundleDisplayName·ASAR productName은 `하박조팽 연결기`, ASAR npm name은 원본을 유지한다. 기존 한글 프로필 위치는 처음 부재했다가 runtimeProfileCreated=true, ASCII 대체 프로필은 처음 부재하고 생성=false로 확인했다. 이는 **새 프로필의 위치 유지 실증이며 기존 기기 키 이전 검증은 아니다.** 기존 프로필이 있으면 중단하며 예상 밖 ASCII 이름 프로필은 삭제하지 않는다. Debian packageName과 ASAR npm runtimePackageName도 분리했다.
+
+같은 Mac 영수증은 DMG 읽기 전용 mount·소유 Applications 복사·코어 9개 SHA·번들 Node, cold/warm same PID·정상 quit IPC·두 번째 cold/IPC와 전체 정리를 확인했다. arm64 DMG는 128,089,217 bytes·SHA256 `1e932a93fa2e8bbbab6aa48aba574ff0725572c53af8449fd827c47e993572d9`다. x64는 DMG 빌드만이며 131,861,518 bytes·SHA256 `f9555f9d6be4babe944944d16860ec88d42f9210dc45e73dc5177a41e4851f88`다. adHoc=true·DeveloperID=false·notarization=false·GatekeeperAccepted=false·strict verification exit1/unknown은 유지한다. 이전 SIGTRAP의 정확한 원인을 확정하거나 서명·공증 통과로 해석하지 않는다.
+
+Windows [job 117423809100](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809100)도 실제 cold OS 루트 슬래시·가시 창·WM_CLOSE, warm same PID/parser·정상 IPC·프로세스/프로필 정리(errors=[])·자체 제거·protocolRestoredToAbsent를 통과했다. 코어 9개 SHA가 일치했고 unsigned QA NSIS는 111,584,104 bytes·SHA256 `86b2ff18f8f949d94ed23053e1c6c6715f5cece2587eef983cf3d3bea78d1499`다. 별도 PG [job 117423809162](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809162)은 PostgreSQL 16의 13개와 noSchemaDifference를 통과했다. 위 `730ad8d` 수치·해시와 합산하거나 재사용하지 않는다.
+
+Ubuntu [job 117423808860](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423808860)의 실제 설치 **8 checks**도 passed/completed다. 코어 9개 SHA·실행 중 sandbox·기록된 정리 6개가 모두 통과했고 `.deb` SHA256은 `42a5b76906854f2a22fd322c5865b98aeb3362c56c4ba633dcd4d9734d8c44dc`다. cold URI는 process-title-token이며 originalArgvProven=false·rendererStateObserved=false를 그대로 유지한다. 이 Linux 성공은 원래 argv 관측이나 cold renderer 상태 검증으로 확대하지 않는다.
+
+별도 공통 저장소 소스 `e5e6a61246acbb91adb6a38ecf4720d9ae4c0d63`의 [CI 39041845705](https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705)는 **3개 OS 모두 success**로 종료됐다. Windows [117422756321](https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705/job/117422756321)의 preflight 2·full 5 checks, Mac [117422756115](https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705/job/117422756115)의 설치 9 checks, Ubuntu [117422756303](https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705/job/117422756303)의 설치 8 checks와 각 소유 프로세스·프로필·설치본·handler 정리를 확인했다. 공통 Windows의 unsigned QA 설치본은 110,619,701 bytes·SHA256 `de9b6abbdf398b4e37fa47f08e659a599eb75791e5244c6077ec8fb04986c99cd`다. known PID 관측의 unknown 샘플이 실제 발생했는지는 영수증에 기록되지 않아 주장하지 않는다. 상세는 [공통 검증 기록](https://github.com/csm-kr/local-agent-connector/blob/main/connector/VALIDATION.md)을 따른다. 이 성공은 하박조팽 Mac, 서명·공증·인증 페어링·실브라우저 승인·운영 배포의 성공을 뜻하지 않는다.

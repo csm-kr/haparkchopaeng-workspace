@@ -23,7 +23,7 @@
         <h1>처음엔 한 번 설치.<br>다음엔 웹에서 AI 연결.</h1>
         <p class="lead">하박조팽 웹·서버와 데스크톱 연결기를 구현했습니다. 사용자는 웹의 <strong>AI 연결</strong>에서 시작하고, 필요한 설치·번호 입력·모델 선택만 안내받습니다. Windows x64·macOS arm64·Ubuntu x64의 네이티브 CI를 확인했으며, 정식 서명 배포와 사용자 환경의 설치 검증은 별도로 남아 있습니다.</p>
         <div class="hero-meta"><span class="tag good">3OS native · 각 13항목 통과</span><span class="tag good">웹 852 · 실제 PostgreSQL 8 통과</span><span class="tag good">공통 repo 분리 · Windows 검증</span><span class="tag wait">분석·채팅 구현 · 운영 대기</span><span class="tag">기준일 2026-10-17</span></div>
-        <p class="small">위 수치는 연결기 기준 <code>d54a1fd</code>의 보존한 기록입니다. 후속 분석·채팅은 <a href="#research-chat">phase13</a>, 실제 설치본과 OS 링크는 <a href="#phase14">phase14의 저장소·소스별 결과</a>로 구분합니다. 후속 진단 CI에서도 남은 Mac·Windows 실패를 확인했습니다. 수정 후보는 별도로 재검증합니다.</p>
+        <p class="small">위 수치는 연결기 기준 <code>d54a1fd</code>의 보존한 기록입니다. 후속 분석·채팅은 <a href="#research-chat">phase13</a>, 실제 설치본과 OS 링크는 <a href="#phase14">phase14의 저장소·소스별 결과</a>로 구분합니다. 최신 제품 9eeccee의 5 jobs·공통 e5e6a612의 3 OS가 성공했습니다. 이전 실패·해시와 정식 배포 한계는 별도로 보존합니다.</p>
         <div class="summary"><article><strong>연결 진입은 하나</strong><p>상단 AI 연결과 설정 카드가 같은 상태·연결창을 사용합니다.</p></article><article><strong>상시 실행은 선택</strong><p>사용 중 연결기는 실행됩니다. 종료한 앱은 웹 버튼으로 다시 엽니다.</p></article><article><strong>처음 모델은 무선택</strong><p>이 PC에서 감지한 모델만 고르고, 실제 제공된 사용 한도만 표시합니다.</p></article></div>
       </div>
 
@@ -107,13 +107,34 @@
         <h2>phase14 · 설치된 앱과 OS 전용 링크</h2>
         <p class="intro">unpackaged 앱의 암호화 13항목과 실제 설치본 검증은 다른 범위입니다. 이번에는 제품·공통 저장소의 패키지를 설치해 OS 링크·창·실행 중 샌드박스·정상 종료·제거를 확인했습니다. 저장소와 소스가 다른 결과를 한 번의 전체 성공으로 합치지 않습니다.</p>
 
-        <h3>최신 완료 CI · 소스별 결과</h3>
+        <h3>최신 확정 CI · 제품 5 jobs / 공통 3 OS 성공</h3>
+        <div class="table-wrap"><table><thead><tr><th>소스·실행</th><th>완료된 검증</th><th>적용 한계</th></tr></thead><tbody>
+          <tr><td>제품 <code>9eeccee</code><p>checkout merge <code>a4aef36f</code></p><a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763">CI 39042209763</a></td><td><span class="result" data-state="pass">5 jobs 모두 SUCCESS</span><p>Web 946개·Chromium 8개(24.4초)·HTTP wire·lint/build·하네스 guards, 별도 PostgreSQL 16의 13개·schema difference 없음. <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809100">Windows 설치·OS URI</a>, <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423809065">Mac arm64 설치 9 checks</a>, <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763/job/117423808860">Ubuntu 설치 8 checks</a>와 각 정리 통과.</p></td><td>실제 installed-package invalid URI smoke입니다. 인증 페어링·실제 AI 추론·서명/공증·운영 배포 성공을 뜻하지 않습니다. unpackaged 암호화 13조건과 별도입니다.</td></tr>
+          <tr><td>공통 <code>e5e6a612</code><p>Research Notebook</p><a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705">CI 39041845705</a></td><td><span class="result" data-state="pass">3 OS 모두 SUCCESS</span><p><a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705/job/117422756321">Windows preflight 2 / full 5</a>, <a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705/job/117422756115">Mac arm64 9</a>, <a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705/job/117422756303">Ubuntu 8 checks</a>. 소유 프로세스·프로필·앱·handler 정리도 통과했습니다.</p></td><td>호스트 설정 하나의 결과이며 다른 앱의 서버·권한·인증 검증을 대신하지 않습니다. Windows unknown PID 샘플의 실제 발생 여부는 미기록입니다.</td></tr>
+        </tbody></table></div>
+        <h3>제품 Mac · ASCII 네이티브 이름과 한글 사용 경험</h3>
+        <div class="notice"><strong>9eeccee에서 실제 Mac 설치·기동이 통과했습니다.</strong> CFBundleName·bundle/main은 <code>hapark-connector</code>, Helper 4개도 ASCII입니다. 표시 이름·ASAR productName은 <strong>하박조팽 연결기</strong>, ASAR npm name은 원본을 유지합니다. 한글 프로필 위치는 처음 부재했다가 생성됐고 ASCII 대체 프로필은 생성되지 않았습니다. cold/warm 같은 PID·정상 quit IPC·두 번째 cold/IPC·전체 정리를 확인했습니다. <strong>새 프로필 위치 유지의 실증이며 기존 기기 키 이전은 미검증</strong>입니다. 이전 SIGTRAP의 정확한 원인은 확정하지 않았습니다.</div>
+        <p class="small">같은 후보의 로컬 pure 137/137·실제 electron-builder 구현 회귀 5/5는 별도 근거입니다. 합성 번들/ASAR 빌더 테스트 자체는 앱을 실행하지 않습니다. 실제 Mac 9 checks 및 제품 웹 946개와 합산하지 않습니다. x64 DMG는 빌드만 확인했으며 Intel native 설치·기동은 미검증입니다.</p>
+        <div class="table-wrap"><table><thead><tr><th>최신 실행의 산출물</th><th>크기·SHA256</th></tr></thead><tbody>
+          <tr><td>제품 9eeccee Windows · CI 설치 PASS</td><td>111,584,104 bytes<br><code>86b2ff18f8f949d94ed23053e1c6c6715f5cece2587eef983cf3d3bea78d1499</code></td></tr>
+          <tr><td>제품 9eeccee Mac arm64 · 실제 설치 9 checks</td><td>128,089,217 bytes<br><code>1e932a93fa2e8bbbab6aa48aba574ff0725572c53af8449fd827c47e993572d9</code></td></tr>
+          <tr><td>제품 9eeccee Mac x64 · 빌드만</td><td>131,861,518 bytes<br><code>f9555f9d6be4babe944944d16860ec88d42f9210dc45e73dc5177a41e4851f88</code></td></tr>
+          <tr><td>제품 9eeccee Ubuntu · 실제 설치 8 checks</td><td><code>42a5b76906854f2a22fd322c5865b98aeb3362c56c4ba633dcd4d9734d8c44dc</code></td></tr>
+          <tr><td>공통 e5e6a612 Windows · CI 설치 PASS</td><td>110,619,701 bytes<br><code>de9b6abbdf398b4e37fa47f08e659a599eb75791e5244c6077ec8fb04986c99cd</code></td></tr>
+          <tr><td>공통 e5e6a612 Mac arm64 · 실제 설치 9 checks</td><td>128,087,826 bytes<br><code>2b7bb5232d7399e18875db42659af70db406ce42ec51f95c8d243f14644dd725</code></td></tr>
+          <tr><td>공통 e5e6a612 Ubuntu · 실제 설치 8 checks</td><td><code>ead1f52044f5bda3a7d0812710c0ba361316aa63961803cb21bcf780cde5cc0b</code></td></tr>
+        </tbody></table></div>
+        <p class="small">제품·공통 Mac은 ad hoc 서명·Developer ID 없음·공증 미완료·Gatekeeper 미통과이며 strict signature 검사는 exit1·valid=false·reason unknown입니다. quarantine을 변경하지 않았습니다. 실제 설치 URI 성공과 브라우저 다운로드 승인·서명/공증 통과는 구분합니다.</p>
+        <h3>로컬에서 볼 Windows QA 파일 · 정식 배포 아님</h3>
+        <p><a href="../../connector/dist/hapark-connector-0.1.0-win-x64-9eeccee-qa.exe">Windows 로컬 검토용 설치 파일 · 9eeccee QA</a> <span class="result" data-state="pending">미서명 정적 검사본 · 실제 미설치</span></p>
+        <p class="small">111,584,080 bytes · SHA256 <code>671ca77ec8b003d8ecd5cfc1cba0d671f3fd8bf979f6d6dc617b2cfc297473f9</code> · Authenticode NotSigned. ASAR 소스 12개·코어 9개 SHA 일치를 확인했으며 이 파일의 실제 설치·앱 실행·추론은 0회입니다. 위 CI 설치본과 해시가 다릅니다. 이 보고서의 로컬 검토 링크이며 정식 웹 다운로드가 아닙니다. 운영 웹·DB는 아직 배포 전이므로 설치 즉시 운영 연결이 가능한 파일로 표시하지 않습니다.</p>
+        <h3>직전 730ad8d / cd2e108 실행 · 당시 결과 보존</h3>
         <div class="table-wrap"><table><thead><tr><th>소스·실행</th><th>성공한 job</th><th>실패·한계</th></tr></thead><tbody>
           <tr><td>제품 <code>730ad8d</code><p>merge <code>c926f996</code></p><a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640">CI 39041064640</a></td><td>Web·PostgreSQL·Windows·Ubuntu 모두 성공. 웹 946개·PG 13개·Chromium 8개·HTTP wire·pytest 60개·lint/build 통과. <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640/job/117420497431">Windows 설치·OS URI·정상 종료·제거 통과</a>, Ubuntu 8조건 재통과.</td><td><span class="result" data-state="fail">제품 Mac SIGTRAP 실패</span><p>전체 CI는 failure. ASCII 실행 파일명·logging 보강도 해결하지 못했으며 원인은 미확정입니다.</p></td></tr>
           <tr><td>공통 <code>cd2e108</code><p>Research Notebook</p><a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041214720">CI 39041214720</a></td><td><a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041214720/job/117420928177">Mac arm64 9 checks</a>·<a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39041214720/job/117420928350">Ubuntu 8 checks</a> 성공.</td><td><span class="result" data-state="fail">공통 Windows 실패</span><p>cold 루트 슬래시·가시 창 이후 정상 닫기 경계의 known PID 신원 재조회가 불확실해 중단했습니다. warm/IPC 미도달, cleanup deferred로 프로필·설치본을 보존했습니다. 실제 누락 필드와 원인은 미확정입니다.</p></td></tr>
         </tbody></table></div>
         <div class="notice"><strong>제품 Windows의 설치·URI 회귀가 통과했습니다.</strong> NSIS 설치·등록·코어 9개 SHA·번들 Node, 실제 cold 루트 슬래시·가시 창/WM_CLOSE, warm의 다른 오류·같은 PID/single main, 정상 quit IPC와 프로필 정리·자체 제거·handler 없음 복구를 확인했습니다. 원문 exact는 false로 보존했습니다. 현재 토큰의 소유 그룹 검사도 통과했으며 SID 원문은 기록하지 않습니다. 설치 폴더 삭제는 명령 성공 근거이고 별도 post-delete exists boolean은 없습니다. unsigned QA artifact이며 Authenticode 완료를 측정한 검증은 아닙니다.</div>
-        <div class="table-wrap"><table><thead><tr><th>최신 실행의 산출물</th><th>크기·SHA256</th></tr></thead><tbody>
+        <div class="table-wrap"><table><thead><tr><th>직전 730ad8d / cd2e108 실행의 산출물</th><th>크기·SHA256</th></tr></thead><tbody>
           <tr><td>제품 Windows · 성공한 QA 설치본</td><td>111,584,107 bytes<br><code>3e2b6669cb543d242f0f8a20c4724c96e6e048e95fc9bbbe5fbd67dd54297289</code></td></tr>
           <tr><td>제품 Ubuntu · 실제 설치 8조건</td><td><code>85ede6d95ea984427dcd27a12e1f78af45b44e67a8f1156a702b14b39caff1dd</code></td></tr>
           <tr><td>공통 Mac arm64 · 설치 URI 9 checks</td><td>128,087,784 bytes<br><code>2974747fd5c53b34dc170bd4fd739f8288e4910293f3d67c7efd744bb188be722</code></td></tr>
@@ -128,7 +149,7 @@
           <tr><td>제품 후보 <code>777e506</code></td><td><a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39039119700" target="_blank" rel="noopener noreferrer">CI 39039119700</a></td><td><span class="result" data-state="fail">Web·PG·Ubuntu 성공 / Mac·Windows 실패</span></td></tr>
           <tr><td>공통 후보 <code>efae799</code></td><td><a href="https://github.com/csm-kr/local-agent-connector/actions/runs/39039124642" target="_blank" rel="noopener noreferrer">CI 39039124642</a></td><td><span class="result" data-state="fail">Mac·Ubuntu 성공 / Windows 실패</span></td></tr>
         </tbody></table></div>
-        <div class="notice"><strong>후보의 진단 보강과 실제 CI 통과는 구분합니다.</strong> 최초 OS 실패를 보존하고, 진단 자식이 살아 있거나 신원이 불명확하면 설치본·프로필 정리를 보류하는 가드를 보강했습니다. 초기 실패는 당시 기록으로 보존하며 최신 제품 Windows 성공을 위에 별도로 추가했습니다. 제품 Mac·공통 Windows의 실패는 완료로 표시하지 않습니다.</div>
+        <div class="notice"><strong>후보의 진단 보강과 실제 CI 통과는 구분합니다.</strong> 최초 OS 실패를 보존하고, 진단 자식이 살아 있거나 신원이 불명확하면 설치본·프로필 정리를 보류하는 가드를 보강했습니다. 초기 실패는 당시 기록으로 보존합니다. 후속 제품 9eeccee의 Mac·Windows와 공통 e5e6a612의 Windows 성공은 위에 소스별로 추가했으며 이전 실패의 정확한 원인을 소급 확정하지 않습니다.</div>
         <h3>Ubuntu 24.04 x64 · 실제 .deb 설치 8조건</h3>
         <p class="small">두 저장소의 영수증 모두 <code>passed=true</code>, <code>phase=completed</code>입니다. X11 가상 데스크톱에서 확인했으며, 아래 sandbox의 <code>0755</code>는 설치기가 선택한 값입니다. 과거 unpackaged CI의 수동 <code>4755</code> 준비와 혼동하지 않습니다.</p>
         <div class="table-wrap"><table><thead><tr><th>조건</th><th>확인한 범위</th></tr></thead><tbody>
@@ -156,10 +177,10 @@
       <section id="platforms">
         <h2>운영체제별 범위</h2>
         <div class="table-wrap"><table><thead><tr><th>환경</th><th>구현·산출물</th><th>실제로 확인한 것</th><th>남은 검증</th></tr></thead><tbody>
-          <tr><td>Windows x64</td><td>제품 NSIS·설치 OS URI</td><td><span class="result" data-state="pass">730ad8d 실제 설치·cold/warm·정상 종료·제거 PASS</span><p>코어 9개 SHA·번들 Node·루트 슬래시·가시 창/WM_CLOSE·같은 PID·IPC·프로필 정리·handler 없음 복구를 확인했습니다. 공통 cd2e108 Windows는 정상 닫기 뒤 known PID 신원 불확실로 실패·보존 상태입니다.</p></td><td>제품·공통 결과를 구분합니다. unsigned QA artifact이며 서명 완료·실브라우저 승인·인증 페어링·실사용자 재부팅/업데이트·운영 연결은 미검증.</td></tr>
-          <tr><td>제품 macOS arm64 / x64</td><td>DMG·이전 unpackaged 암호화 기록</td><td><span class="result" data-state="fail">730ad8d Mac SIGTRAP 실패</span><p>ASCII 실행 파일명 분리·logging 보강 후에도 실패했으며 원인은 미확정입니다. 설치 앱의 OS URI 완료를 주장하지 않습니다.</p></td><td>Intel x64는 빌드만. 제품 URI·실제 Finder/브라우저·Developer ID·공증·재부팅/업데이트·운영 검증은 남아 있습니다.</td></tr>
-          <tr><td>공통 macOS arm64</td><td>Research Notebook · DMG 복사본</td><td><span class="result" data-state="pass">cd2e108 설치·LaunchServices 9 checks PASS</span><p>코어 10개·Node 24.22.0·cold/warm·정상 IPC 두 회차·재기동·앱/프로필/mount/handler 정리를 확인했습니다.</p></td><td>ad hoc 서명. strict signature exit1/valid=false/reason unknown, Gatekeeper 미통과·quarantine 없음. 사용자 다운로드 승인·Finder·Developer ID·공증·Intel native·업데이트 미검증.</td></tr>
-          <tr><td>Ubuntu · GUI x64</td><td>.deb·런처·URI · AppImage 제외</td><td><span class="result" data-state="pass">제품 730ad8d·공통 cd2e108 각 설치 8/8 PASS</span><p>X11에서 실제 설치·코어 9/10개 SHA·번들 Node·0755 sandbox/AppArmor·cold 제목 URI 토큰·가시 창/EWMH·CDP native PID/Seccomp2/NoNewPrivs1·warm·IPC·purge/프로필/handler 정리를 확인했습니다.</p></td><td>GUI·활성 키링·CJK 글꼴·정상 sandbox 전제. 원래 argv 미증명. 실사용자 승인·인증 페어링·Wayland·재부팅/업데이트·정식 배포 미검증.</td></tr>
+          <tr><td>Windows x64</td><td>제품·공통 NSIS·설치 OS URI</td><td><span class="result" data-state="pass">제품 9eeccee · 공통 e5e6a612 설치·cold/warm·정상 종료·제거 PASS</span><p>코어 9/10개 SHA·번들 Node·루트 슬래시·가시 창/WM_CLOSE·같은 PID·IPC·프로필 정리·handler 없음 복구를 확인했습니다. 원문 exact=false는 유지합니다.</p></td><td>서로 다른 소스·설치본의 결과입니다. unsigned QA artifact이며 서명·실브라우저 승인·인증 페어링·실사용자 재부팅/업데이트·운영 연결은 미검증.</td></tr>
+          <tr><td>제품 macOS arm64 / x64</td><td>DMG·설치 OS URI</td><td><span class="result" data-state="pass">9eeccee arm64 실제 설치 9 checks PASS</span><p>ASCII 번들·Helper 4개와 한글 표시/런타임/새 프로필 위치, cold/warm·정상 IPC 두 회차·전체 정리를 확인했습니다. 이전 730ad8d SIGTRAP은 당시 기록으로 보존합니다.</p></td><td>Intel x64는 DMG 빌드만. 기존 기기 키 이전·사용자 Finder/브라우저 승인·Developer ID·공증·Gatekeeper·재부팅/업데이트·운영은 미검증.</td></tr>
+          <tr><td>공통 macOS arm64</td><td>Research Notebook · DMG 복사본</td><td><span class="result" data-state="pass">e5e6a612 설치·LaunchServices 9 checks PASS</span><p>코어 10개·Node 24.22.0·cold/warm·정상 IPC 두 회차·재기동·앱/프로필/mount/handler 정리를 확인했습니다.</p></td><td>ad hoc 서명. strict signature exit1/valid=false/reason unknown, Gatekeeper 미통과·quarantine 없음. 사용자 다운로드 승인·Finder·Developer ID·공증·Intel native·업데이트 미검증.</td></tr>
+          <tr><td>Ubuntu · GUI x64</td><td>.deb·런처·URI · AppImage 제외</td><td><span class="result" data-state="pass">제품 9eeccee · 공통 e5e6a612 각 설치 8/8 PASS</span><p>X11에서 실제 설치·코어 9/10개 SHA·번들 Node·0755 sandbox/AppArmor·cold 제목 URI 토큰·가시 창/EWMH·CDP native PID/Seccomp2/NoNewPrivs1·warm·IPC·purge/프로필/handler 정리를 확인했습니다.</p></td><td>GUI·활성 키링·CJK 글꼴·정상 sandbox 전제. 원래 argv·cold renderer 상태는 미증명. 실사용자 승인·인증 페어링·Wayland·재부팅/업데이트·정식 배포 미검증.</td></tr>
           <tr><td>휴대폰 · GUI 없는 서버</td><td>웹의 작은 화면 배치 검증만 수행</td><td>모바일 다크 모달</td><td>현재 PC용 데스크톱 연결기의 실행 대상이 아닙니다.</td></tr>
         </tbody></table></div>
         <p class="small">현재 실증 버전: 개발 Node 24.15.0 · 설치본 번들 Node 24.22.0 / Electron 44.9.0 · Codex CLI 0.163.0 · Claude Code 2.1.301. 설치 경로는 OS가 관리하며, 웹은 물리적인 실행 파일 경로를 갖지 않습니다.</p>
@@ -189,7 +210,7 @@
         <div class="notice"><strong>phase 13 구현·회귀 검증 완료, 운영 반영 대기</strong><br>제품 소스 <code>3f16685</code> 이후 <a href="https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39034761673">CI 39034761673</a>에서 웹 946개·별도 PostgreSQL 13개·Chromium 8개·HTTP 쿠키 유실 회귀와 3OS native·패키징의 5 jobs가 통과했습니다. 합성 2쪽 PDF의 실제 Codex 검증은 출력 형식 실패 2회 후 명시한 스키마를 보강해 1회 성공했습니다. 실제 논문 전송·API fallback·운영 DB 변경은 수행하지 않았습니다.</div>
         <p class="small">분석은 두 관점과 공통 Figure를 검증해 저장하며, 재분석 중에도 이전 결과와 팀 노트를 유지합니다. 채팅에는 선택한 팀 논문의 본문과 완료된 대화만 전달하고, 팀·소유자·웹 세션과 작업 취소를 서버에서 검사합니다. 모델은 자동 선택하지 않습니다.</p>
         <p><a class="tool" href="local-ai-research-chat-2026-10-17.html">실제 화면이 포함된 AI 분석·채팅 HTML 보고서 열기</a></p>
-        <p class="small">이 보고서 앞부분의 웹 852개·PostgreSQL 8개 결과는 연결기 기준 <code>d54a1fd</code>의 과거 기록입니다. 위 946개·13개는 후속 기능의 근거이며 최신 730ad8d에서도 통과했습니다. <a href="#phase14">phase14</a>는 최신 제품 Windows·제품/공통 Ubuntu·공통 Mac의 설치 검증 성공과 제품 Mac·공통 Windows 실패를 구분합니다. 서명·공증·운영 SQL과 실제 운영 파일럿은 별도로 남아 있습니다.</p>
+        <p class="small">이 보고서 앞부분의 웹 852개·PostgreSQL 8개 결과는 연결기 기준 <code>d54a1fd</code>의 과거 기록입니다. 위 946개·13개는 후속 기능의 근거이며 최신 730ad8d에서도 통과했습니다. <a href="#phase14">phase14</a>는 제품 9eeccee의 5 jobs·공통 e5e6a612의 3 OS 성공과 이전 소스의 실패 기록을 구분합니다. 서명·공증·운영 SQL과 실제 운영 파일럿은 별도로 남아 있습니다.</p>
       </section>
 
       <section id="release">
@@ -198,7 +219,7 @@
         <div class="table-wrap"><table><thead><tr><th>항목</th><th>상태</th><th>완료 조건</th></tr></thead><tbody>
           <tr><td>운영 웹·DB 적용</td><td><span data-evidence="production" class="result"></span></td><td>운영 스키마 적용·서버 설정·실제 HTTPS 웹에서 연결·로그아웃 회수 검증. 소비자 조사 시 운영 API 404.</td></tr>
           <tr><td>설치 파일 배포</td><td><span data-evidence="downloads" class="result"></span></td><td>검증한 파일 게시·서명 상태·OS별 다운로드 manifest 설정. 미서명 설치 회귀와 CI 빌드는 완료됐으나 정식 게시·운영 GUI 콜백은 미검증.</td></tr>
-          <tr><td>phase14 설치 · OS URI</td><td><span class="result" data-state="pending">제품 Mac·공통 Windows 미완료</span></td><td>제품 Windows 설치·cold/warm·정상 종료·제거와 제품/공통 Ubuntu 8조건, 공통 Mac 9 checks는 통과했습니다. 제품 Mac SIGTRAP·공통 Windows known PID 관측 불확실을 해결하고 새 CI로 확인해야 합니다.</td></tr>
+          <tr><td>phase14 설치 · OS URI</td><td><span class="result" data-state="pass">제품 5 jobs · 공통 3 OS CI 성공</span></td><td>제품 9eeccee와 공통 e5e6a612에서 각 Windows 실제 설치·cold/warm·정상 종료·제거, Ubuntu 8조건, Mac arm64 9 checks를 통과했습니다. 운영·서명·실사용자 승인·재부팅/업데이트는 별도 gate입니다.</td></tr>
           <tr><td>최종 사용자 설치 · 업데이트</td><td><span class="result" data-state="pending">정식 배포 미검증</span></td><td>게시자 서명·Mac Developer ID/공증·quarantine/Gatekeeper·실제 브라우저 승인·운영 인증 페어링·재부팅/업데이트·실사용자 GUI를 확인해야 합니다. Ubuntu Wayland와 Intel Mac native는 미검증이며 AppImage 제외를 유지합니다.</td></tr>
           <tr><td>공통 repo · UI/UX 우선 스킬</td><td><span data-evidence="extraction" class="result"></span></td><td>분리·두 번째 호스트 Windows·소비자 설계와 공통 3OS CI 검증 완료. 새 호스트의 운영 접합·실제 배포는 별도로 확인.</td></tr>
           <tr><td>분석 API 대체·채팅</td><td><span class="result" data-state="pending">구현·CI 완료 / 운영 대기</span></td><td>논문 분석과 개인 AI 채팅을 구현하고 웹·DB·브라우저 회귀를 통과했습니다. 운영 SQL 검토·반영과 실제 운영 파일럿은 남아 있습니다.</td></tr>
@@ -372,6 +393,21 @@
         "macos": "success",
         "windows": "failure"
       }
+    },
+    {
+      "repository": "haparkchopaeng-workspace",
+      "sourceCommit": "9eeccee5aa75ed4ef3c14ae9cd95344a49134ef2",
+      "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763",
+      "state": "completed",
+      "conclusion": "success",
+      "resultVerified": true,
+      "jobs": {
+        "web": "success",
+        "postgres": "success",
+        "windows": "success",
+        "linux": "success",
+        "macos": "success"
+      }
     }
   ],
   "limits": {
@@ -393,26 +429,47 @@
   "latest": {
     "updatedAt": "2026-10-17",
     "product": {
-      "sourceCommit": "730ad8d0ee418b623634288636e44a47fe8e4331",
-      "workflowMergeCommit": "c926f9965458c089a2b38b4d0c4ceda631aea54c",
-      "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640",
+      "sourceCommit": "9eeccee5aa75ed4ef3c14ae9cd95344a49134ef2",
+      "workflowMergeCommit": "a4aef36f072196d06a69531b2ca56cd9a0033a55",
+      "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39042209763",
       "status": "completed",
-      "conclusion": "failure",
+      "conclusion": "success",
       "jobs": {
         "web": "success",
         "postgres": "success",
         "windows": "success",
         "linux": "success",
-        "macos": "failure"
+        "macos": "success"
+      },
+      "separateLocalBuilderRegression": {
+        "pureTestsPassed": 137,
+        "builderImplementationTestsPassed": 5,
+        "syntheticBuilderTestLaunchesApp": false
+      },
+      "web": {
+        "job": "117423809238",
+        "suitesPassed": 120,
+        "testsPassed": 946,
+        "chromiumPassed": 8,
+        "chromiumSeconds": 24.4,
+        "httpWireStep": "success",
+        "lintExitCode": 0,
+        "buildExitCode": 0,
+        "harnessGuards": "success"
+      },
+      "postgres": {
+        "job": "117423809162",
+        "version": 16,
+        "testsPassed": 13,
+        "schemaDifference": false
       },
       "windows": {
-        "job": "117420497431",
+        "job": "117423809100",
         "installedUriChecksPassed": 5,
         "installedCoreCount": 9,
-        "installerBytes": 111584107,
-        "installerSha256": "3e2b6669cb543d242f0f8a20c4724c96e6e048e95fc9bbbe5fbd67dd54297289",
+        "installerBytes": 111584104,
+        "installerSha256": "86b2ff18f8f949d94ed23053e1c6c6715f5cece2587eef983cf3d3bea78d1499",
         "unsignedQaArtifact": true,
-        "authenticodeStatusMeasured": false,
         "cold": {
           "rawExactMatch": false,
           "normalizedRootSlashObserved": true,
@@ -420,115 +477,161 @@
           "normalWindowCloseObserved": true
         },
         "warmSameMainPid": true,
-        "warmDistinctParserError": true,
         "normalIpcQuit": true,
         "cleanup": {
           "ownedProcessesStopped": true,
           "freshProfileRemoved": true,
-          "currentTokenOwner": true,
-          "currentUserOwner": false,
-          "administratorsOwner": true,
           "uninstalled": true,
           "protocolRestoredToAbsent": true,
-          "installationDirectoryRemoval": "command-success-only",
-          "postDeleteExistsSeparatelyMeasured": false
+          "errors": []
         }
       },
-      "linux": {
-        "job": "117420497268",
-        "checksPassed": 8,
-        "installedCoreCount": 9,
-        "packageSha256": "85ede6d95ea984427dcd27a12e1f78af45b44e67a8f1156a702b14b39caff1dd",
-        "bundledNode": "24.22.0",
-        "installerSandboxMode": "0755",
-        "appArmorLoaded": true,
-        "qaModeChanged": false,
-        "allRecordedCleanupPassed": true
-      },
       "macos": {
-        "job": "117420497541",
-        "state": "failure",
-        "observedSignal": "SIGTRAP",
-        "causeConfirmed": false,
-        "asciiExecutableAndLoggingResolved": false,
-        "installedUriCompleted": false
-      },
-      "web": {
-        "job": "117420497398",
-        "suitesPassed": 120,
-        "suitesSkipped": 1,
-        "testsPassed": 946,
-        "postgresTestsSkipped": 13,
-        "pytestPassed": 60,
-        "lintExitCode": 0,
-        "buildExitCode": 0,
-        "chromiumPassed": 8,
-        "chromiumSeconds": 30.7,
-        "httpWireStep": "success"
-      },
-      "postgres": {
-        "job": "117420497435",
-        "testsPassed": 13
-      }
-    },
-    "common": {
-      "sourceCommit": "cd2e1082a4801e86d5facd4f266bcb79ff768544",
-      "ci": "https://github.com/csm-kr/local-agent-connector/actions/runs/39041214720",
-      "status": "completed",
-      "conclusion": "failure",
-      "configuration": "Research Notebook",
-      "jobs": {
-        "macos": "success",
-        "linux": "success",
-        "windows": "failure"
-      },
-      "macos": {
-        "job": "117420928177",
+        "job": "117423809065",
+        "architecture": "arm64",
         "checksPassed": 9,
-        "installedCoreCount": 10,
-        "dmgBytes": 128087784,
-        "dmgSha256": "2974747fd5c53b34dc170bd4fd739f8288e4910293f3d67c7efd744bb188be722",
-        "bundledNode": "24.22.0",
+        "installedCoreCount": 9,
+        "dmgBytes": 128089217,
+        "dmgSha256": "1e932a93fa2e8bbbab6aa48aba574ff0725572c53af8449fd827c47e993572d9",
+        "macInternalName": "hapark-connector",
+        "macBundleName": "hapark-connector",
+        "macDisplayName": "하박조팽 연결기",
+        "runtimeProductName": "하박조팽 연결기",
+        "asciiHelperCount": 4,
+        "runtimePackageNamePreserved": true,
+        "profile": {
+          "expectedInitiallyAbsent": true,
+          "runtimeProfileCreated": true,
+          "alternateInitiallyAbsent": true,
+          "alternateCreated": false,
+          "credentialMigrationVerified": false
+        },
+        "warmSameMainPid": true,
+        "normalIpcQuitSequences": 2,
         "distribution": {
           "adHoc": true,
           "developerId": false,
           "gatekeeperAccepted": false,
-          "quarantinePresent": false,
           "quarantineModified": false,
+          "notarizationVerified": false,
           "strictVerification": {
             "exitCode": 1,
             "valid": false,
             "reason": "unknown"
           }
         },
-        "allRecordedCleanupPassed": true
+        "cleanup": {
+          "processesStopped": true,
+          "protocolUnregistered": true,
+          "applicationRemoved": true,
+          "profileRemoved": true,
+          "mountDetached": true,
+          "ownedTempRemoved": true,
+          "directChildExitObserved": true,
+          "reportedMainExitObserved": true,
+          "errors": []
+        },
+        "x64BuildOnly": {
+          "dmgBytes": 131861518,
+          "dmgSha256": "f9555f9d6be4babe944944d16860ec88d42f9210dc45e73dc5177a41e4851f88",
+          "nativeExecutionVerified": false
+        },
+        "earlierSigtrapCauseConfirmed": false
       },
       "linux": {
-        "job": "117420928350",
+        "job": "117423808860",
+        "checksPassed": 8,
+        "installedCoreCount": 9,
+        "packageSha256": "42a5b76906854f2a22fd322c5865b98aeb3362c56c4ba633dcd4d9734d8c44dc",
+        "originalArgvProven": false,
+        "coldUriEvidence": "process-title-token",
+        "coldRendererObserved": false,
+        "allRecordedCleanupPassed": true
+      }
+    },
+    "common": {
+      "sourceCommit": "e5e6a61246acbb91adb6a38ecf4720d9ae4c0d63",
+      "ci": "https://github.com/csm-kr/local-agent-connector/actions/runs/39041845705",
+      "status": "completed",
+      "conclusion": "success",
+      "configuration": "Research Notebook",
+      "jobs": {
+        "windows": "success",
+        "macos": "success",
+        "linux": "success"
+      },
+      "windows": {
+        "job": "117422756321",
+        "preflightChecksPassed": 2,
+        "installedUriChecksPassed": 5,
+        "installedCoreCount": 10,
+        "installerBytes": 110619701,
+        "installerSha256": "de9b6abbdf398b4e37fa47f08e659a599eb75791e5244c6077ec8fb04986c99cd",
+        "unsignedQaArtifact": true,
+        "unknownPidSampleObserved": null,
+        "cold": {
+          "rawExactMatch": false,
+          "normalizedRootSlashObserved": true,
+          "visibleWindowObserved": true,
+          "normalWindowCloseObserved": true
+        },
+        "warmSameMainPid": true,
+        "singleMain": true,
+        "normalIpcQuit": true,
+        "cleanup": {
+          "ownedProcessesStopped": true,
+          "freshProfileRemoved": true,
+          "profileParentRemoved": true,
+          "parentCurrentTokenDefaultOwnerMatched": true,
+          "uninstalled": true,
+          "protocolRestoredToAbsent": true,
+          "errors": []
+        }
+      },
+      "macos": {
+        "job": "117422756115",
+        "checksPassed": 9,
+        "installedCoreCount": 10,
+        "bundledNode": "24.22.0",
+        "dmgBytes": 128087826,
+        "dmgSha256": "2b7bb5232d7399e18875db42659af70db406ce42ec51f95c8d243f14644dd725",
+        "normalIpcQuitSequences": 2,
+        "distribution": {
+          "adHoc": true,
+          "developerId": false,
+          "gatekeeperAccepted": false,
+          "quarantineModified": false,
+          "notarizationVerified": false,
+          "strictVerification": {
+            "exitCode": 1,
+            "valid": false,
+            "reason": "unknown"
+          },
+          "quarantinePresent": false
+        },
+        "cleanup": {
+          "processesStopped": true,
+          "protocolUnregistered": true,
+          "applicationRemoved": true,
+          "profileRemoved": true,
+          "mountDetached": true,
+          "ownedTempRemoved": true,
+          "directChildExitObserved": true,
+          "reportedMainExitObserved": true,
+          "errors": []
+        }
+      },
+      "linux": {
+        "job": "117422756303",
         "checksPassed": 8,
         "installedCoreCount": 10,
-        "packageSha256": "6ec455d6c2ce4dedfca2f2f9c7a7ba3cf52109fe593f6bad7812d115d8b460126",
+        "packageSha256": "ead1f52044f5bda3a7d0812710c0ba361316aa63961803cb21bcf780cde5cc0b",
         "bundledNode": "24.22.0",
         "installerSandboxMode": "0755",
         "appArmorLoaded": true,
         "qaModeChanged": false,
+        "originalArgvProven": false,
         "allRecordedCleanupPassed": true
-      },
-      "windows": {
-        "job": "117420928359",
-        "state": "failure",
-        "phase": "windows_cold_normal_close",
-        "code": "PROCESS_OBSERVATION_UNAVAILABLE",
-        "actualMissingIdentityFieldsMeasured": false,
-        "installedCoreCount": 10,
-        "coldRootSlashAndVisibleWindowPassed": true,
-        "warmReached": false,
-        "normalIpcReached": false,
-        "cleanupDeferred": true,
-        "profileRemovalAttempted": false,
-        "uninstalled": false,
-        "installerBytes": 110619701,
-        "installerSha256": "dd8e3e5d52b7fe0d30b4401eca286aee294b24049a2ecec63cc98b3f046df61c2"
       }
     },
     "limits": {
@@ -540,8 +643,176 @@
       "realUserRebootAndUpdateVerified": false,
       "macX64NativeVerified": false,
       "waylandVerified": false
+    },
+    "localWindowsArtifact": {
+      "sourceCommit": "9eeccee5aa75ed4ef3c14ae9cd95344a49134ef2",
+      "relativeHref": "../../connector/dist/hapark-connector-0.1.0-win-x64-9eeccee-qa.exe",
+      "installerBytes": 111584080,
+      "installerSha256": "671ca77ec8b003d8ecd5cfc1cba0d671f3fd8bf979f6d6dc617b2cfc297473f9",
+      "authenticode": "NotSigned",
+      "asarSourceFilesMatched": 12,
+      "coreFilesMatched": 9,
+      "nativeInstallations": 0,
+      "appLaunches": 0,
+      "inferenceCalls": 0,
+      "productionDownload": false,
+      "productionDeploymentVerified": false
     }
-  }
+  },
+  "latestHistory": [
+    {
+      "updatedAt": "2026-10-17",
+      "product": {
+        "sourceCommit": "730ad8d0ee418b623634288636e44a47fe8e4331",
+        "workflowMergeCommit": "c926f9965458c089a2b38b4d0c4ceda631aea54c",
+        "ci": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39041064640",
+        "status": "completed",
+        "conclusion": "failure",
+        "jobs": {
+          "web": "success",
+          "postgres": "success",
+          "windows": "success",
+          "linux": "success",
+          "macos": "failure"
+        },
+        "windows": {
+          "job": "117420497431",
+          "installedUriChecksPassed": 5,
+          "installedCoreCount": 9,
+          "installerBytes": 111584107,
+          "installerSha256": "3e2b6669cb543d242f0f8a20c4724c96e6e048e95fc9bbbe5fbd67dd54297289",
+          "unsignedQaArtifact": true,
+          "authenticodeStatusMeasured": false,
+          "cold": {
+            "rawExactMatch": false,
+            "normalizedRootSlashObserved": true,
+            "visibleWindowObserved": true,
+            "normalWindowCloseObserved": true
+          },
+          "warmSameMainPid": true,
+          "warmDistinctParserError": true,
+          "normalIpcQuit": true,
+          "cleanup": {
+            "ownedProcessesStopped": true,
+            "freshProfileRemoved": true,
+            "currentTokenOwner": true,
+            "currentUserOwner": false,
+            "administratorsOwner": true,
+            "uninstalled": true,
+            "protocolRestoredToAbsent": true,
+            "installationDirectoryRemoval": "command-success-only",
+            "postDeleteExistsSeparatelyMeasured": false
+          }
+        },
+        "linux": {
+          "job": "117420497268",
+          "checksPassed": 8,
+          "installedCoreCount": 9,
+          "packageSha256": "85ede6d95ea984427dcd27a12e1f78af45b44e67a8f1156a702b14b39caff1dd",
+          "bundledNode": "24.22.0",
+          "installerSandboxMode": "0755",
+          "appArmorLoaded": true,
+          "qaModeChanged": false,
+          "allRecordedCleanupPassed": true
+        },
+        "macos": {
+          "job": "117420497541",
+          "state": "failure",
+          "observedSignal": "SIGTRAP",
+          "causeConfirmed": false,
+          "asciiExecutableAndLoggingResolved": false,
+          "installedUriCompleted": false
+        },
+        "web": {
+          "job": "117420497398",
+          "suitesPassed": 120,
+          "suitesSkipped": 1,
+          "testsPassed": 946,
+          "postgresTestsSkipped": 13,
+          "pytestPassed": 60,
+          "lintExitCode": 0,
+          "buildExitCode": 0,
+          "chromiumPassed": 8,
+          "chromiumSeconds": 30.7,
+          "httpWireStep": "success"
+        },
+        "postgres": {
+          "job": "117420497435",
+          "testsPassed": 13
+        }
+      },
+      "common": {
+        "sourceCommit": "cd2e1082a4801e86d5facd4f266bcb79ff768544",
+        "ci": "https://github.com/csm-kr/local-agent-connector/actions/runs/39041214720",
+        "status": "completed",
+        "conclusion": "failure",
+        "configuration": "Research Notebook",
+        "jobs": {
+          "macos": "success",
+          "linux": "success",
+          "windows": "failure"
+        },
+        "macos": {
+          "job": "117420928177",
+          "checksPassed": 9,
+          "installedCoreCount": 10,
+          "dmgBytes": 128087784,
+          "dmgSha256": "2974747fd5c53b34dc170bd4fd739f8288e4910293f3d67c7efd744bb188be722",
+          "bundledNode": "24.22.0",
+          "distribution": {
+            "adHoc": true,
+            "developerId": false,
+            "gatekeeperAccepted": false,
+            "quarantinePresent": false,
+            "quarantineModified": false,
+            "strictVerification": {
+              "exitCode": 1,
+              "valid": false,
+              "reason": "unknown"
+            }
+          },
+          "allRecordedCleanupPassed": true
+        },
+        "linux": {
+          "job": "117420928350",
+          "checksPassed": 8,
+          "installedCoreCount": 10,
+          "packageSha256": "6ec455d6c2ce4dedfca2f2f9c7a7ba3cf52109fe593f6bad7812d115d8b460126",
+          "bundledNode": "24.22.0",
+          "installerSandboxMode": "0755",
+          "appArmorLoaded": true,
+          "qaModeChanged": false,
+          "allRecordedCleanupPassed": true
+        },
+        "windows": {
+          "job": "117420928359",
+          "state": "failure",
+          "phase": "windows_cold_normal_close",
+          "code": "PROCESS_OBSERVATION_UNAVAILABLE",
+          "actualMissingIdentityFieldsMeasured": false,
+          "installedCoreCount": 10,
+          "coldRootSlashAndVisibleWindowPassed": true,
+          "warmReached": false,
+          "normalIpcReached": false,
+          "cleanupDeferred": true,
+          "profileRemovalAttempted": false,
+          "uninstalled": false,
+          "installerBytes": 110619701,
+          "installerSha256": "dd8e3e5d52b7fe0d30b4401eca286aee294b24049a2ecec63cc98b3f046df61c2"
+        }
+      },
+      "limits": {
+        "inferenceCalls": 0,
+        "mainProcessNetworkIndependentlyMeasured": false,
+        "publisherSigningVerified": false,
+        "productionVerified": false,
+        "realBrowserApprovalVerified": false,
+        "realUserRebootAndUpdateVerified": false,
+        "macX64NativeVerified": false,
+        "waylandVerified": false
+      }
+    }
+  ]
 }
   </script>
   <script id="capture-evidence" type="application/json">
