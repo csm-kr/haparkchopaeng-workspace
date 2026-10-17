@@ -1,13 +1,16 @@
 /** Installed DMG smoke for a disposable macOS runner; no product QA switches. */
 import assert from 'node:assert/strict';
-import { lstat, mkdir, readdir, realpath, rm, rmdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { lstat, mkdir, readFile, readdir, realpath, rm, rmdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import {
-  run, until, reserveDebugPort, connectInstalledApp, fileHash,
+  run, until, reserveDebugPort, connectInstalledApp, fileHash, matchesInstalledRendererUrl,
   verifyInstalledCore, createOwnedDirectory,
 } from './installed-smoke-support.mjs';
 import { assertMacPathInside, canonicalMacPath, classifyOwnedMacProcess, resolveMacProcessIdentity, sameMacPath } from './installed-macos-identity.mjs';
+import { classifyMacDirectLaunchOutput, classifyMacSignatureVerification, isMacInstalledCleanupSafe, mayRunMacDirectLaunchDiagnostic,
+  selectOwnedMacCrashDiagnostic } from './installed-macos-diagnostics.mjs';
 
 // NSWorkspace delivers an actual open-url AppleEvent, including on a cold launch.
 // Supplying the URL only in --args would test argv rather than that OS boundary.
@@ -26,7 +29,9 @@ func details(_ application: NSRunningApplication) -> [String: Any] {
   return ["pid": Int(application.processIdentifier),
           "path": application.bundleURL?.resolvingSymlinksInPath().path ?? "",
           "executable": application.executableURL?.resolvingSymlinksInPath().path ?? "",
-          "started": application.launchDate?.timeIntervalSince1970 ?? 0]
+          "started": application.launchDate?.timeIntervalSince1970 ?? 0,
+          "terminated": application.isTerminated,
+          "finishedLaunching": application.isFinishedLaunching]
 }
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard arguments.count >= 2 else { exit(2) }
@@ -116,6 +121,8 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   const warmUri = `${scheme}://connect?extra=1`;
   const lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
   let helperDirectory, mountDirectory, mountPoint, installDirectory, installedApp, userData, resources, profileContainer, profileRoot;
+  let installedExecutable, crashBaseline, diagnosticChildRecord = null;
+  const diagnosticDirectory = join(homedir(), 'Library', 'Logs', 'DiagnosticReports');
   let profileContainerAbsent = false;
   let mounted = false, registered = false, profileAbsent = false, swiftReady = false, connection, failure;
   const owned = new Map();
@@ -129,6 +136,71 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   };
   const plist = async (file, key, format = 'raw') => (await run('/usr/bin/plutil', ['-extract', key, format, '-o', '-', file])).stdout.trim();
   const identityDiagnostics = metadata.processIdentity = { attempts: 0, rejected: {}, recent: [] };
+
+  async function snapshotDiagnosticReports() {
+    try {
+      if (!(await exists(diagnosticDirectory))) return { available: false, reason: 'absent',
+        capturedAt: Date.now(), names: new Set() };
+      const stat = await lstat(diagnosticDirectory);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) return { available: false, reason: 'not_regular_directory' };
+      const directory = await canonicalMacPath(diagnosticDirectory);
+      await assertMacPathInside(directory, join(homedir(), 'Library', 'Logs'));
+      return { available: true, directory, capturedAt: Date.now(), names: new Set(await readdir(directory)) };
+    } catch { return { available: false, reason: 'read_error' }; }
+  }
+
+  async function captureLaunchFailure() {
+    const crash = metadata.launchFailure = {
+      mainPids: result.mainPids.length, processes: [], profileCreated: false,
+      directoryAvailable: crashBaseline?.available === true,
+      directoryReason: crashBaseline?.available ? 'available' : (crashBaseline?.reason ?? 'not_observed'),
+      scannedFiles: 0, skippedFiles: 0, readErrors: 0, reportsMatched: 0, reports: [],
+      reportAbsenceDoesNotProveNormalExit: true,
+    };
+    for (const pid of result.mainPids.slice(-2)) {
+      const application = (await swift('identity', String(pid))).application;
+      let signalProbe = 'present';
+      try { process.kill(pid, 0); } catch (error) { signalProbe = error.code === 'ESRCH' ? 'missing' : 'unavailable'; }
+      crash.processes.push({ pid, applicationPresent: !!application,
+        terminated: typeof application?.terminated === 'boolean' ? application.terminated : null,
+        finishedLaunching: typeof application?.finishedLaunching === 'boolean' ? application.finishedLaunching : null,
+        signalProbe });
+    }
+    if (userData) {
+      crash.profileCreated = await exists(userData);
+      crash.preferencesPresent = await exists(join(userData, 'preferences.json'));
+      crash.deviceCredentialsPresent = await exists(join(userData, 'devices.enc.json'));
+    }
+    if (!crashBaseline || (!crashBaseline.available && crashBaseline.reason !== 'absent')
+      || !installedExecutable || result.mainPids.length === 0 || !(await exists(diagnosticDirectory))) return;
+    const stat = await lstat(diagnosticDirectory);
+    const currentDirectory = await canonicalMacPath(diagnosticDirectory);
+    await assertMacPathInside(currentDirectory, join(homedir(), 'Library', 'Logs'));
+    if (!stat.isDirectory() || stat.isSymbolicLink()
+      || (crashBaseline.available && !(await sameMacPath(currentDirectory, crashBaseline.directory)))) {
+      crash.directoryReason = 'directory_changed'; return;
+    }
+    crash.directoryAvailable = true;
+    crash.directoryReason = crashBaseline.available ? 'available' : 'created_after_launch';
+    const names = (await readdir(currentDirectory))
+      .filter(name => !crashBaseline.names.has(name) && /\.(?:ips|crash)$/.test(name));
+    crash.scanLimited = names.length > 30;
+    for (const name of names.slice(-30)) {
+      try {
+        const file = join(currentDirectory, name), entry = await lstat(file);
+        if (!entry.isFile() || entry.isSymbolicLink() || entry.uid !== process.getuid()
+          || entry.size > 2 * 1024 * 1024 || entry.mtimeMs < crashBaseline.capturedAt - 2_000) {
+          crash.skippedFiles += 1; continue;
+        }
+        crash.scannedFiles += 1;
+        const text = await readFile(file, 'utf8');
+        for (const pid of result.mainPids.slice(-2)) {
+          const report = selectOwnedMacCrashDiagnostic(text, { pid, appId, executable: installedExecutable });
+          if (report) { crash.reportsMatched += 1; if (crash.reports.length < 3) crash.reports.push({ pid, ...report }); break; }
+        }
+      } catch { crash.readErrors += 1; }
+    }
+  }
 
   async function processIdentity(pid, { main = false } = {}) {
     // lstart is ASCII and independent of executable spelling. NSRunningApplication
@@ -198,7 +270,95 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     }
   }
   async function allStopped() {
-    return (await Promise.all([...owned.values()].map(ownedProcessState))).every(state => state === 'gone');
+    return isMacInstalledCleanupSafe({
+      ownedStates: await Promise.all([...owned.values()].map(ownedProcessState)),
+      directChild: diagnosticChildRecord,
+    });
+  }
+  async function directLaunchDiagnostic() {
+    const diagnostic = metadata.directLaunch = { attempted: false, diagnosticOnly: true, originalOsFailurePreserved: true };
+    if (!installedExecutable || !installedApp || !result.mainPids.length) { diagnostic.skipped = 'no_installed_launch'; return; }
+    // Never overlap an unobservable or still-live OS launch. ESRCH proves the unadmitted PID is absent.
+    await captureRemainingProcesses();
+    const missingPids = [];
+    for (const pid of result.mainPids) {
+      try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') missingPids.push(pid); }
+    }
+    const running = (await swift('running', appId)).applications
+      .filter(value => comparablePath(value.path) === comparablePath(installedApp));
+    const ownedStates = await Promise.all([...owned.values()].map(ownedProcessState));
+    if (!mayRunMacDirectLaunchDiagnostic({ originalPids: result.mainPids, missingPids, ownedStates,
+      runningInstalledApplications: running.length })) { diagnostic.skipped = 'prior_processes_not_proven_gone'; return; }
+    const port = await reserveDebugPort();
+    const child = spawn(installedExecutable, [`--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1', coldUri],
+      { windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    const record = diagnosticChildRecord = { stdout: '', stderr: '', closed: false, code: null, signal: null };
+    child.stdout.on('data', value => { record.stdout = (record.stdout + value.toString()).slice(-32_000); });
+    child.stderr.on('data', value => { record.stderr = (record.stderr + value.toString()).slice(-32_000); });
+    child.once('error', () => { diagnostic.spawnFailed = true; });
+    child.once('close', (code, signal) => { record.closed = true; record.code = code; record.signal = signal; });
+    diagnostic.attempted = true; diagnostic.cdpConnected = false; diagnostic.sameParserErrorObserved = false;
+    diagnostic.cleanupSignalsSent = 0;
+    let client;
+    try {
+      if (Number.isSafeInteger(child.pid) && child.pid > 1) {
+        diagnostic.pid = child.pid;
+        let targetReady = false;
+        try {
+          await until(async () => {
+            if (record.closed) return true;
+            const identity = await processIdentity(child.pid, { main: true }) ?? await processIdentity(child.pid);
+            if (!identity) return false;
+            owned.set(child.pid, identity); diagnostic.ownedIdentityObserved = true;
+            try {
+              const listener = await run('/usr/sbin/lsof', ['-nP', '-a', '-p', String(child.pid), `-iTCP:${port}`, '-sTCP:LISTEN', '-Fpn'],
+                { allowFailure: true, timeout: 2000 });
+              const fields = listener.stdout.trim().split('\n');
+              const addresses = fields.filter(field => field.startsWith('n')).map(field => field.slice(1));
+              if (!fields.includes(`p${child.pid}`) || !addresses.length
+                || !addresses.every(value => value === `127.0.0.1:${port}` || value === `[::1]:${port}`)) return false;
+              const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(600) });
+              if (!response.ok) return false;
+              const targets = await response.json();
+              targetReady = Array.isArray(targets) && targets.some(value => value.type === 'page'
+                && matchesInstalledRendererUrl(value.url, join(resources, 'app.asar', 'renderer', 'index.html')));
+              return targetReady;
+            } catch { return false; }
+          }, 'bounded direct diagnostic startup', 5000);
+        } catch { diagnostic.startupObservationTimedOut = true; }
+        if (targetReady && !record.closed) {
+          client = await connectInstalledApp(port, join(resources, 'app.asar', 'renderer', 'index.html'));
+          diagnostic.cdpConnected = true;
+          const current = await client.state();
+          diagnostic.sameParserErrorObserved = current.stage === 'error'
+            && current.description === '등록된 앱의 연결 링크를 사용해 주세요.'
+            && current.attemptId === null && current.providers.length === 0;
+        }
+      }
+    } catch { diagnostic.observationFailed = true; }
+    finally {
+      // Snapshot before our shutdown so SIGTERM/SIGKILL are not misreported as an early application failure.
+      diagnostic.initialOutcome = classifyMacDirectLaunchOutput(record);
+      if (client) {
+        diagnostic.normalQuitRequested = true;
+        try { await client.quit(); } catch { diagnostic.normalQuitError = true; }
+        client.close();
+        try { await until(() => record.closed, 'direct diagnostic IPC exit', 3000); } catch {}
+      }
+      try {
+        await captureRemainingProcesses();
+        for (const signal of ['SIGTERM', 'SIGKILL']) {
+          if (record.closed && await allStopped()) break;
+          for (const identity of [...owned.values()].reverse()) if (await ownedProcessState(identity) === 'owned') {
+            process.kill(identity.pid, signal); diagnostic.cleanupSignalsSent += 1;
+          }
+          try { await until(async () => record.closed && await allStopped(), 'owned direct diagnostic cleanup', 3000); break; } catch {}
+        }
+        diagnostic.ownedProcessesStopped = record.closed && await allStopped();
+      } catch { diagnostic.cleanupObservationFailed = true; }
+      diagnostic.finalOutcome = classifyMacDirectLaunchOutput(record);
+      if (!record.closed) { child.unref(); child.stdout.unref?.(); child.stderr.unref?.(); }
+    }
   }
   async function captureRemainingProcesses() {
     if (!installedApp || !(await exists(installedApp))) return;
@@ -374,6 +534,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     const executableName = await plist(join(installedApp, 'Contents', 'Info.plist'), 'CFBundleExecutable');
     assert.equal(basename(executableName), executableName, 'Invalid bundle executable name.');
     const executable = join(installedApp, 'Contents', 'MacOS', executableName);
+    installedExecutable = executable;
     assert.ok((await lstat(executable)).isFile(), 'Installed executable is missing.');
     await assertMacPathInside(executable, installedApp);
     const bundledNode = JSON.parse((await run(executable, ['-e', 'process.stdout.write(JSON.stringify({node:process.versions.node,arch:process.arch}))'], { env: { ELECTRON_RUN_AS_NODE: '1' } })).stdout);
@@ -387,19 +548,24 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     // Assessment is evidence, not a substitute for Developer ID signing/notarization.
     evidence.phase = 'macos_distribution_assessment';
     const signature = await run('/usr/bin/codesign', ['-dv', '--verbose=2', installedApp], { allowFailure: true });
+    const signatureVerification = await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', installedApp], { allowFailure: true });
     const gatekeeper = await run('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose=2', installedApp], { allowFailure: true });
     const quarantine = await run('/usr/bin/xattr', ['-p', 'com.apple.quarantine', installedApp], { allowFailure: true });
     result.distribution = { signatureExitCode: signature.code,
       developerId: /Authority=Developer ID Application:/.test(signature.stderr),
       adHoc: /Signature=adhoc/.test(signature.stderr), gatekeeperAccepted: gatekeeper.code === 0,
       gatekeeperExitCode: gatekeeper.code, quarantinePresent: quarantine.code === 0,
-      quarantineModified: false, notarizationVerified: false };
+      quarantineModified: false, notarizationVerified: false,
+      strictVerification: classifyMacSignatureVerification(signatureVerification) };
 
     evidence.phase = 'macos_protocol_registration';
     registered = true; // Cleanup also unregisters a partially successful registration.
     await run(lsregister, ['-f', installedApp]);
     assert.equal(await handler(), comparablePath(installedApp), 'LaunchServices did not select the installed copied app.');
     checked('LaunchServices URI resolution selected the copied Applications bundle.');
+
+    // The hosted runner is fresh. Preserve a before-launch baseline, never publish reports themselves.
+    crashBaseline = await snapshotDiagnosticReports();
 
     const renderer = join(resources, 'app.asar', 'renderer', 'index.html');
     for (let sequence = 1; sequence <= 2; sequence += 1) {
@@ -411,6 +577,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       assert.equal(await sameMacPath(launched.path, installedApp), true, 'A source or translocated bundle was launched.');
       await assertMacPathInside(launched.executable, installedApp);
       result.mainPids.push(launched.pid);
+      (metadata.launchCallbacks ??= []).push({ pid: launched.pid,
+        terminated: typeof launched.terminated === 'boolean' ? launched.terminated : null,
+        finishedLaunching: typeof launched.finishedLaunching === 'boolean' ? launched.finishedLaunching : null });
       await captureProcesses(launched.pid);
       evidence.phase = sequence === 1 ? 'macos_cold_cdp_attach' : 'macos_restarted_cdp_attach';
       await until(async () => {
@@ -454,8 +623,14 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     failure = error;
     result.failureIdentity = { attempts: identityDiagnostics.attempts, rejected: { ...identityDiagnostics.rejected },
       recent: identityDiagnostics.recent.map(sample => ({ ...sample })) };
+    try { if (swiftReady) await captureLaunchFailure(); }
+    catch { metadata.launchFailureObservationFailed = true; }
+    try { if (swiftReady && /macos_(?:cold_uri_launch|cold_cdp_attach|restarted_cold_uri_launch|restarted_cdp_attach)$/.test(evidence.phase)) await directLaunchDiagnostic(); }
+    catch { metadata.directLaunchObservationFailed = true; }
   }
   finally {
+    cleanup.directChildExitObserved = diagnosticChildRecord === null || diagnosticChildRecord.closed === true;
+    if (!cleanup.directChildExitObserved) cleanup.removalDeferred = 'direct_child_exit_unconfirmed';
     async function clean(label, action) {
       try { await action(); }
       catch { cleanup.errors.push(label); }
@@ -482,7 +657,10 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
           try { await until(allStopped, 'owned installed macOS process cleanup', 5_000); break; } catch {}
         }
       }
-      assert.ok(await allStopped(), 'An owned installed process remains.');
+      cleanup.directChildExitObserved = diagnosticChildRecord === null || diagnosticChildRecord.closed === true;
+      if (!cleanup.directChildExitObserved) cleanup.removalDeferred = 'direct_child_exit_unconfirmed';
+      else delete cleanup.removalDeferred;
+      assert.ok(await allStopped(), 'An owned installed process or an unconfirmed direct child remains.');
       cleanup.processesStopped = true;
     });
     if (cleanup.processesStopped && registered) await clean('protocol-unregister', async () => {

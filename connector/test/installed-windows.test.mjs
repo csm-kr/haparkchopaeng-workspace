@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseLaunchUrl } from '../core/security.mjs';
+import { invokeWindowsNative } from '../scripts/ci-installed-windows.mjs';
 import {
   assertWindowsRunner, windowsSmokeLayout, assertOwnedWindowsInstallation, parseWindowsSmokeArguments,
   assertWindowsProcessIdentity, sameWindowsProcess, selectWindowsMain, assertWindowsRejectedState,
   assertFreshWindowsProfile, assertWindowsProtocolCommand, windowsSmokeUris,
   classifyWindowsKnownProcess,
+  windowsProcessObservation,
+  windowsProfileObservation,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from '../scripts/installed-windows-support.mjs';
 
@@ -20,6 +23,47 @@ const sid = 'S-1-5-21-111-222-333-1001';
 const startedAt = Date.parse('2026-10-17T12:00:00.000Z');
 const executable = `${installation}\\research-notebook-connector.exe`;
 const processRow = (overrides = {}) => ({ pid: 1234, executable, sid, createdAt: '2026-10-17T12:00:01.000Z', argv: [executable], ...overrides });
+
+test('native failures retain only an allowlisted operation, exit code and fixed stderr category', async () => {
+  const privateText = 'PRIVATE_ACCOUNT_PATH_AND_TOKEN';
+  const execute = async () => { throw Object.assign(new Error(privateText), { code: 'COMMAND_FAILED',
+    result: { code: 1, stdout: privateText, stderr: `Add-Type : CompilerErrors CS0001 ${privateText}` } }); };
+  await assert.rejects(invokeWindowsNative('context', {}, { execute }), error => {
+    assert.equal(error.code, 'WINDOWS_NATIVE_FAILED');
+    assert.deepEqual(error.nativeFailure, { operation: 'context', exitCode: 1, stderrCategory: 'POWERSHELL_COMPILE' });
+    assert.equal(JSON.stringify(error).includes(privateText), false);
+    assert.equal(error.message.includes(privateText), false);
+    return true;
+  });
+});
+
+test('invalid native JSON is diagnosed without exposing captured output', async () => {
+  const privateText = 'PRIVATE_ACCOUNT_PATH_AND_TOKEN';
+  await assert.rejects(invokeWindowsNative('context', {}, { execute: async () => ({ code: 0, stdout: privateText, stderr: '' }) }), error => {
+    assert.equal(error.code, 'WINDOWS_NATIVE_INVALID_JSON');
+    assert.deepEqual(error.nativeFailure, { operation: 'context', exitCode: 0, stderrCategory: 'NATIVE_INVALID_JSON' });
+    assert.equal(JSON.stringify(error).includes(privateText), false);
+    assert.equal(error.message.includes(privateText), false);
+    return true;
+  });
+});
+
+test('cold process diagnostics distinguish path matches, current-user mains and exact URI delivery without argv', () => {
+  const uri = windowsSmokeUris(layout()).cold;
+  const observation = { counts: { installedPathRows: 3, otherUserRows: 1 }, processes: [
+    processRow({ argv: [executable, uri] }),
+    processRow({ pid: 1235, argv: [executable, '--type=renderer'] }),
+  ] };
+  const summary = windowsProcessObservation(observation, { executable, uri });
+  assert.deepEqual(summary, { nativeCountsObserved: true, installedPathRows: 3, otherUserRows: 1, currentUserRows: 2, mainRows: 1, exactUriRows: 1 });
+  const otherUserOnly = windowsProcessObservation({ counts: { installedPathRows: 1, otherUserRows: 1 }, processes: [] }, { executable, uri });
+  assert.equal(otherUserOnly.installedPathRows, 1);
+  assert.equal(otherUserOnly.currentUserRows, 0);
+  assert.equal(otherUserOnly.mainRows, 0);
+  assert.equal(otherUserOnly.exactUriRows, 0);
+  const json = JSON.stringify(summary);
+  for (const privateValue of [sid, executable, uri, 'argv', 'pid']) assert.equal(json.includes(privateValue), false);
+});
 
 test('Windows URI execution requires the explicitly allowed disposable hosted runner before OS work', () => {
   assert.equal(assertWindowsRunner(env, { platform: 'win32', workspace }).runnerTemp, env.RUNNER_TEMP);
@@ -100,6 +144,21 @@ test('profile cleanup refuses prior, foreign, redirected and stale directories',
   assert.doesNotThrow(() => assertFreshWindowsProfile(fresh, ownership));
   assert.throws(() => assertFreshWindowsProfile(fresh, { ...ownership, existedBefore: true }));
   for (const override of [{ path: appData }, { path: `${profile}-other` }, { realPath: 'C:\\other' }, { directory: false }, { reparsePoint: true }, { sid: 'S-1-5-18' }, { createdAt: '2026-10-16T12:00:00.000Z' }]) assert.throws(() => assertFreshWindowsProfile({ ...fresh, ...override }, ownership));
+});
+
+test('profile diagnostics distinguish current-user and Administrators ownership without weakening cleanup', () => {
+  const appData = 'C:\\Users\\runner\\AppData\\Roaming';
+  const profile = `${appData}\\org.example.research-notebook\\production`;
+  const ownership = { appData, profile, sid, notBefore: startedAt, existedBefore: false };
+  const descriptor = { path: profile, exists: true, directory: true, reparsePoint: false, realPath: profile,
+    sid: 'S-1-5-32-544', createdAt: '2026-10-17T12:00:01.000Z' };
+  const summary = windowsProfileObservation(descriptor, ownership);
+  assert.deepEqual(summary, { exists: true, directory: true, reparsePoint: false, exactPathMatches: true,
+    realPathMatches: true, currentUserOwner: false, administratorsOwner: true, createdAfterStart: true });
+  assert.throws(() => assertFreshWindowsProfile(descriptor, ownership));
+  const current = windowsProfileObservation({ ...descriptor, sid }, ownership);
+  assert.equal(current.currentUserOwner, true); assert.equal(current.administratorsOwner, false);
+  for (const privateValue of [sid, descriptor.sid, profile, 'createdAt']) assert.equal(JSON.stringify(summary).includes(privateValue), false);
 });
 
 test('protocol command must contain only the quoted installed executable and URI placeholder', () => {

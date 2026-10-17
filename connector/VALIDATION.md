@@ -1,5 +1,7 @@
 # 연결기 검증 기록 — 2026-10-17
 
+> 기존 절은 각 실행 당시의 검증 기록을 보존한다. Ubuntu 실제 설치·전용 링크·제거의 추가 결과는 맨 아래 **phase14 Ubuntu 설치본 검증** 절을 따른다. 이전 절의 Ubuntu 설치 미검증 표기는 당시 범위이며, Windows·macOS 상태를 이번 Ubuntu 결과로 변경하지 않는다.
+
 ## 검증 범위
 
 로컬 Windows x64(build 10.0.26200), 개발 Node 24.15.0, Electron 44.9.0, electron-builder 26.15.3에서 확인했다. 별도로 [Actions 실행 39028900156](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156)에서 Windows x64·macOS 15 arm64·Ubuntu 24.04 x64의 실제 Electron과 OS 암호화 저장소를 검증했다. 인증 파일·로그인 토큰·이메일·조직 정보·CLI 응답 원문은 기록하지 않았다. 설치본, QA JSON/PNG, 환경별 manifest는 Git에서 제외하며 이 문서의 결과만 검토 근거로 남긴다.
@@ -134,3 +136,24 @@ macOS arm64의 CI Keychain 사용과 Ubuntu의 CI Secret Service 사용은 통�
 
 - [Ubuntu job 117378896196](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896196): AppImage 생성 뒤 .deb builder가 project homepage와 author.email 또는 명시적 maintainer 누락으로 실패했다. 설치된 electron-builder 26.15.3의 실제 `FpmTarget.computeFpmMetaInfoOptions` 호출에서도 동일 오류를 로컬 재현했다. `homepage=https://hapark.vercel.app`, `linux.maintainer=Hapark maintainers` 보강 후 같은 builder 경로가 URL과 maintainer를 반환해 통과했다. 개인 이메일을 추가하지 않았다. 이후 [Ubuntu job 117385267461](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156/job/117385267461)에서 실제 .deb 생성·artifact 게시까지 통과했다.
 - [Windows job 117378896415](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39026669946/job/117378896415): NSIS 생성은 성공했고 설치 회귀의 PowerShell에서 `Get-FileHash`를 찾지 못해 설치 전에 실패했다. SHA256을 .NET 파일 스트림으로 계산해 셸 모듈 의존을 없앴다. `Get-FileHash`를 사용하면 `CommandNotFoundException`이 나도록 한 환경에서 실제 설치·프로토콜·번들 Node·코어 해시·제거 원복을 전부 다시 통과했다. 해시는 앞선 독립 계산값과 같고 추론·GUI·브라우저 호출은 0회다. 이후 [Windows job 117385267654](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39028900156/job/117385267654)에서도 실제 설치·코어 9개·URI 등록·제거 원복을 통과했다.
+
+## phase14 Ubuntu 설치본 검증 — 추가 기록
+
+[실행 39038318920의 Ubuntu job 117412530581](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39038318920/job/117412530581)에서 Ubuntu 24.04 x64의 실제 `.deb` 설치·OS 전용 링크·제거 **8개 조건이 모두 통과**했다. 제품 소스 `ec594c2`를 검증한 CI merge 소스는 영수증의 `7d06c8bf571da8b1020bc99bf8d1c3c94bc2f302`다. 격리 X11 데스크톱의 `mode=installed-unsigned-package-and-os-uri`, `passed=true`, `phase=completed` 결과이며 운영 배포 기록이 아니다.
+
+패키지는 `hapark-connector-desktop` 버전 `0.1.0`, 아키텍처 `amd64`다. 이 실행에서 설치한 `.deb`의 SHA256은 `3a792f591ddf3eb99383859bb12f5b1a54ad437f55ec33ffdfef37917ba6289f`다. 이전 실행이나 Windows 설치본의 해시와 구분한다. 근거는 해당 job의 installed-package 영수증 `result.json`이며 검토용 로컬 사본은 `phase14-job-117412530581.json`이다.
+
+| 조건 | 실제 확인 결과 |
+| --- | --- |
+| 1. 설치 전 소유 경계 | 동명 패키지·설치 경로·프로필·기본 URI handler가 없는 전용 runner에서 시작 |
+| 2. `.deb` 설치·코어·샌드박스·기본 handler | 실제 설치 후 코어 **9개**의 이름·SHA256이 소스와 일치. 공식 sandbox는 설치기가 선택한 **root:root/0755**, 앱별 AppArmor profile은 실제 loaded. QA의 mode 변경이나 샌드박스 비활성화 없이 기본 전용 링크 해석 확인 |
+| 3. 번들 런타임 | 설치된 실행 파일로 번들 **Node 24.22.0 x64** 실행. 별도 Node 설치 불필요 |
+| 4. cold 전용 링크·창·정상 닫기 | `xdg-open`으로 설치된 실행 파일 시작, 정확한 합성 URI의 **process-title-token**·가시 창·스크린샷 확인. 원래 argv는 미증명(`originalArgvProven=false`). PID 소유를 재확인한 창에 `wmctrl` EWMH 닫기 요청 후 관측한 프로세스 소멸, opener 종료 코드 0·signal null 확인 |
+| 5. 직접 CDP·실행 중 샌드박스 | 별도 기동의 실제 설치 renderer에서 invalid URI 오류 확인. browser-target `SystemInfo.getProcessInfo`의 browser PID는 기동 PID와 같고 renderer native PID는 OS의 정확한 실행 파일·UID·부모 트리와 일치. renderer **Seccomp=2·NoNewPrivs=1** 확인 |
+| 6. warm 전용 링크 | 새 invalid URI가 같은 main PID에 도달해 구별되는 parser 오류 표시. 기기 자격 정보·최초 웹 복귀 설정 생성 없음 |
+| 7. 정상 IPC 종료 | 실제 앱의 quit IPC 뒤 직접 기동한 main 종료 코드 0·signal null, 관측한 소유 프로세스 소멸 확인 |
+| 8. 제거·원복 | 패키지 purge 뒤 설치 파일·프로토콜 handler·앱별 AppArmor 파일/커널 profile 제거. 새 프로필·소유 URI opener·임시 경로 정리 확인. `autoremove` 미사용 |
+
+실제 CLI·모델 추론은 **0회**(`cliInferenceRequested=false`)다. invalid URI가 기기 키 저장·API ACK·adapter 구성 전에 거절되는 제품 흐름으로 해당 작업을 배제했으며, main의 네트워크를 독립 캡처해 API 호출 0회를 측정한 것은 아니다. cold 실행은 renderer 상태를 CDP로 읽지 않았고, 직접 자식이 아닌 cold main의 종료 코드는 측정하지 않았다. 프로세스 소멸 근거는 관측한 소유 PID와 읽을 수 있는 `/proc` 범위이며 모든 sandbox 자손의 관측을 보장하지 않는다.
+
+이번 8조건은 인증 페어링·OS 키 암호화·실제 모델 응답을 검증하지 않는다. 앞선 unpackaged 암호화 13조건과 별개다. 정식 배포, 실사용자의 브라우저 승인·GUI 설치 경험, Wayland, 재부팅, 서명·업데이트는 미검증이며 Windows·macOS의 별도 진행 상태는 유지한다. AppImage는 계속 빌드·배포 대상에서 제외한다.

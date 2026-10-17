@@ -26,13 +26,21 @@
 | Windows x64 | 실제 OS 암호화·정상 재개·암호문 손상 후 새 번호 복구, NSIS 설치·프로토콜 등록·제거 | 게시자 서명, 최종 서명본으로 다운로드부터 재설치/업데이트까지 확인 |
 | macOS arm64 | CI의 실제 네이티브 암호화·재개·손상 복구, arm64 DMG 생성 | Developer ID 서명·공증, 최종 설치본과 실제 브라우저의 전용 링크·권한 창·업데이트/제거 |
 | macOS x64 | x64 DMG 생성 | x64 네이티브 실행·암호화·재개 및 최종 설치 흐름 |
-| Ubuntu GUI x64 | Ubuntu 24.04 CI에서 실제 Electron·Secret Service 암호화·정상 재개·손상 복구 13조건 통과, 한글 글꼴·가독성 확인, .deb 생성·내용 검사 | .deb 실제 설치·전용 링크·재실행·업데이트·제거·Wayland |
+| Ubuntu GUI x64 | 기존 암호화·재개·손상 복구 13조건과 별도로, phase14에서 실제 .deb 설치·전용 링크 cold/warm 실행·샌드박스·정상 종료·제거 8조건 통과 | 최종 배포본으로 실제 사용자 브라우저 승인·인증 페어링·GUI 설치 경험, 업데이트·재부팅·Wayland |
 
 위 네이티브 CI 근거는 [실행 39029600751](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751)이다. 실제 Electron·OS 암호화 저장소를 사용했으며 서버 API만 loopback fixture다. 실제 모델 추론·운영 웹·브라우저 URI 실행은 하지 않았다. macOS의 네이티브 실행은 arm64이며 x64는 DMG 생성과 구분한다.
 
 Ubuntu는 GUI와 안전한 키링, 한국어 표시가 가능한 글꼴이 필요하다. `basic_text` 저장소는 차단한다. 해당 CI는 공식 sandbox의 root:root/4755 준비와 CJK 글꼴을 확인했고 한글 캡처 가독성을 검토했다. X11/Wayland의 펫 위치·항상 위 제약, headless 미지원도 안내한다. 각 OS의 완료 근거가 확보된 아키텍처만 다운로드 목록에 등록한다.
 
 Ubuntu 배포 후보는 .deb만이다. builder의 기본 AppImage launcher에서 샌드박스 비활성화 경로를 확인해 AppImage를 빌드·배포 대상에서 제외했다. 이전 CI가 만든 AppImage는 Git에서 제외한 개발 산출물로 보류하고 `LOCAL_AGENT_RELEASES`에 등록하지 않는다. 안전한 AppImage 대안 개발은 이번 배포 범위 밖이다.
+
+### phase14 Ubuntu 실제 설치 CI 추가 근거
+
+[Ubuntu job 117412530581 / 실행 39038318920](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39038318920/job/117412530581)에서 실제 설치 8조건이 모두 통과했다. 제품 소스 `ec594c2`, 영수증의 CI merge 소스 `7d06c8bf571da8b1020bc99bf8d1c3c94bc2f302`를 구분한다. 패키지는 `hapark-connector-desktop` `0.1.0` `amd64`, 설치한 `.deb` SHA256은 `3a792f591ddf3eb99383859bb12f5b1a54ad437f55ec33ffdfef37917ba6289f`다. 정식 게시 파일이 아닌 해당 CI 산출물의 해시다.
+
+8조건은 (1) 빈 패키지·프로필·설치 경로·handler 사전 확인, (2) 실제 설치와 코어 9개 SHA256·기본 handler·root:root/0755 sandbox·앱별 AppArmor loaded, (3) 설치본의 번들 Node 24.22.0 x64, (4) cold `xdg-open`의 설치 실행 파일·합성 URI 제목 토큰·가시 창과 소유 창의 EWMH 정상 닫기, (5) 직접 CDP browser/renderer native PID와 OS 실행 파일·UID·부모 트리·Seccomp=2·NoNewPrivs=1, (6) warm URI의 같은 main PID·구별되는 오류, (7) 정상 quit IPC와 종료 코드 0, (8) purge·프로필·AppArmor·handler·opener·임시 경로 정리다. 설치기가 sandbox mode를 선택했고 QA가 0755를 수동 변경하지 않았다.
+
+합쳐진 Linux process title의 URI 토큰을 관측했으며 **원래 argv는 미증명**이다. cold renderer 상태와 직접 자식이 아닌 cold main의 종료 코드는 측정하지 않았다. 종료 확인 범위는 관측한 소유 PID와 읽기 가능한 `/proc`다. CLI·추론 0회이며 invalid URI parser가 자격 정보·API ACK·adapter 구성 전에 거절하는 경계로 배제했다. 독립 네트워크 캡처로 API 호출 수를 측정하지 않았다. 인증 페어링·실제 사용자 GUI·Wayland·재부팅·서명·업데이트·정식 배포는 남아 있다. Windows·macOS 상태는 이 Ubuntu 결과로 변경하지 않는다. 상세 8조건과 이전 기록은 [connector/VALIDATION](../../connector/VALIDATION.md)의 phase14 절을 따른다.
 
 현재 로컬 Windows QA 파일은 `hapark-connector-0.1.0-win-x64.exe`, 111,583,838바이트, SHA256 `9E12B8206ECB8A365C799B978A73B0396E68FC0AA32D184A3DAC82F046D6ABD8`, Authenticode `NotSigned`다. 재빌드하면 해시를 다시 계산한다. 이 파일과 CI의 unsigned artifact는 개발 검토용으로 표시한다. 미서명 파일을 먼저 사용할 경우 운영자가 비공개 개발 파일럿 범위를 명시적으로 선택한다.
 

@@ -4,6 +4,21 @@ import { win32 as path } from 'node:path';
 export const WINDOWS_COLD_ERROR = '연결 링크에 허용되지 않은 정보가 있어요.';
 export const WINDOWS_WARM_ERROR = '등록된 앱의 연결 링크를 사용해 주세요.';
 
+export function windowsNativeFailure(error, operation) {
+  const operations = new Set(['context', 'protocol', 'path', 'processes', 'identity', 'open', 'window', 'close', 'kill', 'listeners']);
+  const stderr = typeof error?.result?.stderr === 'string' ? error.result.stderr.slice(0, 64_000) : '';
+  let stderrCategory = 'NONE';
+  if (error?.code === 'ENOENT') stderrCategory = 'NATIVE_NOT_FOUND';
+  else if (error?.code === 'ETIMEDOUT') stderrCategory = 'NATIVE_TIMEOUT';
+  else if (/ParserError|MissingEndCurlyBrace|UnexpectedToken|TerminatorExpectedAtEndOfString/i.test(stderr)) stderrCategory = 'POWERSHELL_PARSE';
+  else if (/Add-Type|CompilerErrors|\bCS\d{4}\b/i.test(stderr)) stderrCategory = 'POWERSHELL_COMPILE';
+  else if (/UnauthorizedAccess|AccessDenied|Access is denied|PermissionDenied/i.test(stderr)) stderrCategory = 'POWERSHELL_ACCESS';
+  else if (/OWNER_UNAVAILABLE|GetOwnerSid|CimException|Get-CimInstance|Invoke-CimMethod/i.test(stderr)) stderrCategory = 'POWERSHELL_CIM';
+  else if (stderr) stderrCategory = 'POWERSHELL_OTHER';
+  return { operation: operations.has(operation) ? operation : 'unknown',
+    exitCode: Number.isSafeInteger(error?.result?.code) ? error.result.code : null, stderrCategory };
+}
+
 export function windowsAbsolute(value) {
   assert.ok(typeof value === 'string' && path.isAbsolute(value) && path.parse(value).root.length > 1 && !/[\p{Cc}\p{Cf}]/u.test(value), 'A fully qualified Windows path is required');
   return path.resolve(value);
@@ -107,6 +122,17 @@ export function classifyWindowsKnownProcess(observation, identity) {
   return 'running';
 }
 
+export function windowsProcessObservation(observation, { executable, uri }) {
+  const rows = Array.isArray(observation?.processes) ? observation.processes : [];
+  const count = value => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000;
+  const nativeCountsObserved = count(observation?.counts?.installedPathRows) && count(observation?.counts?.otherUserRows);
+  const mains = rows.filter(row => sameWindowsPath(row.executable, executable) && Array.isArray(row.argv)
+    && !row.argv.some(arg => typeof arg === 'string' && arg.startsWith('--type=')));
+  return { nativeCountsObserved, installedPathRows: nativeCountsObserved ? observation.counts.installedPathRows : 0,
+    otherUserRows: nativeCountsObserved ? observation.counts.otherUserRows : 0, currentUserRows: rows.length,
+    mainRows: mains.length, exactUriRows: mains.filter(row => row.argv.includes(uri)).length };
+}
+
 export function selectWindowsMain(rows, options) {
   const mains = rows.filter(row => sameWindowsPath(row.executable, options.executable) && Array.isArray(row.argv) && !row.argv.some(arg => arg.startsWith('--type=')));
   assert.ok(mains.length <= 1, 'More than one installed main process is running');
@@ -123,6 +149,16 @@ export function assertWindowsRejectedState(state, description) {
   assert.equal(state.stage, 'error'); assert.equal(state.description, description);
   assert.equal(state.attemptId, null); assert.deepEqual(state.providers, []);
   assert.equal(state.autoStart, false); assert.equal(state.pet, false);
+}
+
+export function windowsProfileObservation(descriptor, { profile, sid, notBefore }) {
+  const matches = (first, second) => { try { return sameWindowsPath(first, second); } catch { return false; } };
+  return { exists: descriptor?.exists === true, directory: descriptor?.directory === true,
+    reparsePoint: descriptor?.reparsePoint === true, exactPathMatches: matches(descriptor?.path, profile),
+    realPathMatches: matches(descriptor?.realPath, profile), currentUserOwner: descriptor?.sid === sid,
+    administratorsOwner: descriptor?.sid === 'S-1-5-32-544',
+    createdAfterStart: Number.isFinite(Date.parse(descriptor?.createdAt)) && Number.isFinite(notBefore)
+      && Date.parse(descriptor.createdAt) >= notBefore - 2_000 };
 }
 
 export function assertFreshWindowsProfile(descriptor, { appData, profile, sid, notBefore, existedBefore }) {

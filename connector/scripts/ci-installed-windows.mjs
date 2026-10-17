@@ -11,6 +11,9 @@ import {
   assertWindowsRunner, windowsSmokeLayout, assertOwnedWindowsInstallation, parseWindowsSmokeArguments,
   assertWindowsProcessIdentity, sameWindowsProcess, selectWindowsMain, assertWindowsRejectedState,
   classifyWindowsKnownProcess,
+  windowsNativeFailure,
+  windowsProcessObservation,
+  windowsProfileObservation,
   assertFreshWindowsProfile, assertWindowsProtocolCommand, windowsSmokeUris, windowsInside, sameWindowsPath,
   WINDOWS_COLD_ERROR, WINDOWS_WARM_ERROR,
 } from './installed-windows-support.mjs';
@@ -77,15 +80,17 @@ switch ($qaInput.operation) {
     $qaSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $qaPrefixes = @($qaInput.installation, $qaInput.installationAlias) | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\') + '\' }
     $qaRows = @()
+    $qaPathRows = 0; $qaOtherUserRows = 0
     foreach ($qaItem in @(Get-CimInstance -ClassName Win32_Process)) {
       if (-not $qaItem.ExecutablePath) { continue }
       $qaPath = [IO.Path]::GetFullPath($qaItem.ExecutablePath)
       if (@($qaPrefixes | Where-Object { $qaPath.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { continue }
-      if ((Get-QaSid $qaItem) -ne $qaSid) { continue }
+      $qaPathRows++
+      if ((Get-QaSid $qaItem) -ne $qaSid) { $qaOtherUserRows++; continue }
       $qaRows += @{ pid = [int]$qaItem.ProcessId; executable = $qaPath; sid = $qaSid;
         createdAt = $qaItem.CreationDate.ToUniversalTime().ToString('o'); argv = @([ConnectorInstalledWindowsNative]::Split($qaItem.CommandLine)) }
     }
-    Write-QaJson @{ processes = $qaRows }
+    Write-QaJson @{ processes = $qaRows; counts = @{ installedPathRows = $qaPathRows; otherUserRows = $qaOtherUserRows } }
   }
   'identity' {
     $qaCandidate = Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId=' + [int]$qaInput.identity.pid)
@@ -140,12 +145,22 @@ switch ($qaInput.operation) {
 }
 `;
 
-async function native(operation, input = {}) {
+export async function invokeWindowsNative(operation, input = {}, { execute = run } = {}) {
   const encodedInput = Buffer.from(JSON.stringify({ ...input, operation })).toString('base64');
   const command = `$qaInput = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedInput}')) | ConvertFrom-Json\n${WINDOWS_NATIVE_SCRIPT}`;
-  const result = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { timeout: 15_000 });
-  return JSON.parse(result.stdout.replace(/^\uFEFF/, '').trim());
+  let result;
+  try { result = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { timeout: 15_000 }); }
+  catch (error) {
+    throw Object.assign(new Error('Windows native observation failed'), { code: 'WINDOWS_NATIVE_FAILED',
+      nativeFailure: windowsNativeFailure(error, operation) });
+  }
+  try { return JSON.parse(result.stdout.replace(/^\uFEFF/, '').trim()); }
+  catch {
+    throw Object.assign(new Error('Windows native observation did not return JSON'), { code: 'WINDOWS_NATIVE_INVALID_JSON',
+      nativeFailure: { ...windowsNativeFailure({ result }, operation), stderrCategory: 'NATIVE_INVALID_JSON' } });
+  }
 }
+const native = invokeWindowsNative;
 
 async function exists(file) {
   try { await lstat(file); return true; }
@@ -204,9 +219,18 @@ async function observeWindowsInstallation(options, evidence) {
     assert.ok(match && sameWindowsPath(await realpath(match[1]), await realpath(executable)));
     assertWindowsProtocolCommand(protocol, match[1]);
   }
+  evidence.processObservation = { samples: 0, maxInstalledPathRows: 0, maxOtherUserRows: 0, maxCurrentUserRows: 0, maxMainRows: 0, maxExactUriRows: 0, knownOwnedIdentities: 0 };
   const processes = async () => {
-    const rows = (await native('processes', { installation, installationAlias: options.installation })).processes;
-    return Promise.all(rows.map(async row => ({ ...row, nativeExecutable: row.executable, executable: await realpath(row.executable) })));
+    const observation = await native('processes', { installation, installationAlias: options.installation });
+    const rows = await Promise.all(observation.processes.map(async row => ({ ...row, nativeExecutable: row.executable, executable: await realpath(row.executable) })));
+    const summary = windowsProcessObservation({ ...observation, processes: rows }, { executable, uri: windowsSmokeUris(layout).cold });
+    evidence.processObservation.samples++;
+    evidence.processObservation.latest = summary;
+    for (const key of ['installedPathRows', 'otherUserRows', 'currentUserRows', 'mainRows', 'exactUriRows']) {
+      const maximum = `max${key[0].toUpperCase()}${key.slice(1)}`;
+      evidence.processObservation[maximum] = Math.max(evidence.processObservation[maximum], summary[key]);
+    }
+    return rows;
   };
   assert.deepEqual(await processes(), [], 'Existing installed processes must be preserved');
   if (options.preflight) {
@@ -222,7 +246,7 @@ async function observeWindowsInstallation(options, evidence) {
   const ownership = { installation, executable, sid: system.sid, notBefore: startedAt };
   const remember = row => {
     const identity = { ...assertWindowsProcessIdentity(row, { ...ownership, executable: undefined }), nativeExecutable: row.nativeExecutable };
-    owned.set(identity.pid, identity); return identity;
+    owned.set(identity.pid, identity); evidence.processObservation.knownOwnedIdentities = owned.size; return identity;
   };
   const capture = async () => { const rows = await processes(); rows.forEach(remember); return rows; };
   const allOwnedStopped = async () => {
@@ -302,10 +326,13 @@ async function observeWindowsInstallation(options, evidence) {
     } catch (error) {
       evidence.cleanup.errors.push('owned_process_stop'); evidence.cleanup.deferred = true;
       evidence.cleanup.failureCode = diagnostic(error, 'windows_cleanup').code;
+      if (error.nativeFailure) evidence.cleanup.nativeFailure = error.nativeFailure;
     }
     if (evidence.cleanup.ownedProcessesStopped) {
       try {
+        evidence.cleanup.profileTarget = 'profile';
         const descriptor = await describePath(profile);
+        evidence.cleanup.profileObservation = windowsProfileObservation(descriptor, { profile, sid: system.sid, notBefore: startedAt });
         assertFreshWindowsProfile(descriptor, { appData, profile, sid: system.sid, notBefore: startedAt, existedBefore: before.exists });
         if (descriptor.exists) {
           assert.ok(owned.size > 0, 'Profile ownership was not observed through an installed process');
@@ -314,11 +341,17 @@ async function observeWindowsInstallation(options, evidence) {
         }
         evidence.cleanup.freshProfileRemoved = !(await exists(profile));
         if (!parentBefore.exists && !sameWindowsPath(parent, appData) && await exists(parent)) {
+          evidence.cleanup.profileTarget = 'parent';
           const descriptor = await describePath(parent);
+          evidence.cleanup.profileObservation = windowsProfileObservation(descriptor, { profile: parent, sid: system.sid, notBefore: startedAt });
           assertFreshWindowsProfile(descriptor, { appData, profile: parent, sid: system.sid, notBefore: startedAt, existedBefore: false });
           await rmdir(parent); // Empty only; preserve an independently created development profile.
         }
-      } catch { evidence.cleanup.errors.push('fresh_profile_remove'); }
+      } catch (error) {
+        evidence.cleanup.errors.push('fresh_profile_remove');
+        evidence.cleanup.profileFailureCode = diagnostic(error, 'windows_profile_cleanup').code;
+        if (error.nativeFailure) evidence.cleanup.nativeFailure = error.nativeFailure;
+      }
     }
   }
   if (failure) throw failure;
@@ -345,7 +378,10 @@ export async function main(argv = process.argv.slice(2)) {
     evidence.preflightOnly = options.preflight;
     await observeWindowsInstallation(options, evidence);
     evidence.passed = true; evidence.phase = options.preflight ? 'windows_preflight_completed' : 'windows_installed_uri_completed';
-  } catch (error) { process.exitCode = 1; evidence.error = diagnostic(error, evidence.phase); }
+  } catch (error) {
+    process.exitCode = 1; evidence.error = diagnostic(error, evidence.phase);
+    if (error.nativeFailure) evidence.nativeFailure = error.nativeFailure;
+  }
   finally {
     try {
       if (authorized) {

@@ -37,7 +37,10 @@
         "connector/test/installed-windows.test.mjs",
         "connector/test/installed-macos-identity.test.mjs",
         "connector/test/linux-process-observation.test.mjs",
-        ".github/workflows/local-agent.yml"
+        ".github/workflows/local-agent.yml",
+        "connector/scripts/installed-macos-diagnostics.mjs",
+        "connector/scripts/installed-windows-support.mjs",
+        "connector/test/installed-macos-diagnostics.test.mjs"
       ],
       "checks": [
         [
@@ -47,8 +50,8 @@
         ]
       ],
       "started_at": "2026-10-17T22:14:52+0900",
-      "summary": "실제 설치본 URI 검증기를 macOS·Ubuntu·Windows hosted CI에 접합했다. 제품 연결기 89개·공통 연결기 115개와 하네스 pytest 60개를 통과했다. 프로세스 소유권·정상 종료·관측 실패 시 정리 보류, macOS 번들·Unicode 경로, Linux CDP PID/sandbox를 검증한다. 실제 OS 통과 판정은 step2 원격 CI에 남긴다.",
-      "completed_at": "2026-10-17T22:50:53+0900"
+      "summary": "실제 설치본 URI 검증기를 macOS·Ubuntu·Windows hosted CI에 접합했다. 제품 연결기 105개 AC 통과. Mac 시작 직후 종료의 서명·crash·직접 자식 진단과 Windows native 실패·프로세스·프로필 진단은 원문을 출력하지 않는다. 독립 검토에서 찾은 미확인 Mac 진단 자식의 정리 경계를 실패 테스트로 고쳤으며 원래 OS 실패 판정은 보존한다. 실제 OS 통과 판정은 step2 원격 CI에 남긴다.",
+      "completed_at": "2026-10-17T23:02:58+0900"
     },
     {
       "step": 2,
