@@ -157,3 +157,9 @@
 | 5xx | 서버/외부 오류 | "잠시 후 다시 시도해주세요" + 다시 시도 |
 
 - 분석 실패는 HTTP 에러가 아니라 `Paper.analysisStatus`로 표현 — 논문은 정상 응답(위 reanalyze 참조).
+
+## 로컬 AI 연결 — `/api/local-agent` (ADR-025)
+
+웹은 로그인 세션·활성 팀을 서버에서 해소한다. 변이 요청은 정확한 Origin을 요구한다. `GET status`, `POST attempts`, `GET/DELETE attempts/:id`, `POST web-heartbeat`, `DELETE devices/:id`, `POST jobs`, `GET jobs/:id`, `POST jobs/:id/cancel`, `GET downloads`를 제공한다. 작업 생성은 큐 적재 후 202로 응답한다.
+
+설치앱은 `desktop/ack`, `desktop/pair`, `desktop/heartbeat`, `desktop/claim`, `desktop/result`에 POST한다. ack/pair는 짧은 launch credential, 나머지는 기기 bearer와 `X-Local-Agent-Device`로 인증한다. 번호는 웹에만 반환한다. 앱 heartbeat는 웹 grant를 연장하지 못한다. 응답은 `no-store, private`이며 자격 증명·작업 내용은 공개 Realtime에 방송하지 않는다. 실제 DTO·상태코드·주기는 `lib/local-agent/PROTOCOL.md`와 [LOCAL_AGENT](./LOCAL_AGENT.md)를 따른다.

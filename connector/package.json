@@ -1,0 +1,13 @@
+{
+  "name": "@hapark/local-agent-connector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "qa:desktop": "node scripts/run-desktop-qa.mjs",
+    "qa:install": "node scripts/verify-windows-installer.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  }
+}

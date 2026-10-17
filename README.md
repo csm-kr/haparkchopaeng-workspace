@@ -202,3 +202,7 @@ LiveKit 기반 다자간 화상 룸. 라이브가 없을 때의 빈 상태 — �
 - `tweaks-panel.jsx` — 디자인 탐색 전용; **포팅하지 말 것**.
 
 제품 명세는 `PRD.md`를, 단계별 플로우는 `UX_FLOWS.md`를 참조한다.
+
+## 로컬 Codex·Claude Code 연결
+
+웹의 **AI 연결**에서 이 PC의 CLI를 연결한다. 최초 설치·6자리 확인 이후 같은 웹 세션·팀·기기는 전용 링크로 다시 실행한다. 설정 화면에서 실제 모델·팀 논문을 선택해 질문한다. [동작·설치 빌드·검증](docs/dev/LOCAL_AGENT.md), [UX 시연](docs/reports/local-agent-connection-design-2026-10-17.html), [하네스 상태](phases/12-local-agent-connection/index.json)를 참조한다. 운영 DB와 설치 파일 배포는 검토 상태를 확인한 뒤 반영한다.

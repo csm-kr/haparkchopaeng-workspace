@@ -83,3 +83,9 @@ npx prisma db push     # Supabase 스키마 동기화 + npx prisma db seed
 npx inngest-cli dev    # (jobs용) 로컬 Inngest Dev Server
 npm run dev
 ```
+
+## 로컬 AI 연결
+
+기존 서버 `AUTH_SECRET`를 사용하며 별도 CLI OAuth 키를 서버에 넣지 않는다. `LOCAL_AGENT_RELEASES`는 실제 설치 파일의 `platform`, `url`, `version`과 선택 `architecture`·`filename`을 담는 JSON 배열이다. 미설정은 빈 배포 목록이다. 설치앱 빌드에는 `CONNECTOR_APP_ORIGIN=https://hapark.vercel.app`을 주입한다. 이 값들은 `NEXT_PUBLIC_*`로 노출하지 않는다. [설치·검증·미설정 동작](./LOCAL_AGENT.md).
+
+검증은 `npm run test:isolated` 또는 `test:local-agent*`를 사용한다. 공유 DB에 `db seed`를 실행해 테스트 실패를 고치지 않는다. 새 로컬 연결 테이블은 코드·SQL 검토 후 운영에서 수동 적용한다(ADR-020/022/023).

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>하박조팽 연결기</title><link rel="stylesheet" href="app.css"><script type="module" src="app.js"></script></head>
+<body>
+  <header><span class="mark" aria-hidden="true">ㅎ</span><div><strong id="site-name">하박조팽</strong><span>내 PC 연결</span></div><span id="status" class="status" role="status" aria-live="polite">대기 중</span></header>
+  <main>
+    <p class="eyebrow">AI 연결</p><h1 id="title">웹에서 AI 연결을 눌러 주세요</h1><p id="description" class="description">한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.</p>
+    <section id="target" class="target" hidden><div><span>웹앱</span><strong id="target-site"></strong></div><div><span>계정 · 팀</span><strong id="target-account"></strong></div><div><span>이 PC</span><strong id="target-device"></strong></div><p>선택한 논문의 질문과 연구 보조에만 사용해요.</p></section>
+    <form id="pairing" hidden><label for="code">웹의 6자리 번호</label><input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-describedby="code-help code-error"><p id="code-help" class="helper">웹에 보이는 번호를 여기에 직접 입력해 주세요.</p><p id="code-error" class="error" role="alert"></p><button id="pair-button" type="submit" class="primary" disabled>번호 확인하고 연결</button></form>
+    <section id="providers" hidden aria-label="내 PC의 AI"><div class="section-title"><h2>내 PC의 AI</h2><button id="refresh" type="button" class="text-button">다시 확인</button></div><div id="provider-list"></div></section>
+    <div id="idle-actions"><button id="open-web" type="button" class="primary">웹에서 연결 이어 하기</button></div>
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+  </main>
+  <footer><div class="preferences"><label><input id="auto-start" type="checkbox">컴퓨터를 켤 때 자동 시작</label><label><input id="pet" type="checkbox">작은 펫 표시</label></div><p id="lifetime-note">필요할 때 웹 버튼으로 실행할 수 있어요.</p><div class="footer-actions"><button id="pause" type="button" class="text-button" hidden>연결 중지</button><button id="quit" type="button" class="text-button">앱 종료</button></div></footer>
+</body></html>

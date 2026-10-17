@@ -323,3 +323,7 @@ model Publication {
 - **`ScheduleMonth`를 미리 만들지 마라.** 이유: row 부재가 "빈 달"의 진짜 표현이다. 미리 생성하면 유령 일정이 된다(ADR-006).
 - **`Paper`에 타입/형식 필드를 두지 마라.** 이유: PDF 전용이므로 분기가 없다(ADR-003).
 - **논문에 댓글 테이블을 붙이지 마라.** 이유: 회고 댓글은 발표 자료 귀속, 논문 상세엔 댓글 패널이 없다(ADR-004).
+
+## 로컬 AI 연결 (ADR-025)
+
+`LocalAgentDevice`·`LocalAgentAttempt`·`LocalAgentGrant`·`LocalAgentSnapshot`·`LocalAgentJob` 다섯 모델은 팀에 귀속되고 팀 삭제 시 cascade된다. 요청·허가·작업은 member/session에도 스코프한다. 기기 키·launch token·확인 번호는 해시로만 저장한다. `sessionExpiresAt`은 확인 번호가 실제 웹 쿠키보다 오래 유효하지 않게 한다. grant lease와 job version/eventSequence/CAS로 중복 실행·만료 후 결과를 막는다. 멤버 제거는 관련 권한 회수와 같은 트랜잭션으로 처리한다. 공유 운영 DB 적용은 사람의 검토·수동 실행 대상이며 자동 테스트는 일회용 DB만 사용한다. [계약·검증](./LOCAL_AGENT.md).

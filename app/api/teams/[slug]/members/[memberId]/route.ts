@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
 import { getMembership } from "@/lib/teams";
 import { prisma } from "@/lib/prisma";
+import { revokeMembershipConnections } from "@/lib/local-agent/service";
 
 // PATCH/DELETE /api/teams/:slug/members/:memberId — 멤버십 역할 변경 / 내보내기(ADR-018).
 // CRITICAL: 권한은 RLS 없이 앱레벨에서 멤버십 역할로 강제(R19). UI 게이팅은 보조 — 서버가 최종.
@@ -77,8 +78,11 @@ export async function DELETE(
       (viewer.role === "admin" && target.role === "member");
     if (!allowed) return fail(403, "FORBIDDEN", "이 멤버를 내보낼 권한이 없어요.");
 
-    await prisma.membership.delete({
-      where: { teamId_memberId: { teamId: team.id, memberId } },
+    await prisma.$transaction(async (tx) => {
+      await revokeMembershipConnections(tx, { teamId: team.id, memberId });
+      await tx.membership.delete({
+        where: { teamId_memberId: { teamId: team.id, memberId } },
+      });
     });
     return ok({ memberId });
   } catch (e) {

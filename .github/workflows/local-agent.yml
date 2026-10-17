@@ -1,0 +1,131 @@
+name: Local agent validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/local-agent-connection]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      AUTH_SECRET: isolated-local-agent-ci-only-not-a-deployment-secret
+      PRISMA_GENERATE_SKIP_AUTOINSTALL: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: python -m pip install pytest
+      - name: Harness and isolation guards
+        run: |
+          python -m pytest scripts/test_execute.py -q
+          node --test scripts/local-agent-verify.test.mjs scripts/local-agent-pg-guard.test.mjs
+      - name: Harness gate — isolated regression, lint and production build
+        run: python scripts/execute.py 12-local-agent-connection --verify --step 4
+      - run: npx playwright install --with-deps chromium
+      - name: Web flow in Chromium
+        run: npm run test:local-agent:e2e
+      - name: Real HTTP connector contract and cookie loss
+        run: npm run test:local-agent:wire
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: web-evidence
+          path: |
+            test-results/
+            playwright-report/
+            phases/12-local-agent-connection/step4-output.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: hapark_local_agent_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-agent-ci-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hapark_local_agent_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/local-agent-pg-guard.test.mjs
+      - name: PostgreSQL 16 concurrent authority and queue tests
+        run: node scripts/local-agent-pg-verify.mjs
+        env:
+          CI: 'true'
+          HAPARK_PG_ISOLATED_TESTS: '1'
+          LOCAL_AGENT_PG_TEST_URL: postgresql://postgres:local-agent-ci-password@127.0.0.1:5432/hapark_local_agent_test
+
+  connector:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-15
+            platform: mac
+          - os: ubuntu-24.04
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CONNECTOR_APP_ORIGIN: https://hapark.vercel.app
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - name: Connector contracts and process cancellation
+        run: npm --prefix connector test
+      - run: npm --prefix connector/desktop ci
+      - name: Native installer build (unsigned validation artifact)
+        run: npm --prefix connector/desktop run package:${{ matrix.platform }}
+      - name: Windows install, protocol registration and uninstall
+        if: matrix.platform == 'win'
+        run: npm --prefix connector run qa:install
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && matrix.platform == 'win'
+        with:
+          name: windows-install-evidence
+          path: connector/artifacts/windows-installer-qa.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: connector-${{ matrix.platform }}-unsigned
+          path: |
+            connector/dist/*.exe
+            connector/dist/*.dmg
+            connector/dist/*.deb
+            connector/dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 14

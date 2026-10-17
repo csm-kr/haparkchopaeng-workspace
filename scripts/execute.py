@@ -4,6 +4,7 @@ Harness Step Executor — phase 내 step을 순차 실행하고 자가 교정한
 
 Usage:
     python3 scripts/execute.py <phase-dir> [--push]
+    python3 scripts/execute.py <phase-dir> --verify [--step N]
 """
 
 import argparse
@@ -28,6 +29,11 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def hidden_process_options() -> dict:
+    """Keep child tools from opening Windows consoles or stealing focus."""
+    return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
 @contextlib.contextmanager
@@ -97,6 +103,69 @@ class StepExecutor:
         self._execute_all_steps(guardrails)
         self._finalize()
 
+    def verify(self, step_num: Optional[int] = None):
+        """Run explicit AC argv lists after collaborative work, without touching git.
+
+        `checks` are trusted repository configuration, never shell strings. Results
+        and timestamps use the same phase index/output contract as Claude steps.
+        An explicitly selected step may be rechecked after correcting a failure.
+        """
+        self._print_header()
+        index = self._read_json(self._index_file)
+        selected = [s for s in index["steps"] if s["step"] == step_num] if step_num is not None else [
+            s for s in index["steps"] if s["status"] != "completed"
+        ]
+        if step_num is not None and not selected:
+            raise ValueError(f"Unknown step: {step_num}")
+        for step in selected:
+            checks = step.get("checks")
+            if not isinstance(checks, list) or not checks or any(
+                not isinstance(argv, list) or not argv or
+                any(not isinstance(arg, str) or not arg for arg in argv)
+                for argv in checks
+            ):
+                raise ValueError(f"Step {step['step']} requires non-empty checks argv lists")
+        self._ensure_created_at()
+        for selected_step in selected:
+            index = self._read_json(self._index_file)
+            step = next(s for s in index["steps"] if s["step"] == selected_step["step"])
+            step.setdefault("started_at", self._stamp())
+            for key in ("error_message", "failed_at", "completed_at"):
+                step.pop(key, None)
+            evidence = {"mode": "verification", "step": step["step"], "checks": []}
+            for argv in step["checks"]:
+                print(f"  Step {step['step']}: {' '.join(argv)}", flush=True)
+                try:
+                    result = subprocess.run(
+                        argv, cwd=self._root, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=1800,
+                        **hidden_process_options(),
+                    )
+                    check = {"argv": argv, "exitCode": result.returncode,
+                             "stdout": result.stdout, "stderr": result.stderr}
+                except (OSError, subprocess.TimeoutExpired) as error:
+                    check = {"argv": argv, "exitCode": 1, "stdout": "", "stderr": str(error)}
+                evidence["checks"].append(check)
+                if check["exitCode"] != 0:
+                    break
+            passed = all(c["exitCode"] == 0 for c in evidence["checks"])
+            step["status"] = "completed" if passed else "error"
+            step["completed_at" if passed else "failed_at"] = self._stamp()
+            if passed:
+                step.setdefault("summary", f"{step['name']}: {len(evidence['checks'])} AC commands passed")
+            else:
+                step["error_message"] = f"AC failed: {' '.join(evidence['checks'][-1]['argv'])}"
+            self._write_json(self._phase_dir / f"step{step['step']}-output.json", evidence)
+            self._write_json(self._index_file, index)
+            if not passed:
+                self._update_top_index("error")
+                sys.exit(1)
+        index = self._read_json(self._index_file)
+        if all(s["status"] == "completed" for s in index["steps"]):
+            index["completed_at"] = self._stamp()
+            self._write_json(self._index_file, index)
+            self._update_top_index("completed")
+
     # --- timestamps ---
 
     def _stamp(self) -> str:
@@ -116,7 +185,8 @@ class StepExecutor:
 
     def _run_git(self, *args) -> subprocess.CompletedProcess:
         cmd = ["git"] + list(args)
-        return subprocess.run(cmd, cwd=self._root, capture_output=True, text=True)
+        return subprocess.run(cmd, cwd=self._root, capture_output=True, text=True,
+                              **hidden_process_options())
 
     def _checkout_branch(self):
         branch = f"feat-{self._phase_name}"
@@ -145,24 +215,38 @@ class StepExecutor:
         output_rel = f"phases/{self._phase_dir_name}/step{step_num}-output.json"
         index_rel = f"phases/{self._phase_dir_name}/index.json"
 
-        self._run_git("add", "-A")
-        self._run_git("reset", "HEAD", "--", output_rel)
-        self._run_git("reset", "HEAD", "--", index_rel)
-
-        if self._run_git("diff", "--cached", "--quiet").returncode != 0:
+        index = self._read_json(self._index_file)
+        step = next(s for s in index["steps"] if s["step"] == step_num)
+        paths = step.get("paths", [])
+        if paths:
             msg = self.FEAT_MSG.format(phase=self._phase_name, num=step_num, name=step_name)
-            r = self._run_git("commit", "-m", msg)
-            if r.returncode == 0:
-                print(f"  Commit: {msg}")
-            else:
-                print(f"  WARN: 코드 커밋 실패: {r.stderr.strip()}")
+            self._commit_paths(paths, msg)
+        else:
+            print("  No owned paths declared; code commit skipped.")
+        self._commit_paths([output_rel, index_rel],
+                           self.CHORE_MSG.format(phase=self._phase_name, num=step_num))
 
-        self._run_git("add", "-A")
-        if self._run_git("diff", "--cached", "--quiet").returncode != 0:
-            msg = self.CHORE_MSG.format(phase=self._phase_name, num=step_num)
-            r = self._run_git("commit", "-m", msg)
-            if r.returncode != 0:
-                print(f"  WARN: housekeeping 커밋 실패: {r.stderr.strip()}")
+    def _commit_paths(self, paths: list[str], message: str):
+        root = Path(self._root).resolve()
+        for rel in paths:
+            candidate = Path(rel)
+            resolved = (root / candidate).resolve()
+            if (candidate.is_absolute() or rel in ("", ".") or
+                    resolved == root or not resolved.is_relative_to(root) or
+                    any(char in rel for char in "*?[]:\x00") or
+                    any(part.startswith(".env") and part != ".env.example" for part in candidate.parts)):
+                raise ValueError(f"Unsafe owned path: {rel}")
+        # --only also protects already-staged unrelated changes in a shared tree.
+        result = self._run_git("add", "--", *paths)
+        if result.returncode != 0:
+            print(f"  WARN: scoped stage failed: {result.stderr.strip()}")
+            return
+        if self._run_git("diff", "--cached", "--quiet", "--", *paths).returncode != 0:
+            result = self._run_git("commit", "-m", message, "--only", "--", *paths)
+            if result.returncode == 0:
+                print(f"  Commit: {message}")
+            else:
+                print(f"  WARN: scoped commit failed: {result.stderr.strip()}")
 
     # --- top-level index ---
 
@@ -230,8 +314,8 @@ class StepExecutor:
             f"   - AC 통과 → \"completed\" + \"summary\" 필드에 이 step의 산출물을 한 줄로 요약\n"
             f"   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 → \"error\" + \"error_message\" 기록\n"
             f"   - 사용자 개입이 필요한 경우 (API 키, 인증, 수동 설정 등) → \"blocked\" + \"blocked_reason\" 기록 후 즉시 중단\n"
-            f"6. 모든 변경사항을 커밋하라:\n"
-            f"   {commit_example}\n\n---\n\n"
+            f"6. 직접 git stage/commit하지 마라. 하네스가 index의 소유 경로만 커밋한다.\n"
+            f"   하네스의 커밋 형식: {commit_example}\n\n---\n\n"
         )
 
     # --- Claude 호출 ---
@@ -251,6 +335,7 @@ class StepExecutor:
             ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json"],
             cwd=self._root, capture_output=True, text=True, encoding="utf-8",
             timeout=1800, input=prompt,
+            **hidden_process_options(),
         )
 
         if result.returncode != 0:
@@ -393,16 +478,16 @@ class StepExecutor:
 
     def _finalize(self):
         index = self._read_json(self._index_file)
+        if not all(step["status"] == "completed" for step in index["steps"]):
+            raise ValueError("All steps must be completed before finalizing a phase")
         index["completed_at"] = self._stamp()
         self._write_json(self._index_file, index)
         self._update_top_index("completed")
 
-        self._run_git("add", "-A")
-        if self._run_git("diff", "--cached", "--quiet").returncode != 0:
-            msg = f"chore({self._phase_name}): mark phase completed"
-            r = self._run_git("commit", "-m", msg)
-            if r.returncode == 0:
-                print(f"  ✓ {msg}")
+        metadata = [self._index_file.relative_to(self._root).as_posix()]
+        if self._top_index_file.exists():
+            metadata.append(self._top_index_file.relative_to(self._root).as_posix())
+        self._commit_paths(metadata, f"chore({self._phase_name}): mark phase completed")
 
         if self._auto_push:
             branch = f"feat-{self._phase_name}"
@@ -421,9 +506,18 @@ def main():
     parser = argparse.ArgumentParser(description="Harness Step Executor")
     parser.add_argument("phase_dir", help="Phase directory name (e.g. 0-mvp)")
     parser.add_argument("--push", action="store_true", help="Push branch after completion")
+    parser.add_argument("--verify", action="store_true", help="Run recorded AC commands without git changes or nested agents")
+    parser.add_argument("--step", type=int, help="Verify only this step (requires --verify)")
     args = parser.parse_args()
-
-    StepExecutor(args.phase_dir, auto_push=args.push).run()
+    if args.step is not None and not args.verify:
+        parser.error("--step requires --verify")
+    if args.verify and args.push:
+        parser.error("--verify does not push")
+    executor = StepExecutor(args.phase_dir, auto_push=args.push)
+    if args.verify:
+        executor.verify(args.step)
+    else:
+        executor.run()
 
 
 if __name__ == "__main__":

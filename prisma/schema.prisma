@@ -74,6 +74,11 @@ model Team {
   createdAt   DateTime     @default(now())
   memberships Membership[]
   invites     Invite[]
+  localAgentDevices LocalAgentDevice[]
+  localAgentAttempts LocalAgentAttempt[]
+  localAgentGrants LocalAgentGrant[]
+  localAgentSnapshots LocalAgentSnapshot[]
+  localAgentJobs LocalAgentJob[]
   // 전역 팀 상한 MAX_TEAMS(기본 2)는 앱레벨에서 강제(ADR-018).
 }
 
@@ -340,4 +345,118 @@ model Job {
   // 분석 등 분 단위 작업은 요청 경로가 아니라 이 잡으로 처리(ADR-013).
 
   @@index([status, runAfter])
+}
+
+// Local CLI connector. All writes are server-authenticated and scoped to member/team/session.
+// No raw web/CLI/device credentials or pairing codes are stored. Team deletion cascades.
+model LocalAgentDevice {
+  id         String @id @default(cuid())
+  teamId     String
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId   String
+  secretHash String
+  name       String
+  platform   String
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  attempts   LocalAgentAttempt[]
+  grants     LocalAgentGrant[]
+  snapshots  LocalAgentSnapshot[]
+  jobs       LocalAgentJob[]
+
+  @@unique([teamId, memberId, secretHash])
+  @@index([memberId, teamId])
+}
+
+model LocalAgentAttempt {
+  id                String @id @default(cuid())
+  teamId            String
+  team              Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId          String
+  sessionKey        String
+  sessionExpiresAt  DateTime
+  launchTokenHash   String
+  codeHash          String
+  status            String @default("awaiting_app")
+  failedAttempts    Int @default(0)
+  pendingSecretHash String?
+  pendingName       String?
+  pendingPlatform   String?
+  deviceId          String?
+  device            LocalAgentDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  cancelledAt       DateTime?
+  version           Int @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([memberId, teamId, sessionKey])
+  @@index([expiresAt])
+}
+
+model LocalAgentGrant {
+  id             String @id @default(cuid())
+  teamId         String
+  team           Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId       String
+  sessionKey     String
+  deviceId       String
+  device         LocalAgentDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  leaseExpiresAt DateTime
+  revokedAt      DateTime?
+  version        Int @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  jobs           LocalAgentJob[]
+
+  @@unique([sessionKey, teamId, deviceId])
+  @@index([deviceId, revokedAt, leaseExpiresAt])
+}
+
+model LocalAgentSnapshot {
+  id         String @id @default(cuid())
+  teamId     String
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId   String
+  deviceId   String
+  device     LocalAgentDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  provider   String
+  payload    Json
+  observedAt DateTime
+
+  @@unique([deviceId, provider])
+  @@index([teamId, memberId])
+}
+
+model LocalAgentJob {
+  id             String @id @default(cuid())
+  teamId         String
+  team           Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId       String
+  sessionKey     String
+  deviceId       String
+  device         LocalAgentDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  grantId        String
+  grant          LocalAgentGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  requestId      String
+  paperId        String
+  provider       String
+  model          String
+  prompt         String
+  context        String
+  status         String @default("queued")
+  response       String @default("")
+  error          String?
+  version        Int @default(0)
+  eventSequence  Int @default(0)
+  claimTokenHash String?
+  claimedAt      DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([teamId, memberId, sessionKey, requestId])
+  @@index([deviceId, status, createdAt])
+  @@index([grantId, status])
 }

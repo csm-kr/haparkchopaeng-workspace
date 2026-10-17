@@ -34,3 +34,9 @@
 - 라이트(따뜻한 웜 화이트) 기본 + 다크 테마. 액센트는 보라-파랑(blurple) `oklch` 토큰 — 정확한 값은 `src/styles.css` 참조.
 - 정직한 빈 상태: 라이브 없음·빈 달은 비어 있는 그대로 보여주고 명확한 CTA 제공.
 - 세부 명세: [`../design/DESIGN_GUIDE.md`](../design/DESIGN_GUIDE.md), 화면: [`../design/SCREENS.md`](../design/SCREENS.md), 플로우: [`./USER_FLOW.md`](./USER_FLOW.md) · 루트 `UX_FLOWS.md`.
+
+## 내 PC의 AI 연결 (ADR-025)
+
+멤버는 이 웹에 접속한 PC의 Codex·Claude Code로 논문 질문·연구 보조를 사용할 수 있다. 연결앱을 처음 한 번 설치한 뒤 웹의 AI 연결 버튼으로 실행한다. 처음에는 웹의 6자리 번호를 앱에 입력하고, 같은 로그인·팀·PC의 재실행은 다시 입력하지 않는다. 로그아웃·쿠키/세션 유실·팀 변경 시 다시 확인한다.
+
+모델은 실제 CLI 목록에서 직접 선택하고 기본 선택은 없다. 작은 사용량 링은 구독 비율과 관측 시각을 상세 표시하며 정확한 잔여 토큰을 주장하지 않는다. 연결앱은 다크 테마, 자동 시작·펫은 선택 사항이다. 설치/연결/오프라인/로그인 만료/사용량 미확인 상태를 구분한다. 논문 상세의 두 관점과 기존 Gemini 분석을 변경하지 않는다. [상세 UX](../design/LOCAL_AGENT_CONNECTION.md), [구현·검증](../dev/LOCAL_AGENT.md).

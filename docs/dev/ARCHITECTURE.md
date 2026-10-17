@@ -143,3 +143,7 @@ src/
 | `<image-slot>` 플레이스홀더 | 실제 이미지 업로드 / 렌더링된 PDF figure |
 | `getUserMedia` 프리뷰 + 정적 아바타 | **LiveKit(SFU)** — 실제 다자간 참가자 비디오 타일·화면공유 |
 | `tweaks-panel.jsx` | **제거** |
+
+## 로컬 CLI 연결 (ADR-025)
+
+`lib/local-agent`와 인증된 `app/api/local-agent`가 페어링·45초 허가·DB 큐를 담당하고 `connector/` 설치앱이 기존 CLI를 실행한다. 웹은 자체 API만 호출한다. 질문은 적재 후 202로 끝나며 연결기가 claim/result를 전송한다. 앱 heartbeat는 웹 허가를 갱신하지 못한다. 서버리스 함수에서 CLI나 지속 WebSocket을 띄우지 않는다. 인증된 짧은 상태 조회로 연결을 동기화하며 기존 live Realtime의 역할은 유지한다. [상세](./LOCAL_AGENT.md).
