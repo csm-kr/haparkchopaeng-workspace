@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { PrismaClient as ApplicationPrismaClient } from "@prisma/client";
+const preparationRace = vi.hoisted(() => ({ afterVerified: null as null | (() => Promise<void>) }));
 vi.mock("@/lib/inngest", () => ({ inngest: { send: vi.fn().mockResolvedValue({ ids: ["event"] }) } }));
 vi.mock("@/lib/prisma", async () => {
   const modulePath = process.env.LOCAL_AGENT_TEST_CLIENT_MODULE;
@@ -14,11 +16,19 @@ vi.mock("@/lib/prisma", async () => {
   const { assertIsolatedDatabase } = require("../../../scripts/local-agent-verify.mjs");
   assertIsolatedDatabase(directory, url);
   const { PrismaClient } = require(modulePath);
-  return { prisma: new PrismaClient({ datasources: { db: { url } } }) };
+  const client: ApplicationPrismaClient = new PrismaClient({ datasources: { db: { url } } });
+  return { prisma: client.$extends({ query: { presentation: { async findFirst({ args, query }) {
+    const result = await query(args);
+    const race = preparationRace.afterVerified;
+    if (race) { preparationRace.afterVerified = null; await race(); }
+    return result;
+  } } } }) };
 });
 import { prisma } from "@/lib/prisma";
 import { acknowledgeDesktop, claimJob, createAttempt, desktopHeartbeat, pairDesktop, revokeSession, submitResult, type LocalAgentScope } from "@/lib/local-agent/service";
 import { cancelTurn, createConversation, createTurn, getConversation, listConversations, listResearchPapers } from "../service";
+import { assertChatPreparation, beginChatPreparation, finishChatPreparation } from "../preparation";
+import type { PreparedPdfSource } from "@/worker/prepare-pdf-source";
 const enabled = Boolean(process.env.LOCAL_AGENT_TEST_CLIENT_MODULE);
 const scope = (sessionKey = "chat-session"): LocalAgentScope => ({ memberId: "chat-test-owner", teamId: "chat-test-a", sessionKey, sessionExpiresAt: new Date(Date.now() + 3_600_000) });
 const ids = ["chat-test-paper-a", "chat-test-paper-b", "chat-test-paper-foreign", "chat-test-paper-unprepared"];
@@ -42,6 +52,7 @@ async function conversation(paperIds = ids.slice(0, 2)) { return createConversat
 
 describe.skipIf(!enabled)("private research conversations on the isolated database", () => {
   beforeEach(async () => {
+    preparationRace.afterVerified = null;
     process.env.AUTH_SECRET = "research-chat-isolated-tests-only";
     await cleanup();
     for (const id of ["chat-test-owner", "chat-test-other"]) await prisma.member.upsert({ where: { id }, create: { id, name: id, handle: `@${id}`, email: `${id}@test.invalid`, role: "멤버", color: "var(--m-ha)", initial: "연" }, update: {} });
@@ -162,6 +173,65 @@ describe.skipIf(!enabled)("private research conversations on the isolated databa
     expect(await claimJob(identity)).toBeNull();
     expect((await cancelTurn(scope(), thread.id, pending.id)).status).toBe("cancelled");
     expect((await listResearchPapers(scope())).find(paper => paper.id === ids[3])?.sourceReady).toBe(false);
+  });
+  it("publishes complete OCR sources through the actual preparing/version CAS without renewing the grant", async () => {
+    const identity = await readyDevice();
+    const thread = await conversation([ids[3]]);
+    const pending = await createTurn(scope(), thread.id, target(identity.deviceId));
+    const before = await prisma.localAgentGrant.findFirstOrThrow({ where: { deviceId: identity.deviceId } });
+    const plan = await beginChatPreparation(pending.id);
+    expect(plan).not.toBeNull();
+    const text = JSON.stringify([{ page: 1, text: "문자 인식으로 읽은 합성 논문의 근거입니다.", method: "ocr" }]);
+    await prisma.paper.update({ where: { id: ids[3] }, data: { sourceText: text, sourceDigest: "e".repeat(64), pageCount: 1 } });
+    const prepared: PreparedPdfSource = { target: { kind: "paper", id: ids[3], teamId: scope().teamId },
+      objectKey: "fixture.pdf", assetId: null, source: { text, digest: "e".repeat(64), pageCount: 1 } };
+    await assertChatPreparation(plan!);
+    await finishChatPreparation(plan!, [prepared]);
+    const stored = await prisma.localAgentJob.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(stored.status).toBe("queued");
+    expect(stored.version).toBe(plan!.version + 1);
+    expect(JSON.parse(stored.context).papers[0].pages[0].method).toBe("ocr");
+    expect((await prisma.localAgentGrant.findUniqueOrThrow({ where: { id: before.id } })).leaseExpiresAt).toEqual(before.leaseExpiresAt);
+    expect((await claimJob(identity))?.job.id).toBe(pending.id);
+  });
+  it("cannot revive cancelled or expired preparation after durable source results arrive", async () => {
+    const identity = await readyDevice();
+    const thread = await conversation([ids[3]]);
+    const first = await createTurn(scope(), thread.id, target(identity.deviceId));
+    const cancelledPlan = await beginChatPreparation(first.id);
+    await cancelTurn(scope(), thread.id, first.id);
+    await expect(assertChatPreparation(cancelledPlan!)).rejects.toMatchObject({ code: "PREPARATION_ENDED" });
+    await finishChatPreparation(cancelledPlan!, []);
+    expect((await prisma.localAgentJob.findUniqueOrThrow({ where: { id: first.id } })).status).toBe("cancelled");
+    const second = await createTurn(scope(), thread.id, target(identity.deviceId));
+    const expiredPlan = await beginChatPreparation(second.id);
+    await prisma.localAgentGrant.updateMany({ where: { deviceId: identity.deviceId }, data: { leaseExpiresAt: new Date(0) } });
+    await expect(assertChatPreparation(expiredPlan!)).rejects.toMatchObject({ code: "PREPARATION_ENDED" });
+    await finishChatPreparation(expiredPlan!, []);
+    expect((await prisma.localAgentJob.findUniqueOrThrow({ where: { id: second.id } })).status).toBe("preparing");
+    await expect(claimJob(identity)).rejects.toMatchObject({ code: "WEB_PERMISSION_EXPIRED" });
+  });
+  it("rejects an actual PDF replacement committed just after source verification without queueing old text", async () => {
+    const identity = await readyDevice();
+    const seminarId = "chat-test-prepare-replaced";
+    await prisma.presentation.create({ data: { id: seminarId, teamId: scope().teamId, presenterId: scope().memberId, title: "Replacement fixture",
+      date: new Date(), tags: [], keypoints: [], slides: [], assets: { create: { id: "chat-test-prepare-old-asset", name: "synthetic.pdf", type: "pdf", size: "100 B", url: "presentations/old-synthetic.pdf" } } } });
+    const thread = await createConversation(scope(), { requestId: crypto.randomUUID(), paperIds: [], presentationIds: [seminarId] });
+    const pending = await createTurn(scope(), thread.id, target(identity.deviceId));
+    expect(pending.status).toBe("preparing");
+    const plan = await beginChatPreparation(pending.id);
+    const prepared: PreparedPdfSource = { target: { kind: "presentation", id: seminarId, teamId: scope().teamId },
+      objectKey: "presentations/old-synthetic.pdf", assetId: "chat-test-prepare-old-asset",
+      source: { text: JSON.stringify([{ page: 1, text: "Old complete synthetic seminar text" }]), digest: "a".repeat(64), pageCount: 1 } };
+    preparationRace.afterVerified = async () => {
+      await prisma.presentationAsset.update({ where: { id: "chat-test-prepare-old-asset" }, data: { url: "presentations/new-synthetic.pdf" } });
+    };
+    await expect(finishChatPreparation(plan!, [prepared])).rejects.toMatchObject({ code: "SOURCE_CHANGED" });
+    const stored = await prisma.localAgentJob.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(stored.status).toBe("preparing");
+    expect(stored.context).not.toContain("Old complete synthetic seminar text");
+    expect((await prisma.presentationAsset.findUniqueOrThrow({ where: { id: "chat-test-prepare-old-asset" } })).url).toBe("presentations/new-synthetic.pdf");
+    await prisma.presentation.delete({ where: { id: seminarId } });
   });
   it("admits only one simultaneous turn and deduplicates simultaneous identical requests", async () => {
     const identity = await readyDevice();

@@ -318,3 +318,18 @@
 legacy session hint는 서버 검증 후 한 번 공유하고, 배경 heartbeat/status는 승인 revision을 새로 게시하지 않는다. 이전 요청의 성공·오류·폴링 재예약은 승인 raw와 generation을 모두 비교하며, 해제는 자신이 확인한 값만 compare-and-swap으로 삭제한다. 같은 기기를 재승인해도 새 revision으로 이전 응답을 무효화한다.
 
 실제 브라우저의 새 탭과 native storage event, StrictMode 및 승인 전후 경합 검증은 [phase 22](../../phases/22-ai-connection-ux/index.json)로 추적한다.
+
+<a id="adr-030"></a>
+## ADR-030 — 스캔 PDF 본문과 페이지별 durable OCR
+
+**결정(2026-10-18):** ADR-026의 스캔 PDF 준비 실패 범위를 확장한다. 정상 native 본문은 유지하고, 이미지·벡터 페이지 등 본문을 더 읽어야 하는 페이지만 서버에 동봉한 MuPDF·Tesseract와 영·한 언어 데이터로 인식한다. 외부 AI API·CDN·새 API 키·원격 대체 호출은 추가하지 않는다. PDF는 20MB, 논문은 30쪽, 발표 자료는 150쪽, 추출 본문은 자료당 12만 자로 제한한다.
+
+공통 준비기가 Inngest의 검사 → 페이지별 OCR → 완성 캐시 확정 checkpoint를 직접 조율한다. 준비기 자체를 `step.run`으로 감싸지 않고 PDF 바이트도 checkpoint에 저장하지 않는다. 페이지 단계는 전체 50초 예산에서 서명·다운로드·권한 확인에 쓴 시간을 빼 OCR에 최대 40초를 배정한다. 각 단계에서 현재 팀·자료·작업·45초 실행 허가와 PDF digest를 다시 확인하며 worker가 허가를 갱신하지 않는다. 소유 child handle의 종료를 확인하고, 부분 OCR 결과를 완성 캐시에 쓰지 않는다.
+
+원문 캐시는 PDF 경로·기존 본문·digest CAS로 갱신한다. 채팅의 확정은 정렬된 자료 부모 key 잠금 → 선택 PDF asset 잠금 → 현재 자료 재조회 → 작업 version/grant CAS를 동일 트랜잭션에서 처리한다. 논문 분석 적재는 원래 `Job.createdAt`의 10분 준비 상한과 세션 만료를 최종 적재·잠금 대기 후·커밋 전에 재검사한다. 최신 분석 실행 CAS, 기존 두 관점·Figure·작성자 노트 보존 규칙은 유지한다.
+
+유효 grant 중 서버가 이미 접수한 `completed` 결과의 로그아웃 후 검증·저장은 ADR-026대로 허용한다. 새 OCR 준비·신규 추론 적재와 이미 접수한 결과의 후처리는 구분하며 최종 저장의 현재 멤버십 검증은 유지한다.
+
+본문의 페이지 번호와 선택적 `method: "ocr"`를 문맥에 보존하고 strict 인용 검증을 인식된 본문 문자열과 대조한다. 상태 조회는 캐시에서 `sourceHasOcr`를 계산하되 잘못된 과거 캐시 때문에 실패하지 않는다. OCR 페이지가 있을 때만 수치·인용을 원문 PDF와 함께 확인하라는 안내를 표시한다. native Figure renderer는 실제 Figure 후처리에 필요할 때만 동적으로 import하며, 모듈 로딩·렌더 실패가 상태 조회나 검증된 본문·캡션 저장을 막지 않는다.
+
+**한계와 상태:** OCR은 오탈자가 있을 수 있으며 원본 이미지와 인용의 의미적 일치까지 보증하지 않는다. 새 DDL은 없지만 OCR 캐시가 생긴 뒤 웹을 롤백하려면 선택적 `method`를 읽는 reader를 유지해야 한다. 구현·로컬 회귀와 배포 인수는 [phase 24 검증 기록](../../phases/24-scanned-pdf-reading/VALIDATION.md)에서 구분한다. 이 결정 기록은 운영 배포 완료를 뜻하지 않는다.

@@ -11,10 +11,17 @@ function requireEnv(name: string): string {
 }
 
 /** service role 권한의 Supabase 클라이언트. 세션을 보존하지 않는다(요청마다 신규). */
-export function createSupabaseAdmin() {
+export function createSupabaseAdmin(options: { signal?: AbortSignal } = {}) {
+  const pageSignal = options.signal;
+  const boundedFetch: typeof fetch | undefined = pageSignal ? (input, init) => {
+    const signals = [pageSignal];
+    if (init?.signal) signals.push(init.signal);
+    if (input instanceof Request) signals.push(input.signal);
+    return fetch(input, { ...init, signal: AbortSignal.any(signals) });
+  } : undefined;
   return createClient(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    { auth: { persistSession: false, autoRefreshToken: false }, ...(boundedFetch ? { global: { fetch: boundedFetch } } : {}) },
   );
 }

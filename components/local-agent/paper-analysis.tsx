@@ -9,7 +9,7 @@ import type { AnalysisStatus } from "@/types";
 import { useLocalAgent } from "./provider";
 import { LocalAgentModelPicker } from "./model-picker";
 
-interface State { analysisStatus: string; analysisError?: string | null; runId?: string | null; canCancel?: boolean; sourceReady?: boolean }
+interface State { analysisStatus: string; analysisError?: string | null; runId?: string | null; canCancel?: boolean; sourceReady?: boolean; sourceHasOcr?: boolean }
 class AnalysisApiError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 async function call(paperId: string, method: "GET" | "POST" | "DELETE", input?: object, signal?: AbortSignal): Promise<State> {
   const result = await fetch(`/api/papers/${encodeURIComponent(paperId)}/reanalyze`, { method, cache: "no-store", signal, ...(input ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) } : {}) });
@@ -92,6 +92,8 @@ export function LocalPaperAnalysis({ paperId, initialStatus }: { paperId: string
     {state.analysisStatus === "pending" && <div role="status" className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted"><Loader2 size={15} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /><span>{running ? "연결한 AI가 분석하고 있어요. 이 웹페이지를 열어두세요." : "PDF 본문을 준비하고 있어요."}</span>{state.canCancel && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void cancel()}>분석 중단</Button>}</div>}
     {state.analysisStatus === "awaiting_ai" && !state.analysisError && <p role="status" className="text-[12px] text-fg-muted">모델을 선택한 뒤 분석을 시작할 수 있어요.</p>}
     {(error || state.analysisError) && <p role="alert" className="text-[13px] text-busy">{error || state.analysisError}</p>}
-    <p className="text-[11px] text-fg-subtle">본문·캡션을 바탕으로 분석해요. 그림 속 수치는 원문에서 확인해주세요.</p>
+    <p className="text-[11px] text-fg-subtle">{state.sourceHasOcr
+      ? "스캔 페이지를 문자 인식으로 읽었어요. 중요한 수치·인용은 원문 PDF와 함께 확인해주세요."
+      : "본문·캡션을 바탕으로 분석해요. 그림 속 수치는 원문에서 확인해주세요."}</p>
   </Card>;
 }

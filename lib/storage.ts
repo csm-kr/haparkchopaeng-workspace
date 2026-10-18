@@ -39,8 +39,9 @@ export async function createSignedUploadUrl(
 export async function signedDownloadUrl(
   path: string,
   ttlSec = 60,
+  options?: { signal?: AbortSignal },
 ): Promise<string> {
-  const admin = createSupabaseAdmin();
+  const admin = options?.signal ? createSupabaseAdmin({ signal: options.signal }) : createSupabaseAdmin();
   const { data, error } = await admin.storage
     .from(bucketName())
     .createSignedUrl(path, ttlSec);

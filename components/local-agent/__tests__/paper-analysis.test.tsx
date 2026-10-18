@@ -12,6 +12,18 @@ beforeEach(() => {
   f.fetch.mockImplementation(async () => new Response(JSON.stringify({ data: { analysisStatus: "awaiting_ai", runId: null, canCancel: false, analysisError: null } }), { status: 200 }));
 });
 describe("local paper analysis controls", () => {
+  it.each([true, false])("문자 인식 여부 %s를 실제 준비 결과로 표시하고 추론을 자동 시작하지 않는다", async sourceHasOcr => {
+    f.fetch.mockImplementation(async () => new Response(JSON.stringify({ data: {
+      analysisStatus: "awaiting_ai", runId: null, sourceHasOcr,
+    } }), { status: 200 }));
+    render(<LocalPaperAnalysis paperId="p1" initialStatus="pending" />);
+    await screen.findByText("모델을 선택한 뒤 분석을 시작할 수 있어요.");
+    if (sourceHasOcr) {
+      expect(await screen.findByText(/스캔 페이지를 문자 인식으로 읽었어요/)).toHaveTextContent(/중요한 수치·인용은 원문 PDF/);
+    } else expect(screen.queryByText(/스캔 페이지를 문자 인식으로 읽었어요/)).not.toBeInTheDocument();
+    expect(f.fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it("requires a connection and an explicit model without automatically starting inference", async () => {
     render(<LocalPaperAnalysis paperId="p1" initialStatus="awaiting_ai" />);
     expect(screen.getByRole("button", { name: "이 AI로 분석" })).toBeDisabled();

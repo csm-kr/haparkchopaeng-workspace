@@ -1,8 +1,9 @@
-import { failAnalysisRun, finishAnalysisRun, prepareAnalysisRun, preparePaperSource, readAnalysisJob } from "@/lib/local-ai/service";
-import { sourceFailureMessage } from "@/lib/local-ai/source";
+import { analysisSourceTarget, failAnalysisRun, finishAnalysisRun, prepareAnalysisRun, readAnalysisJob } from "@/lib/local-ai/service";
+import { PaperSourceError, sourceFailureMessage } from "@/lib/local-ai/source";
 import { prisma } from "@/lib/prisma";
 import { broadcastPaperAnalyzed } from "@/lib/realtime";
 import { inngest, type PaperAnalyzeData } from "@/lib/inngest";
+import { preparePdfSource } from "./prepare-pdf-source";
 
 // Upload prepares text only. Explicit local model requests execute through the durable DB queue.
 // Inngest sleeps between short reads; no HTTP request or in-memory promise waits on CLI inference.
@@ -12,7 +13,7 @@ export const analyzePaperFn = inngest.createFunction(
   async ({ event, step }) => {
     const { paperId, runId } = event.data as PaperAnalyzeData;
     if (!runId) {
-      try { await step.run("prepare-source", () => preparePaperSource(paperId)); }
+      try { await preparePdfSource({ kind: "paper", id: paperId }, step); }
       catch (cause) {
         const analysisError = sourceFailureMessage(cause);
         await step.run("source-failed", async () => {
@@ -22,7 +23,7 @@ export const analyzePaperFn = inngest.createFunction(
           });
           // Preserve a previous result and never overwrite a newer source or an active explicit run.
           await prisma.paper.updateMany({
-            where: { id: paperId, sourceText: null, analysisStatus: { not: "pending" } },
+            where: { id: paperId, sourceText: null, analysisRequestId: null, analysisStatus: { not: "pending" } },
             data: { analysisError },
           });
         });
@@ -31,6 +32,8 @@ export const analyzePaperFn = inngest.createFunction(
       return { paperId, analysisStatus: "awaiting_ai" };
     }
     try {
+      const target = await step.run("analysis-source-target", () => analysisSourceTarget(runId));
+      await preparePdfSource(target, step, async () => { await analysisSourceTarget(runId); });
       await step.run("prepare-local-analysis", () => prepareAnalysisRun(runId));
       for (let index = 0; index < 121; index++) {
         const job = await step.run(`read-local-${index}`, () => readAnalysisJob(runId));
@@ -43,8 +46,9 @@ export const analyzePaperFn = inngest.createFunction(
       }
       const status = await step.run("persist-local-analysis", () => finishAnalysisRun(runId));
       if (status !== "ready") return { paperId, analysisStatus: status };
-    } catch {
-      await step.run("local-failed", () => failAnalysisRun(runId));
+    } catch (cause) {
+      await step.run("local-failed", () => cause instanceof PaperSourceError
+        ? failAnalysisRun(runId, sourceFailureMessage(cause)) : failAnalysisRun(runId));
       return { paperId, analysisStatus: "failed" };
     }
     // 완료 전파 — 실패해도 분석 결과를 막지 않는다(broadcast 자체가 graceful).

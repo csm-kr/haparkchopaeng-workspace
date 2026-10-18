@@ -5,9 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
 import { inngest } from "@/lib/inngest";
 import { signedDownloadUrl } from "@/lib/storage";
-import { renderFigures } from "@/lib/figure-render";
 import { assertJobTarget, createPreparedJob, getJob, type LocalAgentScope } from "@/lib/local-agent/service";
-import { extractPdfSource, parsePaperSource } from "./source";
+import { extractPdfSource, parsePaperSource, PaperSourceError } from "./source";
 import { LOCAL_ANALYSIS_PROMPT, parseLocalAnalysis } from "./payload";
 
 export const LocalAnalysisRequestSchema = z.object({ deviceId: z.string().min(1).max(150), provider: z.enum(["codex", "claude"]), model: z.string().min(1).max(160), requestId: z.uuid() }).strict();
@@ -111,20 +110,41 @@ export async function requestLocalAnalysis(scope: LocalAgentScope, paperId: stri
   return { id: paperId, runId, analysisStatus: result.analysisStatus, analysisError: result.analysisError };
 }
 
-export async function prepareAnalysisRun(runId: string, deps?: SourceDependencies): Promise<{ jobId: string }> {
+function assertPreparationDeadline(record: { status: string; createdAt: Date }, sessionExpiresAt: Date): void {
+  if (!["queued", "running"].includes(record.status) || sessionExpiresAt.getTime() <= Date.now()) throw new HttpError(409, "SUPERSEDED", "분석 요청이 끝났어요.");
+  if (record.createdAt && Date.now() - record.createdAt.getTime() >= 600_000) throw new HttpError(409, "EXPIRED", "분석 준비 시간이 끝났어요. 다시 분석해주세요.");
+}
+
+/** Every OCR step rechecks the existing web authority; workers never renew it. */
+export async function analysisSourceTarget(runId: string) {
+  const { record, payload, scope } = await runRecord(runId);
+  assertPreparationDeadline(record, scope.sessionExpiresAt);
+  const paper = await prisma.paper.findFirst({ where: { id: payload.paperId, teamId: scope.teamId, analysisRequestId: runId, analysisStatus: "pending" }, select: { id: true } });
+  if (!paper) throw new HttpError(409, "SUPERSEDED", "분석 요청이 바뀌거나 취소됐어요.");
+  await assertJobTarget(scope, payload.selection);
+  return { kind: "paper" as const, id: paper.id, teamId: scope.teamId };
+}
+
+/** Durable source preparation has finished before this short admission step. */
+export async function prepareAnalysisRun(runId: string): Promise<{ jobId: string }> {
   const { record, payload, scope } = await runRecord(runId);
   const paper = await prisma.paper.findFirst({ where: { id: payload.paperId, teamId: scope.teamId, analysisRequestId: runId, analysisStatus: "pending" } });
   if (!paper) throw new HttpError(409, "SUPERSEDED", "새 분석 요청으로 바뀌었어요.");
   if (payload.jobId) return { jobId: payload.jobId };
+  assertPreparationDeadline(record, scope.sessionExpiresAt);
   await assertJobTarget(scope, payload.selection);
-  const source = await preparePaperSource(paper.id, deps);
+  if (!paper.sourceText || !paper.sourceDigest) throw new HttpError(409, "SOURCE_NOT_READY", "논문 본문을 먼저 준비해주세요.");
+  const pages = parsePaperSource(paper.sourceText);
+  if (!pages.some(page => page.text.trim())) throw new PaperSourceError("INVALID_CACHE");
+  const source = { text: paper.sourceText, digest: paper.sourceDigest };
   const context = JSON.stringify({ title: paper.title, authors: paper.authors, sourceDigest: source.digest, pages: parsePaperSource(source.text), capabilities: { textOnly: true, externalSearch: false, figurePixels: false } });
   return prisma.$transaction(async (tx) => {
-    const locked = await tx.paper.updateMany({ where: { id: paper.id, teamId: scope.teamId, analysisRequestId: runId, analysisStatus: "pending" }, data: { analysisError: null } });
+    const locked = await tx.paper.updateMany({ where: { id: paper.id, teamId: scope.teamId, analysisRequestId: runId, analysisStatus: "pending", pdfUrl: paper.pdfUrl, sourceText: paper.sourceText, sourceDigest: paper.sourceDigest }, data: { analysisError: null } });
     if (!locked.count) throw new HttpError(409, "SUPERSEDED", "분석 요청이 바뀌거나 취소됐어요.");
     const current = await tx.job.findUniqueOrThrow({ where: { id: record.id } });
-    if (!["queued", "running"].includes(current.status)) throw new HttpError(409, "SUPERSEDED", "분석 요청이 끝났어요.");
+    assertPreparationDeadline(current, scope.sessionExpiresAt);
     const job = await createPreparedJob(scope, { ...payload.selection, paperId: paper.id, prompt: LOCAL_ANALYSIS_PROMPT }, context, { purpose: "paper_analysis", transaction: tx });
+    assertPreparationDeadline(current, scope.sessionExpiresAt);
     await tx.job.update({ where: { id: record.id }, data: { status: "running", claimedAt: new Date(), payload: { ...payload, jobId: job.id } } });
     return { jobId: job.id };
   });
@@ -135,7 +155,10 @@ export async function getLocalAnalysisState(scope: LocalAgentScope, paperId: str
   if (!paper) throw new HttpError(404, "NOT_FOUND", "논문을 찾을 수 없어요.");
   const record = paper.analysisRequestId ? await prisma.job.findUnique({ where: { id: paper.analysisRequestId } }) : null;
   const payload = Payload.safeParse(record?.payload);
-  return { id: paper.id, analysisStatus: paper.analysisStatus, analysisError: paper.analysisError, runId: paper.analysisRequestId, sourceReady: Boolean(paper.sourceText), canCancel: Boolean(paper.analysisStatus === "pending" && payload.success && payload.data.scope.memberId === scope.memberId && payload.data.scope.sessionKey === scope.sessionKey) };
+  let sourceHasOcr = false;
+  try { sourceHasOcr = Boolean(paper.sourceText && parsePaperSource(paper.sourceText).some(page => page.method === "ocr")); }
+  catch { /* Invalid legacy cache cannot turn a status read into an error. */ }
+  return { id: paper.id, analysisStatus: paper.analysisStatus, analysisError: paper.analysisError, runId: paper.analysisRequestId, sourceReady: Boolean(paper.sourceText), sourceHasOcr, canCancel: Boolean(paper.analysisStatus === "pending" && payload.success && payload.data.scope.memberId === scope.memberId && payload.data.scope.sessionKey === scope.sessionKey) };
 }
 
 export async function cancelLocalAnalysis(scope: LocalAgentScope, paperId: string) {
@@ -188,7 +211,10 @@ export async function finishAnalysisRun(runId: string): Promise<"ready" | "pendi
   catch { await failAnalysisRun(runId, "AI 분석의 형식·원문 근거를 확인하지 못했어요. 모델을 바꾸거나 다시 분석해주세요."); return "failed"; }
   let figures = parsed.figures;
   if (figures.length) {
-    try { figures = await renderFigures(await loadPdf(paper.id), `${paper.id}/${runId}`, figures); }
+    try {
+      const { renderFigures } = await import("@/lib/figure-render");
+      figures = await renderFigures(await loadPdf(paper.id), `${paper.id}/${runId}`, figures);
+    }
     catch { /* Text and verified captions survive an unavailable image renderer. */ }
   }
   return prisma.$transaction(async (tx) => {
