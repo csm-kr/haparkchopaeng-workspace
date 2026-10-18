@@ -120,8 +120,8 @@
         "name": "PET_REAL_ELAPSED_BLINK_AND_SMILE_CYCLE",
         "passed": true,
         "details": {
-          "blinkIterationMs": 5999.200000047684,
-          "smileIterationMs": 13999.400000095367,
+          "blinkIterationMs": 5999.600000143051,
+          "smileIterationMs": 13999.800000190735,
           "closedEyeHeight": 0.6453323364257812,
           "smileOpacity": 1,
           "realElapsedCycleObserved": true
@@ -131,7 +131,7 @@
         "name": "PET_DRAG_AREA_AND_FOCUS_PRESERVED",
         "passed": true,
         "details": {
-          "excludedDragAreaRatio": 0.063,
+          "excludedDragAreaRatio": 0.062,
           "physicalDragPerformed": false
         }
       }
@@ -164,6 +164,12 @@
       "Native cursor hover is observed on Windows; other platforms use explicit Chromium hover state.",
       "Drag coverage is checked from native renderer CSS; physical OS dragging is not performed."
     ],
+    "motionEnvironment": {
+      "hostPrefersReducedMotion": false,
+      "normalPrefersReducedMotion": false,
+      "normalAnimationCount": 4,
+      "normalAnimationsPending": 0
+    },
     "cleanup": {
       "ownedElectronExited": true,
       "exitCode": 0,
@@ -188,5 +194,16 @@
   },
   "productionDeployed": false,
   "connectorReleased": false,
-  "installedPetVerified": false
+  "installedPetVerified": false,
+  "ciMotionCorrection": {
+    "firstSource": "c535bf6f99b66fd45c7ed4a0ac9adf3d740fd8a6",
+    "firstTag": "ai-bridge-v0.1.6-preview.1",
+    "firstValidationRun": 39107454817,
+    "sameTwoFailuresReproducedWithInitialReducedMotion": true,
+    "forcedReducedMotionAfterPassedChecks": 9,
+    "normalMotionExplicit": true,
+    "reducedMotionStillTested": true,
+    "packagedProductFilesChanged": false,
+    "originalTagMoved": false
+  }
 }

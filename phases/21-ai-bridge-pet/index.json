@@ -17,7 +17,7 @@
       ],
       "summary": "Connector regression: 211 passed, 1 opt-in native test skipped. Pet-specific failures were demonstrated in the original renderer before implementation.",
       "started_at": "2026-10-18T16:21:04+0900",
-      "completed_at": "2026-10-18T16:21:08+0900"
+      "completed_at": "2026-10-18T16:28:30+0900"
     },
     {
       "step": 2,
@@ -38,9 +38,9 @@
         "Native drag/focus observation or an explicit unverified limit",
         "Owned QA process and temporary profile cleanup"
       ],
-      "summary": "Real isolated Windows pet renderer: 9 checks passed including native hover, light/dark opacity, elapsed blink/smile cycles, reduced motion and cleanup; existing desktop pairing/recovery flow passed.",
+      "summary": "Real Windows pet: 9 checks passed under explicit normal/reduced modes, elapsed cycles and native hover; existing desktop flow passed. A reduced-motion CI precondition reproduced two frame-sampling failures before the QA-only correction.",
       "started_at": "2026-10-18T16:21:13+0900",
-      "completed_at": "2026-10-18T16:21:45+0900"
+      "completed_at": "2026-10-18T16:29:01+0900"
     }
   ],
   "overallGoalComplete": false,
@@ -49,6 +49,6 @@
   "installedPetVerified": false,
   "releaseStatus": "Local TDD and Harness gates passed; exact-source multi-OS CI, 0.1.6 publication and installed pet verification pending.",
   "created_at": "2026-10-18T16:21:04+0900",
-  "completed_at": "2026-10-18T16:21:45+0900",
+  "completed_at": "2026-10-18T16:29:01+0900",
   "localVerified": true
 }

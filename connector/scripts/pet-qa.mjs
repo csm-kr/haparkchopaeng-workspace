@@ -91,7 +91,12 @@ async function nativePetQa() {
         'Native cursor hover is observed on Windows; other platforms use explicit Chromium hover state.',
         'Drag coverage is checked from native renderer CSS; physical OS dragging is not performed.'] };
     let win;
-    const check = async (name, callback) => { try { const details = await callback(); receipt.checks.push({ name, passed: true, details: details ?? null }); } catch { receipt.checks.push({ name, passed: false }); } };
+    const check = async (name, callback) => { try { const details = await callback(); receipt.checks.push({ name, passed: true, details: details ?? null }); } catch (error) { receipt.checks.push({ name, passed: false, error: {
+      name: error?.name === 'AssertionError' ? 'AssertionError' : 'Error',
+      code: typeof error?.code === 'string' && /^ERR_[A-Z_]+$/.test(error.code) ? error.code : null,
+      actual: ['number', 'boolean'].includes(typeof error?.actual) ? error.actual : null,
+      expected: ['number', 'boolean'].includes(typeof error?.expected) ? error.expected : null,
+    } }); } };
     try {
       const work = screen.getPrimaryDisplay().workArea;
       win = new BrowserWindow({ width: 104, height: 112, x: work.x + work.width - 130, y: work.y + work.height - 140,
@@ -103,7 +108,7 @@ async function nativePetQa() {
       await win.loadFile(join(connector, 'desktop/renderer/pet.html')); win.showInactive();
       const js = expression => win.webContents.executeJavaScript(expression);
       const frame = () => js('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))');
-      const pause = time => js(`document.getAnimations().forEach(animation=>{animation.pause();animation.currentTime=${time}})`);
+      const pause = time => js(`Promise.all(document.getAnimations().map(async animation=>{animation.pause();await animation.ready;animation.currentTime=${time}}))`);
       const screenshot = async name => { const image = await win.webContents.capturePage(); await writeFile(join(evidenceDirectory, name), image.toPNG()); receipt.screenshots.push(name); return image; };
       win.webContents.debugger.attach('1.3'); await win.webContents.debugger.sendCommand('DOM.enable'); await win.webContents.debugger.sendCommand('CSS.enable');
       const document = await win.webContents.debugger.sendCommand('DOM.getDocument');
@@ -111,7 +116,13 @@ async function nativePetQa() {
       const hover = value => win.webContents.debugger.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: value ? ['hover'] : [] });
       const mouth = () => js(`(()=>{const smile=document.querySelector('.mouth-smile'),flat=document.querySelector('.mouth-flat');return {smile:smile?Number(getComputedStyle(smile).opacity):-1,flat:flat?Number(getComputedStyle(flat).opacity):-1}})()`);
       const neutralMouth = async () => { const value = await mouth(); assert.ok(value.smile < .05 && value.flat > .95); };
+      receipt.motionEnvironment = { hostPrefersReducedMotion: await js('matchMedia("(prefers-reduced-motion: reduce)").matches') };
+      // Normal-motion samples must not inherit an accessibility preference from the CI host.
+      // The explicit reduce-mode check below still verifies that preference independently.
+      await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+      await frame();
       await pause(0); await frame();
+      Object.assign(receipt.motionEnvironment, await js(`({normalPrefersReducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,normalAnimationCount:document.getAnimations().length,normalAnimationsPending:document.getAnimations().filter(animation=>animation.pending).length})`));
       await check('PET_SECURITY_AND_DRAG_CONTRACT', async () => {
         const observed = await js(`({node:typeof require,script:document.querySelectorAll('script').length,csp:document.querySelector('meta[http-equiv="Content-Security-Policy"]').content,drag:getComputedStyle(document.body).webkitAppRegion})`);
         const prefs = win.webContents.getLastWebPreferences();
