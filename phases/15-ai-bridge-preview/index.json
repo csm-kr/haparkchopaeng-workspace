@@ -42,9 +42,28 @@
       "started_at": "2026-10-18T09:41:47+0900",
       "summary": "AI 브릿지 0.1.1 표시명·기존 프로필 보존·게시자 서명 안내와 exact-source draft 업로드 guard를 TDD로 검증했다. 공개 태그 API가 draft에 실제 404를 반환하는 경계를 재현하고 목록의 정확한 태그 1개로 조회를 수정했다. 웹/API 70개, 연결기 185개, 실제 builder 구현 5개 통과. 설치 파일 공개와 운영 웹 확인은 별도 배포 영수증 대상이다.",
       "completed_at": "2026-10-18T09:55:10+0900"
+    },
+    {
+      "step": 1,
+      "name": "debian-input-filename-for-preview-publication",
+      "status": "completed",
+      "paths": [
+        "connector/scripts/preview-release.mjs",
+        "connector/test/preview-release.test.mjs"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/preview-release.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-18T10:10:54+0900",
+      "completed_at": "2026-10-18T10:10:55+0900",
+      "summary": "실제 Debian amd64 파일명에서 ENOENT를 먼저 재현하고 입력 경로만 수정했다. 공개 파일명과 runtime/manifest의 x64를 유지하고 설치 영수증 해시 변조 차단을 보존했다. 게시 guard 44개와 step1 하네스 검증 통과. 새 태그의 실제 게시와 운영 확인은 별도 영수증으로 남긴다."
     }
   ],
   "scope": "Code regression only. Installer publication and production browser verification require separate evidence.",
   "created_at": "2026-10-18T09:41:47+0900",
-  "completed_at": "2026-10-18T09:55:10+0900"
+  "completed_at": "2026-10-18T10:10:55+0900"
 }

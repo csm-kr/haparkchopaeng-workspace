@@ -106,7 +106,9 @@ export async function uploadPreview({ env, head, root, runtime, github, upload }
     && version.length < 80, 'PACKAGE_VERSION_INVALID');
   const os = platform === 'mac' ? 'macos' : 'linux';
   const extension = platform === 'mac' ? 'dmg' : 'deb';
-  const filename = `hapark-connector-${version}-${platform}-${architecture}.${extension}`;
+  // electron-builder uses Debian's amd64 spelling only for the input package filename.
+  const packageArchitecture = platform === 'linux' ? 'amd64' : architecture;
+  const filename = `hapark-connector-${version}-${platform}-${packageArchitecture}.${extension}`;
   const packageFile = await ownedFile(root, join('connector', 'dist', filename));
   requireValue(packageFile.stat.size > 0 && packageFile.stat.size < 2 * 1024 ** 3, 'PACKAGE_SIZE_INVALID');
   const installed = await ownedJson(root, `connector/artifacts/ci-installed-${os}/result.json`);

@@ -178,7 +178,8 @@ async function packageFixture(t, platform = 'mac', architecture = 'arm64') {
   });
   const os = platform === 'mac' ? 'macos' : 'linux';
   const extension = platform === 'mac' ? 'dmg' : 'deb';
-  const filename = `hapark-connector-0.1.1-${platform}-${architecture}.${extension}`;
+  const filename = platform === 'linux' ? 'hapark-connector-0.1.1-linux-amd64.deb'
+    : `hapark-connector-0.1.1-${platform}-${architecture}.${extension}`;
   const bytes = Buffer.from('verified native installer fixture');
   const hash = createHash('sha256').update(bytes).digest('hex');
   const dist = join(root, 'connector', 'dist');
@@ -263,11 +264,23 @@ test('Intel macOS and Ubuntu publish only their own verified installer', async t
   ]) await t.test(`${platform}-${architecture}`, async child => {
     const fixture = await packageFixture(child, platform, architecture);
     const uploads = [];
-    await uploadPreview({ ...fixture, head: sha, github: githubFixture(), upload: async value => uploads.push(value) });
+    const metadata = await uploadPreview({ ...fixture, head: sha, github: githubFixture(), upload: async value => uploads.push(value) });
     assert.equal(uploads.length, 1);
     assert.equal(basename(uploads[0].files[0]), name);
     assert.deepEqual(await readFile(uploads[0].files[0]), fixture.bytes);
+    assert.equal(metadata.architecture, architecture);
+    assert.equal(metadata.sha256, fixture.hash);
   });
+});
+
+test('the actual amd64 Debian input must still match the installed receipt hash before upload', async t => {
+  const fixture = await packageFixture(t, 'linux', 'x64');
+  await writeFile(join(fixture.root, 'connector', 'dist', 'hapark-connector-0.1.1-linux-amd64.deb'),
+    Buffer.alloc(fixture.bytes.length, 0x78));
+  let uploads = 0;
+  await assert.rejects(uploadPreview({ ...fixture, head: sha, github: githubFixture(),
+    upload: async () => { uploads += 1; } }), { code: 'PACKAGE_HASH_MISMATCH' });
+  assert.equal(uploads, 0);
 });
 
 test('failed, stale-source, wrong-architecture and unclean installation receipts never reach upload', async t => {
