@@ -1,0 +1,192 @@
+{
+  "baseline": "be78da5073e7abe9c5ab3048392efc4d2a1cb2d7",
+  "version": "0.1.6",
+  "tdd": {
+    "originalPetPassedChecks": 2,
+    "originalPetFailedChecks": 6,
+    "versionIdentityBeforePassed": 3,
+    "versionIdentityBeforeFailed": 1,
+    "versionIdentityAfterPassed": 4
+  },
+  "connector": {
+    "passed": 211,
+    "skipped": 1
+  },
+  "native": {
+    "passed": true,
+    "mode": "isolated-real-electron-pet-renderer",
+    "platform": "win32",
+    "checks": [
+      {
+        "name": "PET_SECURITY_AND_DRAG_CONTRACT",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "PET_OPAQUE_FACE_AND_PLUGS_ON_LIGHT_AND_DARK",
+        "passed": true,
+        "details": [
+          {
+            "background": "#ffffff",
+            "face": [
+              26,
+              24,
+              22,
+              255
+            ],
+            "leftPlug": [
+              26,
+              24,
+              22,
+              255
+            ],
+            "rightPlug": [
+              26,
+              24,
+              22,
+              255
+            ],
+            "bitmapScaleFactor": 1,
+            "representations": [
+              1
+            ]
+          },
+          {
+            "background": "#101216",
+            "face": [
+              26,
+              24,
+              22,
+              255
+            ],
+            "leftPlug": [
+              26,
+              24,
+              22,
+              255
+            ],
+            "rightPlug": [
+              26,
+              24,
+              22,
+              255
+            ],
+            "bitmapScaleFactor": 1,
+            "representations": [
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "name": "PET_REAL_EYE_CLOSURE_6000MS",
+        "passed": true,
+        "details": {
+          "periodMs": 6000,
+          "closedHeightRatio": 0.08
+        }
+      },
+      {
+        "name": "PET_SPONTANEOUS_SMILE_14000MS",
+        "passed": true,
+        "details": {
+          "periodMs": 14000,
+          "sampledAtMs": 12320,
+          "smileOpacity": 1
+        }
+      },
+      {
+        "name": "PET_RENDERER_HOVER_SMILE",
+        "passed": true,
+        "details": {
+          "chromiumHoverState": true,
+          "neutralRestored": true
+        }
+      },
+      {
+        "name": "PET_WINDOWS_NATIVE_CURSOR_HOVER",
+        "passed": true,
+        "details": null
+      },
+      {
+        "name": "PET_REDUCED_MOTION_STATIC_HOVER",
+        "passed": true,
+        "details": {
+          "repeatingAnimations": 0,
+          "staticHoverSmile": true
+        }
+      },
+      {
+        "name": "PET_REAL_ELAPSED_BLINK_AND_SMILE_CYCLE",
+        "passed": true,
+        "details": {
+          "blinkIterationMs": 5999.200000047684,
+          "smileIterationMs": 13999.400000095367,
+          "closedEyeHeight": 0.6453323364257812,
+          "smileOpacity": 1,
+          "realElapsedCycleObserved": true
+        }
+      },
+      {
+        "name": "PET_DRAG_AREA_AND_FOCUS_PRESERVED",
+        "passed": true,
+        "details": {
+          "excludedDragAreaRatio": 0.063,
+          "physicalDragPerformed": false
+        }
+      }
+    ],
+    "screenshots": [
+      "light-neutral.png",
+      "dark-neutral.png",
+      "eyes-closed.png",
+      "spontaneous-smile.png",
+      "hover-smile.png",
+      "native-hover.png",
+      "reduced-motion-hover.png"
+    ],
+    "focusRequested": false,
+    "focusObserved": false,
+    "productMainLoaded": false,
+    "protocolRegistration": false,
+    "accountProfileRead": false,
+    "cliRequests": 0,
+    "rendererNetworkRequests": 0,
+    "nativePointer": {
+      "supported": true,
+      "observed": true,
+      "cursorRestored": true,
+      "dipConvertedToPhysical": true,
+      "smileObserved": true
+    },
+    "limits": [
+      "No installed app, authenticated account, real desktop wallpaper or packaged installer is used.",
+      "Native cursor hover is observed on Windows; other platforms use explicit Chromium hover state.",
+      "Drag coverage is checked from native renderer CSS; physical OS dragging is not performed."
+    ],
+    "cleanup": {
+      "ownedElectronExited": true,
+      "exitCode": 0,
+      "forcedCleanup": false,
+      "ownedProfileRemoved": true
+    }
+  },
+  "desktopFlow": {
+    "passed": true,
+    "harnessStep": 2,
+    "checkIndex": 1
+  },
+  "productFileHashes": {
+    "connector/desktop/renderer/pet.html": "c5bb2828bc4d237680220432774b1204aa50d7cb96ce86413828ca0987544fc7",
+    "connector/desktop/renderer/pet.css": "f826ed75c379970b9196ee03659390b547806c842cf72b0fc5e3bfb44275c1f2",
+    "connector/desktop/package.json": "137157810cf1d50407cc8f34a58abdf2abad2a5c63f1586360c04ae381dbeab4"
+  },
+  "independentReview": {
+    "unresolvedP1": 0,
+    "unresolvedP2": 0,
+    "mode": "read-only"
+  },
+  "productionDeployed": false,
+  "connectorReleased": false,
+  "installedPetVerified": false
+}

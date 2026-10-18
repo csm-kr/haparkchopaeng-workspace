@@ -172,6 +172,9 @@ jobs:
       - name: Native tray state and menu lifecycle
         if: runner.os != 'Linux'
         run: node connector/scripts/desktop-tray-qa.mjs
+      - name: Native pet contrast, blink and smile rendering
+        if: runner.os != 'Linux'
+        run: node connector/scripts/pet-qa.mjs
       - name: Linux desktop test dependencies
         if: runner.os == 'Linux'
         run: |
@@ -219,6 +222,7 @@ jobs:
             printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
             node connector/scripts/ci-desktop-smoke.mjs
             node connector/scripts/desktop-tray-qa.mjs
+            node connector/scripts/pet-qa.mjs
           '
       - uses: actions/upload-artifact@v7.0.2
         if: always() && inputs.upload_artifacts == true
@@ -227,6 +231,7 @@ jobs:
           path: |
             connector/artifacts/ci-desktop-*/**
             connector/artifacts/desktop-tray-*/**
+            connector/artifacts/pet-renderer-*/**
           if-no-files-found: ignore
           retention-days: 14
       - name: Native installer build (unsigned validation artifact)

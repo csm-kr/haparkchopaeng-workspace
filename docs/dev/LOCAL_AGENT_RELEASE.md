@@ -2,7 +2,7 @@
 
 ## AI 브릿지 테스트 설치 파일 게시
 
-앱 표시 이름은 **AI 브릿지**, desktop 버전은 **0.1.1**이다. 기존 `hapark-connect` 링크·앱 ID·OS 프로필과 내부 암호화 서비스명은 유지한다. 정식 게시자 서명 전에는 테스트 버전으로 구분한다.
+앱 표시 이름은 **AI 브릿지**다. 현재 빌드 버전은 `connector/desktop/package.json`을 따르며, 0.1.6에는 밝은 배경의 펫 대비와 눈 깜빡임·미소가 포함된다. 공개된 다운로드 버전은 실제 게시 영수증과 운영 다운로드 API에서 확인한다. 기존 `hapark-connect` 링크·앱 ID·OS 프로필과 내부 암호화 서비스명은 유지한다. 정식 게시자 서명 전에는 테스트 버전으로 구분한다.
 
 Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치를 확인한 뒤 draft prerelease에 올린다. Mac arm64·Intel x64와 Ubuntu x64는 수동 실행 전용 [미리보기 게시 워크플로](../../.github/workflows/ai-bridge-preview.yml)를 사용한다. 기존 PR 검증의 읽기 권한은 유지한다. 이 워크플로는 사전 생성한 태그·정확한 SHA·같은 SHA의 6개 CI 성공·draft prerelease를 확인하고, 네이티브 암호화와 실제 설치를 통과한 자기 아키텍처의 파일 하나와 해시 메타데이터만 직접 업로드한다. Actions artifact 저장소는 사용하지 않는다.
 
