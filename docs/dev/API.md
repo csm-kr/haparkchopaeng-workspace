@@ -194,3 +194,40 @@
 논문 목록과 상세의 `papers`는 `sourceReady`와 nullable `sourceError`를 제공한다. 후자는 본문 추출 모듈이 소유한 고정 오류 문구만 반환한다. `/sources`는 기존 분석을 재실행하지 않고 PDF 본문만 준비하며, 재시도 시 해당 본문 오류만 지운다. 실패한 스캔·페이지/텍스트 한도와 기존 분석 결과를 구분한다.
 
 본문 미준비 자료를 포함한 턴은 `preparing`으로 접수해 Inngest에서 본문을 준비하고 실행 권한을 재검사한 뒤 `queued`로 전환한다. 논문 추출의 기존 30쪽 기본 한도는 유지하며 발표 PDF는 최대 150쪽을 지원한다. 같은 대화의 진행 중 턴은 `409 CONVERSATION_BUSY`다. 모델 문맥은 서버 원문과 완료된 최근 8턴만으로 최대 20만 자를 구성하며 잘림을 표시한다. 원문/이전 대화는 클라이언트에서 받지 않는다. 새 세션도 개인 이력을 읽을 수 있으나 새 실행과 취소는 현재 세션의 권한을 따른다. 유효 grant 중 서버에 이미 접수된 `completed` 결과의 후처리는 로그아웃 뒤 허용하고, 미접수 결과·새 추론은 거절한다. 최종 분석 저장 시 멤버십을 재검증한다.
+
+## 대화형 PT와 출력 (ADR-032)
+
+모든 경로는 로그인·활성 팀·작업 소유자를 검사한다. 변이는 정확한 Origin을 검사한다. 요청으로 팀·소유자·원문 텍스트·임의 도구·HTML·객체 경로를 받지 않는다.
+
+| 경로 | 계약 |
+|---|---|
+| `POST /api/agent/tasks` | 세미나는 `kind:seminar,workflow:guided,completion:saved_presentation`. 기존 직접 생성은 workflow 생략 |
+| `GET /api/agent/tasks/:id` | 개인 DTO에 workspace(방향·브리프·한 질문·목차·덱·대화), 최신 export 상태, requiresReconnect/sourceChanged 추가 |
+| `POST /api/agent/tasks/:id/seminar` | `{requestId,expectedVersion,action:choose/answer/outline/build/revise,directionId?,text?,reviewedDraft?,deviceId?,provider?,model?,effort?}` → 202. reviewedDraft는 덱 수정 대화에만 허용 |
+| `POST /api/agent/tasks/:id/exports` | `{requestId,expectedVersion,seminar}` → 202 `{task,export}`. 현재 검토본 저장과 Job 적재; 동일 UUID·동일 검토본 재요청 멱등 |
+| `GET /api/agent/tasks/:id/exports/:jobId` | 개인 출력 상태·현재 원문/덱 일치 여부·검수·다운로드 URL. Storage 경로 제외 |
+| `GET /api/agent/tasks/:id/exports/:jobId/file?format=pdf/html` | 최신 근거·덱과 일치하는 완료 파일의 attachment. HTML은 sandbox CSP·nosniff·private/no-store |
+| `POST /api/agent/tasks/:id/save` | 세미나 요청에 `artifactJobId?` 추가. guided PT는 검수한 파일 ID 필수(없으면 409 EXPORT_REVIEW_REQUIRED); 기존 직접 세미나는 선택. 정확한 검토본과 파일을 같은 트랜잭션에서 첨부 |
+| `GET /api/papers/:id/pages/:n` | 활성 팀 원문 PDF의 한 페이지 PNG; 1~300 정수와 실제 페이지 수 검사 |
+
+workspace는 40턴·3~16장 상한이며 발표 방향은 2~3개다. 각 장의 visual은 figure(현재 논문의 사용 가능한 Figure ID), page(읽은 원문 페이지), table, diagram 중 하나이고 citations·speakerNotes를 지원한다. 도식은 구조화 노드·연결만 받으며 HTML/SVG 소스는 받지 않는다. 작업·원문 충돌은 409다. export Job은 Inngest `seminar/export`와 2분 재접수 작업으로 처리한다. GET/다운로드에서 새 렌더나 추론을 실행하지 않는다.
+
+이전 로그인의 개인 제작 대화는 읽을 수 있지만 `requiresReconnect=true`면 현재 연결로 명시적으로 resume한 뒤 새 대화·공유 저장을 한다. 이미 등록한 덱의 새 출력은 작업의 과거 세션을 재사용하지 않고 현재 로그인에 연결된 유효 grant를 검증한다. 저장 연결 누락은 Job 적재 전 한국어 503이다. task 버전이 같아도 공유 객체 검증·권한·출력 상태는 새 조회 값을 반영한다.
+
+대기 중인 작업의 `sourceChanged=true`는 최신 원문으로 다시 시작하는 명시적 steer 진입점이다. 원문이 같고 추론을 기다리지 않는 resume은 기존 읽기 증거의 revision을 보존한다. 새 추론을 재접수할 때만 새 revision을 만든다. 등록 검증은 덱 메타데이터와 정확한 PDF/HTML 첨부를 함께 다시 읽는다. 덱 응답의 `message?`는 원문에 따른 선택 이유·수정 설명이며 앱 저장·내보내기 완료 주장이 아니다.
+
+## 목표 작업 (ADR-031)
+
+모든 응답은 개인 `no-store`다. 쓰기는 same-origin·웹 세션·활성 팀을 검사하며 `teamId/memberId/context/approved/tool` 입력을 받지 않는다. 장기 추론은 Inngest와 PC 큐에서 실행한다.
+
+| 경로 | 계약 |
+| --- | --- |
+| `GET /api/agent/tasks?conversationId=...` | 팀·소유자의 최근 작업 10개. 미지정이면 독립 작업 |
+| `POST /api/agent/tasks` | `requestId(UUID),paperId,goal,deviceId,provider,model,effort?,conversationId?,kind?(note/seminar),completion?(draft/saved_note/saved_presentation)`. 202 |
+| `GET /api/agent/tasks/:id` | 개인 작업·근거·초안·실제 저장 검증 DTO |
+| `POST /api/agent/tasks/:id` | `expectedVersion,action(cancel/steer/resume),goal?,deviceId?,provider?,model?,effort?`. 202 |
+| `POST /api/agent/tasks/:id/save` | 노트 `{expectedVersion,title,body}` 또는 세미나 `{expectedVersion,seminar}`. 200 |
+
+세미나는 `title,durationMinutes(5~120),summary,keypoints(1~10),slides(3~16),citations`다. 슬라이드는 `title,body,subtitle?`다. 인용은 실제 읽은 원문과 일치해야 한다. 저장 대상·팀·발표자는 서버가 task에서 정한다. 버전 충돌은 409, 구형 브릿지는 업데이트 안내, 플래그 꺼짐/큐 미설정은 한국어 503 안내다. 큐 전송 유실은 같은 요청 UUID로 재접수할 수 있다.
+
+> 데이터 모델은 [`./DB.md`](./DB.md), 호출 순서·외부 연동은 [`./SEQUENCE_DIAGRAM.md`](./SEQUENCE_DIAGRAM.md), 코드 규칙은 [`./CODING_CONVENTION.md`](./CODING_CONVENTION.md)를 본다.

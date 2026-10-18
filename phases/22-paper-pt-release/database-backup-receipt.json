@@ -1,0 +1,139 @@
+{
+  "createdAt": "2026-10-18T22:03:13.354Z",
+  "project": "ocprfnjuakugiraimeoo",
+  "database": "postgres",
+  "serverVersion": "17.6",
+  "tableCount": 30,
+  "rowCounts": [
+    {
+      "table": "Analysis",
+      "rows": 22
+    },
+    {
+      "table": "AppSetting",
+      "rows": 1
+    },
+    {
+      "table": "Comment",
+      "rows": 0
+    },
+    {
+      "table": "Figure",
+      "rows": 63
+    },
+    {
+      "table": "FineConfig",
+      "rows": 1
+    },
+    {
+      "table": "Invite",
+      "rows": 10
+    },
+    {
+      "table": "Job",
+      "rows": 32
+    },
+    {
+      "table": "LiveSession",
+      "rows": 54
+    },
+    {
+      "table": "LocalAgentAttempt",
+      "rows": 33
+    },
+    {
+      "table": "LocalAgentDevice",
+      "rows": 2
+    },
+    {
+      "table": "LocalAgentGrant",
+      "rows": 3
+    },
+    {
+      "table": "LocalAgentJob",
+      "rows": 21
+    },
+    {
+      "table": "LocalAgentSnapshot",
+      "rows": 6
+    },
+    {
+      "table": "Member",
+      "rows": 12
+    },
+    {
+      "table": "MemberLedger",
+      "rows": 4
+    },
+    {
+      "table": "Membership",
+      "rows": 14
+    },
+    {
+      "table": "Paper",
+      "rows": 11
+    },
+    {
+      "table": "Participant",
+      "rows": 66
+    },
+    {
+      "table": "Presentation",
+      "rows": 8
+    },
+    {
+      "table": "PresentationAsset",
+      "rows": 8
+    },
+    {
+      "table": "PresentationVersion",
+      "rows": 0
+    },
+    {
+      "table": "Publication",
+      "rows": 1
+    },
+    {
+      "table": "Reaction",
+      "rows": 0
+    },
+    {
+      "table": "ResearchConversation",
+      "rows": 8
+    },
+    {
+      "table": "ScheduleMonth",
+      "rows": 2
+    },
+    {
+      "table": "ScheduleWeek",
+      "rows": 9
+    },
+    {
+      "table": "SectionNote",
+      "rows": 0
+    },
+    {
+      "table": "Team",
+      "rows": 4
+    },
+    {
+      "table": "TeamInviteAcceptance",
+      "rows": 12
+    },
+    {
+      "table": "Workspace",
+      "rows": 1
+    }
+  ],
+  "bytes": 244965,
+  "sha256": "a64d58c8915138b6a44c322e4e2475638fc6e05cbb091f8fc343e7478eee8ef2",
+  "gzipReadbackVerified": true,
+  "restoreRehearsed": false,
+  "privateBackupLocation": "release worktree node_modules/.cache/pt-release-secrets (not committed)",
+  "excludes": [
+    "auth",
+    "storage",
+    "binary Storage objects"
+  ]
+}

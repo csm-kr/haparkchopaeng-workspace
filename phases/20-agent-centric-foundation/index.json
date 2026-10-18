@@ -1,0 +1,115 @@
+{
+  "project": "hapark",
+  "phase": "20-agent-centric-foundation",
+  "execution": "User authorized implementation and verification on 2026-10-18. Preserve existing workspace changes; use execute.py --verify to record checks without automatic git staging.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "contracts-and-observation",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "lib/agent/__tests__/contract.test.ts"
+        ]
+      ],
+      "started_at": "2026-10-18T22:42:02+0900",
+      "completed_at": "2026-10-18T22:42:04+0900",
+      "summary": "contracts-and-observation: 1 AC commands passed"
+    },
+    {
+      "step": 1,
+      "name": "durable-task-and-reviewed-note",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "unit"
+        ]
+      ],
+      "started_at": "2026-10-18T22:24:00+0900",
+      "summary": "durable-task-and-reviewed-note: 1 AC commands passed",
+      "completed_at": "2026-10-18T22:38:12+0900"
+    },
+    {
+      "step": 2,
+      "name": "connector-capability-contract",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-18T22:42:04+0900",
+      "completed_at": "2026-10-18T22:42:09+0900",
+      "summary": "connector-capability-contract: 1 AC commands passed"
+    },
+    {
+      "step": 3,
+      "name": "task-workspace-ui",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "e2e"
+        ]
+      ],
+      "started_at": "2026-10-18T22:18:49+0900",
+      "summary": "task-workspace-ui: 1 AC commands passed",
+      "completed_at": "2026-10-18T22:29:21+0900"
+    },
+    {
+      "step": 4,
+      "name": "wire-and-full-regression",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "wire"
+        ],
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ],
+        [
+          "node",
+          "--test",
+          "scripts/local-agent-verify.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-18T22:38:12+0900",
+      "completed_at": "2026-10-18T22:41:55+0900",
+      "summary": "wire-and-full-regression: 3 AC commands passed"
+    },
+    {
+      "step": 5,
+      "name": "review-and-build",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "lint"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "build"
+        ]
+      ],
+      "started_at": "2026-10-18T22:42:09+0900",
+      "completed_at": "2026-10-18T22:43:58+0900",
+      "summary": "review-and-build: 2 AC commands passed"
+    }
+  ],
+  "created_at": "2026-10-18T22:18:49+0900",
+  "completed_at": "2026-10-18T22:43:58+0900"
+}

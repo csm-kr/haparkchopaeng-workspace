@@ -357,3 +357,17 @@ model Publication {
 4. 반영 후 읽기 전용 drift 확인과 권한·소스 준비·선택 모델 분석·개인 채팅의 제한된 검증을 한다. 코드 롤백 시 추가 테이블·사용자 이력은 보존하며 자동 `DROP`/리셋을 수행하지 않는다.
 
 공유 운영 DB에서 `prisma db push`·`seed`로 이 단계를 대체하지 않는다. 구체적 대상 확인·서명·설치 파일·배포·롤백 절차는 [운영 런북](./LOCAL_AGENT_RELEASE.md)을 따른다.
+
+## 대화형 PT 상태·출력 (ADR-032)
+
+phase 20의 AgentTask/AgentOperation/Presentation.sourcePaperId 스키마를 재사용한다. guided 세미나의 draft는 version=1,type=paper_pt인 JSON wrapper로 브리프·질문·방향·목차·덱·개인 대화를 보존한다. 기존 노트·직접 세미나 draft JSON은 그대로 읽는다. 새 테이블·컬럼·SQL은 없다.
+
+Job.type=seminar_export의 payload는 version, taskId, teamId, memberId, paperId, sourceRevision, draftHash, draft, expectedVersion과 완료 files/qa다. Job.id는 검증한 요청 UUID다. AgentOperation.kind=export/tool=seminar.export가 Job ID를 연결한다. 파일은 비공개 `seminars/<team>/<member>/<task>/<job>/<server-random>.pdf/html`에 저장하며 DTO에 객체 키를 반환하지 않는다. 검토 등록 또는 동일한 등록본의 후속 출력 완료 때 PresentationAsset.type=pdf/html로 연결한다. html은 생성물 전용이며 업로드는 계속 PDF만 받는다. 잡 상태는 queued/running/done/failed이며 소유 작업 삭제·원문 변경·멤버십 상실은 새 결과 노출을 막는다.
+
+## 목표 작업 스키마 (ADR-031)
+
+`AgentTask`·`AgentOperation`과 `Presentation.sourcePaperId`를 추가한다. 팀·소유자·요청 UUID, revision별 operation key, PC job ID에 고유 제약을 둔다. 팀 삭제 시 작업/원장은 cascade, 원문 삭제 시 발표 자료의 연결만 SetNull이다.
+
+새 웹은 발표 조회에도 새 관계를 사용하므로 **플래그가 꺼져 있어도 새 스키마가 먼저 필요하다**. [20261018-agent-centric-foundation.sql](./sql/20261018-agent-centric-foundation.sql)을 기존 연결·연구 채팅 SQL 이후 검토·적용한다. 이 phase는 운영 DB에 적용하지 않는다. 운영 `db push/seed`로 대체하지 않는다. 롤백 시 신규 실행 플래그를 끄고 이력·공유 객체는 보존한다.
+
+> 아키텍처 전반은 [`./ARCHITECTURE.md`](./ARCHITECTURE.md), 접근 경로는 [`./API.md`](./API.md), 앱 상태는 [`../agent/STATE.md`](../agent/STATE.md)를 본다. 데이터의 출처(프로토타입 목)는 `src/data.js`다. 이 문서는 그 목 데이터를 **타입드 영속 모델**로 정규화한 것이다.

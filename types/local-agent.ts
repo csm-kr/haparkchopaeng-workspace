@@ -18,6 +18,7 @@ export interface LocalAgentProviderSnapshot {
   /** Last actual quota observation; independent of fresh authentication/model metadata. */
   quotaObservedAt?: string;
   message?: string;
+  capabilities?: ("agent_step_v1")[];
 }
 /** Authenticated self-report from the running app, independent of provider metadata. */
 export interface LocalAgentBridgeMetadata {

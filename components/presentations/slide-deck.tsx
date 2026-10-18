@@ -4,6 +4,7 @@ import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import type { SlideView } from "./types";
+import { SlideVisual } from "@/components/seminar/slide-visual";
 
 // 슬라이드 덱 — 한 장씩 넘겨 보는 뷰어(클라이언트 섬, ADR-015).
 // 이전/다음 버튼 · 좌우 화살표 키 · 썸네일 점프로 이동한다. 토큰만 사용(R20).
@@ -11,9 +12,10 @@ import type { SlideView } from "./types";
 
 export interface SlideDeckProps {
   slides: SlideView[];
+  sourcePaperId?: string;
 }
 
-export function SlideDeck({ slides }: SlideDeckProps) {
+export function SlideDeck({ slides, sourcePaperId }: SlideDeckProps) {
   const [idx, setIdx] = React.useState(0);
   const total = slides.length;
 
@@ -54,9 +56,8 @@ export function SlideDeck({ slides }: SlideDeckProps) {
         {slide.subtitle && (
           <p className="text-[13px] text-fg-subtle">{slide.subtitle}</p>
         )}
-        <p className="text-[14px] whitespace-pre-wrap text-fg-muted">
-          {slide.body}
-        </p>
+        <div className={slide.visual ? "mt-2 flex min-w-0 flex-col gap-5" : ""}><p className="whitespace-pre-wrap text-[14px] leading-relaxed text-fg-muted">{slide.body}</p>{slide.visual && <SlideVisual key={`${cur}:${slide.visual.kind}`} visual={slide.visual} paperId={sourcePaperId} />}</div>
+        {!!slide.citations?.length && <p className="mt-3 font-mono text-[10px] text-fg-subtle">원문 p.{[...new Set(slide.citations.map(citation => citation.page))].join(", ")}</p>}
       </Card>
 
       {/* 컨트롤 — 이전/다음 + 현재 위치 */}
@@ -81,6 +82,7 @@ export function SlideDeck({ slides }: SlideDeckProps) {
           다음 <ChevronRight size={14} aria-hidden="true" />
         </Button>
       </div>
+      {slide.speakerNotes && <details className="text-[12px] text-fg-muted"><summary className="cursor-pointer">발표자 메모</summary><p className="mt-2 whitespace-pre-wrap leading-relaxed">{slide.speakerNotes}</p></details>}
 
       {/* 썸네일 — 번호로 바로 점프 */}
       <div className="flex flex-wrap gap-1.5">

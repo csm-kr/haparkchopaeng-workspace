@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   // Linux 네이티브 바이너리를 강제 포함한다(Vercel runtime은 linux-x64).
   outputFileTracingIncludes: {
     "/api/inngest": [
+      "./public/fonts/Pretendard-Regular.ttf",
+      "./public/fonts/Pretendard-SemiBold.ttf",
+      "./public/fonts/Pretendard-LICENSE.txt",
       "./node_modules/@img/sharp-linux-x64/**/*",
       "./node_modules/@img/sharp-libvips-linux-x64/**/*",
       "./node_modules/mupdf/dist/mupdf-wasm.wasm",

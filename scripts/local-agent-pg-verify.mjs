@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { withoutAgentTaskSchema, assertAgentTaskSql } from './agent-task-schema.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const databaseName = 'hapark_local_agent_test';
@@ -29,8 +30,9 @@ export function postgresSchema(source, output) {
     .replace(/generator client\s*\{[\s\S]*?\}/, block => `${block.slice(0, -1).replace(/^\s*output\s*=.*$/m, '')}  output = ${JSON.stringify(output.replaceAll('\\', '/'))}\n}`);
 }
 
-/** Remove only the two reviewed phases; their SQL must create every new table and column. */
+/** Remove reviewed additive phases; their SQL must create every new table and column. */
 export function postgresBaseSchema(source) {
+  source = withoutAgentTaskSchema(source);
   const removed = [];
   let teamCount = 0, paperCount = 0, conversationCount = 0;
   const base = source.replace(/^model\s+(\w+)\s*\{[\s\S]*?^\}/gm, (block, name) => {
@@ -141,7 +143,7 @@ export function postgresEnvironment(inherited, clientModule) {
     !/(?:API_KEY|TOKEN|SECRET|SUPABASE|LIVEKIT|INNGEST|DATABASE_URL|DIRECT_URL|LOCAL_AGENT_TEST_CLIENT_MODULE|LOCAL_AGENT_PG_TEST_CLIENT_MODULE|LOCAL_AGENT_PG_TEST_URL|^PG|^POSTGRES)/i.test(key)));
   return { ...env, CI: 'true', HAPARK_PG_ISOLATED_TESTS: '1', LOCAL_AGENT_PG_TEST_URL: url,
     LOCAL_AGENT_PG_TEST_CLIENT_MODULE: clientModule, PRISMA_GENERATE_SKIP_AUTOINSTALL: '1',
-    AUTH_SECRET: 'isolated-postgres-local-agent-tests-only-not-a-deployment-secret' };
+    AUTH_SECRET: 'isolated-postgres-local-agent-tests-only-not-a-deployment-secret', AGENT_TASKS_ENABLED: '1' };
 }
 
 function redact(output, url) {
@@ -192,8 +194,10 @@ export async function runPostgresVerification(environment, operations) {
   const baseSource = postgresBaseSchema(source);
   const sql = join(root, 'docs/dev/sql/20261017-local-agent-connection.sql');
   const analysisSql = join(root, 'docs/dev/sql/20261017-local-ai-research-chat.sql');
+  const agentSql = join(root, 'docs/dev/sql/20261018-agent-centric-foundation.sql');
   assertLocalAgentSql(await readFile(sql, 'utf8'));
   assertLocalAiSql(await readFile(analysisSql, 'utf8'));
+  assertAgentTaskSql(await readFile(agentSql, 'utf8'));
   const parent = join(root, 'node_modules/.cache');
   await mkdir(parent, { recursive: true });
   const directory = await mkdtemp(join(parent, 'hapark-local-agent-pg-'));
@@ -210,9 +214,10 @@ export async function runPostgresVerification(environment, operations) {
   await operations.command([prisma, 'db', 'push', '--skip-generate', '--schema', baseSchema], env);
   await operations.command([prisma, 'db', 'execute', '--file', sql, '--schema', schema], env);
   await operations.command([prisma, 'db', 'execute', '--file', analysisSql, '--schema', schema], env);
+  await operations.command([prisma, 'db', 'execute', '--file', agentSql, '--schema', schema], env);
   // Read-only drift check proves the reviewed SQL matches the full canonical Prisma schema.
   await operations.command([prisma, 'migrate', 'diff', '--from-schema-datasource', schema, '--to-schema-datamodel', schema, '--exit-code'], env);
-  await operations.command([join(root, 'node_modules/vitest/vitest.mjs'), 'run', 'lib/local-agent/__tests__/postgres.integration.test.ts', '--reporter=basic'], env);
+  await operations.command([join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--no-file-parallelism', 'lib/local-agent/__tests__/postgres.integration.test.ts', 'lib/agent/__tests__/workflow.integration.test.ts', '--reporter=basic'], env);
 }
 
 export async function verifyPostgres(environment = process.env) {

@@ -1,3 +1,4 @@
+import { HttpError } from "@/lib/http";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 
 // Supabase Storage 헬퍼 — 서버 전용(ADR-016).
@@ -111,4 +112,19 @@ export async function removeFolder(prefix: string): Promise<void> {
   } catch {
     // 정리 실패는 무시 — best-effort.
   }
+}
+
+/** Local configuration only; no client creation, credentials in errors, or network access. */
+export function assertGeneratedPresentationStorage(): void {
+  let ready = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+  try { ready = ready && ["https:","http:"].includes(new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").protocol); } catch { ready = false; }
+  if (!ready) throw new HttpError(503,"STORAGE_UNAVAILABLE","발표 파일 저장 기능을 아직 연결하지 않았어요. 연결을 준비한 뒤 다시 시도해주세요.");
+}
+
+/** Generated PT artifacts only. HTML stays a private downloadable object, never an app origin page. */
+export async function uploadGeneratedPresentation(path: string, body: Buffer, contentType: "application/pdf" | "application/octet-stream"): Promise<void> {
+  assertGeneratedPresentationStorage();
+  await ensureBucket();
+  const { error } = await createSupabaseAdmin().storage.from(bucketName()).upload(path, body, { contentType, upsert: false });
+  if (error) throw new Error(error.message);
 }

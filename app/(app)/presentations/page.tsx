@@ -45,7 +45,10 @@ export default async function PresentationsPage() {
     <>
       <Topbar
         crumbs={[{ label: "발표 자료" }]}
-        actions={<CreatePresentationButton />}
+        actions={<div className="flex items-center gap-2">
+          {process.env.AGENT_TASKS_ENABLED === "1" && <Link href="/presentations/new" className="rounded-sm bg-accent px-3 py-1.5 text-[13px] font-medium text-accent-fg hover:bg-accent-hover">세미나 만들기</Link>}
+          <CreatePresentationButton />
+        </div>}
       />
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">{content}</div>

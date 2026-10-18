@@ -12,6 +12,8 @@ import { ConversationList } from "./conversation-list";
 import { ChatDialog } from "./dialog";
 import { Transcript } from "./transcript";
 import type { ResearchChatApi } from "./client";
+import { useAgentTasks } from "@/components/agent/use-agent-tasks";
+import { AgentTaskList } from "@/components/agent/task-list";
 
 export interface ResearchChatProps {
   teamId: string;
@@ -23,6 +25,8 @@ export interface ResearchChatProps {
   initialPaperId?: string;
   initialError?: string | null;
   api?: ResearchChatApi;
+  agentTasksEnabled?: boolean;
+  initialWork?: "seminar";
 }
 
 export function ResearchChat(props: ResearchChatProps) {
@@ -63,9 +67,12 @@ function ScopedResearchChat(props: ResearchChatProps) {
   const matches = available.filter(item => !chosen.some(selected => selected.id === item.id && selected.kind === item.kind) && item.title.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""));
   const activeIndex = Math.min(mention?.index ?? 0, Math.max(0, matches.length - 1));
   const target = chatSelection(agent?.device, agent?.chatTarget ?? agent?.selectedModel, agent?.effort);
+  const work = useAgentTasks(Boolean(props.agentTasksEnabled) && !chat.blocked, chat.detail?.conversation.id);
+  const execution = agent?.phase === "connected" && target && agent.device ? { deviceId: agent.device.id, ...target } : null;
+  const taskPapers = chosen.filter(item => item.kind === "paper");
   const activeTurn = chat.detail?.turns.find(turn => ["preparing", "queued", "running"].includes(turn.status));
   const canSend = agent?.phase === "connected" && !!target && !!chat.prompt.trim() && !activeTurn && !chat.sending && !chat.loading && !chat.blocked;
-  const empty = !chat.detail?.turns.length && !chat.loading;
+  const empty = !chat.detail?.turns.length && !chat.loading && !work.tasks.length;
   const closeMention = React.useCallback(() => setMention(null), []);
   React.useEffect(() => { setMention(null); }, [key]);
   React.useEffect(() => {
@@ -110,6 +117,17 @@ function ScopedResearchChat(props: ResearchChatProps) {
     void chat.submit(paperIds, { deviceId: agent.device.id, ...target, paperIds, presentationIds, prompt: chat.prompt.trim() });
   }
   function newChat() { chat.newChat(); setSelections(previous => ({ ...previous, new: [] })); setListOpen(false); closeMention(); }
+  async function startTask() {
+    if (!execution || taskPapers.length !== 1 || !chat.prompt.trim() || activeTurn || work.busyId) return;
+    closeMention();
+    if (await work.start({ ...execution, paperId: taskPapers[0].id, goal: chat.prompt.trim(), completion: "draft" })) chat.setPrompt("");
+  }
+  async function startSeminar() {
+    if (!execution || taskPapers.length !== 1 || activeTurn || work.busyId) return;
+    closeMention();
+    const goal = chat.prompt.trim() || "선택한 논문으로 30분 연구 세미나를 준비해줘. 문제, 기여, 방법, 실험, 한계, 토론 질문과 원문 근거를 슬라이드로 구성해줘.";
+    if (await work.start({ ...execution, paperId: taskPapers[0].id, goal, kind: "seminar", completion: "saved_presentation" })) chat.setPrompt("");
+  }
   function open(id: string) { void chat.open(id); setListOpen(false); closeMention(); }
   const list = <ConversationList conversations={chat.conversations} selectedId={chat.detail?.conversation.id} onSelect={open} onNew={newChat} />;
   return <section aria-label="AI 연구 채팅" className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -122,8 +140,8 @@ function ScopedResearchChat(props: ResearchChatProps) {
       </header>
       <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${empty ? "justify-center" : ""}`}>
         {chat.loading ? <div role="status" className="flex flex-1 items-center justify-center p-6 text-[13px] text-fg-muted">대화를 불러오고 있어요…</div> : empty ?
-          <div className="mx-auto mb-7 w-full max-w-3xl px-6 text-center"><h2 className="text-[24px] font-semibold tracking-tight text-fg sm:text-[28px]">무엇을 함께 생각해 볼까요?</h2></div> :
-          <Transcript detail={chat.detail} onRetry={question => { chat.setPrompt(question); input.current?.focus(); }}>{null}</Transcript>}
+          <div className="mx-auto mb-7 w-full max-w-3xl px-6 text-center"><h2 className="text-[24px] font-semibold tracking-tight text-fg sm:text-[28px]">{props.initialWork === "seminar" ? "어떤 논문으로 세미나를 준비할까요?" : "무엇을 함께 생각해 볼까요?"}</h2>{props.initialWork === "seminar" && <p className="mt-3 text-[13px] text-fg-muted">@로 논문 한 편을 고르면 발표 구성과 슬라이드를 만들 수 있어요.</p>}</div> :
+          <Transcript detail={chat.detail} onRetry={question => { chat.setPrompt(question); input.current?.focus(); }} activityKey={work.tasks.map(task => `${task.id}:${task.version}`).join(",")} taskContent={props.agentTasksEnabled && !chat.blocked ? <AgentTaskList tasks={work.tasks} busyId={work.busyId} connected={Boolean(execution)} onSave={(task, content) => { void work.save(task, content); }} onSeminarSave={(task, seminar) => { void work.saveSeminar(task, seminar); }} onControl={(task, control) => { void work.control(task, control, execution); }} /> : undefined}>{null}</Transcript>}
         <div className={`shrink-0 px-3 pb-[max(16px,env(safe-area-inset-bottom))] sm:px-6 ${empty ? "" : "pt-3"}`}>
           <form aria-label="연구 질문 보내기" onSubmit={event => { event.preventDefault(); send(); }} className="relative mx-auto flex w-full max-w-3xl flex-col rounded-xl border border-border-strong bg-bg-elevated p-3 shadow-[var(--shadow-xs)] focus-within:border-accent">
             {chosen.length > 0 && <div aria-label="첨부 자료" className="mb-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">{chosen.map(item => <span key={`${item.kind}:${item.id}`} className="inline-flex max-w-full items-center gap-1 rounded-sm bg-bg-subtle pl-2 text-[11px] text-fg-muted">
@@ -164,7 +182,9 @@ function ScopedResearchChat(props: ResearchChatProps) {
                 <button type="submit" aria-label="보내기" disabled={!canSend} className="grid size-10 place-items-center rounded-lg bg-fg text-bg transition-colors hover:bg-fg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:bg-bg-active disabled:text-fg-faint"><ArrowUp size={19} aria-hidden="true" /></button>}
             </div>
           </form>
-          {agent?.phase === "connected" && agent.chatTarget && !target && <p role="status" className="mx-auto mt-2 max-w-3xl px-1 text-[12px] leading-relaxed text-busy">사용하던 모델을 사용할 수 없어요. 연결 설정에서 새 모델을 직접 선택해 주세요.</p>}
+          {props.agentTasksEnabled && taskPapers.length === 1 && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center gap-2"><Button type="button" variant="secondary" size="sm" disabled={!execution || !!activeTurn || !!work.busyId || chat.blocked || chat.loading} onClick={() => void startSeminar()}>세미나 만들기</Button><Button type="button" variant="ghost" size="sm" disabled={!execution || !chat.prompt.trim() || !!activeTurn || !!work.busyId || chat.blocked || chat.loading} onClick={() => void startTask()}>{work.busyId === "new" ? "작업 요청 중…" : "노트 초안 만들기"}</Button><span className="min-w-0 truncate text-[11px] text-fg-subtle">{taskPapers[0].title}</span></div>}
+          {props.agentTasksEnabled && work.loading && <p role="status" className="mx-auto mt-2 max-w-3xl text-[11px] text-fg-muted">작업 이력을 확인하고 있어요…</p>}
+          {props.agentTasksEnabled && work.error && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center gap-2"><p role="alert" className="text-[12px] text-busy">{work.error}</p><Button type="button" variant="ghost" size="sm" onClick={() => void work.refresh()}>작업 상태 다시 확인</Button></div>}
           {chat.error && <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center gap-2 px-1"><p role="alert" className="text-[12px] leading-relaxed text-busy">{chat.error}</p>{chat.blocked ? <Link href={chat.blockedTarget} className="text-[12px] text-accent">{chat.blockedTarget === "/" ? "다시 로그인" : "팀 확인"}</Link> : <Button variant="ghost" size="sm" onClick={() => void chat.refresh()}>상태 다시 확인</Button>}</div>}
         </div>
       </div>

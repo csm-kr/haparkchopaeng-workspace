@@ -80,6 +80,7 @@ model Team {
   localAgentSnapshots LocalAgentSnapshot[]
   localAgentJobs LocalAgentJob[]
   researchConversations ResearchConversation[]
+  agentTasks AgentTask[]
   // 전역 팀 상한 MAX_TEAMS(기본 2)는 앱레벨에서 강제(ADR-018).
 }
 
@@ -130,6 +131,7 @@ model Paper {
   analyses       Analysis[]
   figures        Figure[]
   notes          SectionNote[]
+  seminarPresentations Presentation[] @relation("SeminarSourcePaper")
   // CRITICAL: 업로드는 PDF 전용(ADR-003). kind 같은 타입 필드 두지 말 것.
   // CRITICAL: 분석 실패가 Paper 저장을 막지 않는다 — analysisStatus=failed로 두고 재시도(API /reanalyze).
 
@@ -173,6 +175,8 @@ model SectionNote {
 }
 
 model Presentation {
+  sourcePaperId String?
+  sourcePaper   Paper? @relation("SeminarSourcePaper", fields: [sourcePaperId], references: [id], onDelete: SetNull)
   id          String                @id @default(cuid())
   teamId      String                @default("") // Team.id — 활성 팀 스코핑(ADR-020, R37). default ""는 백필 sentinel(step 4가 명시 주입).
   title       String
@@ -196,7 +200,7 @@ model PresentationAsset {
   presentationId String
   presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
   name           String
-  type           String // pdf | ppt | note
+  type           String // pdf | ppt | note | html (generated PT only; uploads stay PDF)
   size           String
   url            String
 }
@@ -338,7 +342,7 @@ model Participant {
 
 model Job {
   id          String    @id @default(cuid())
-  type        String // analyze_paper | fetch_arxiv | process_recording
+  type        String // analyze_paper | fetch_arxiv | process_recording | seminar_export
   status      String    @default("queued") // queued | running | done | failed
   payload     Json // { paperId } 등
   attempts    Int       @default(0)
@@ -484,4 +488,62 @@ model ResearchConversation {
   updatedAt DateTime @updatedAt
 
   @@index([memberId, teamId, updatedAt])
+}
+
+// Goal state is separate from a chat turn and one PC inference. Private to owner.
+model AgentTask {
+  id             String @id @default(cuid())
+  teamId         String
+  team           Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId       String
+  requestId      String
+  conversationId String?
+  sessionKey     String
+  sessionExpiresAt DateTime
+  deviceId       String
+  provider       String
+  model          String
+  effort         String @default("medium")
+  paperId        String
+  kind           String @default("note")
+  goal           String
+  completion     String @default("draft")
+  status         String @default("queued")
+  phase          String @default("queued")
+  version        Int @default(0)
+  revision       Int @default(0)
+  decisionCount  Int @default(0)
+  toolCount      Int @default(0)
+  repairCount    Int @default(0)
+  sourceRevision String?
+  draft          Json?
+  activeJobId    String?
+  error          String?
+  runStartedAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  operations     AgentOperation[]
+
+  @@unique([teamId, memberId, requestId])
+  @@index([teamId, memberId, updatedAt])
+  @@index([status, updatedAt])
+}
+
+model AgentOperation {
+  id        String @id
+  taskId    String
+  task      AgentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  revision  Int
+  key       String
+  kind      String
+  tool      String
+  status    String
+  input     Json
+  output    Json?
+  jobId     String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([taskId, revision, key])
+  @@index([taskId, createdAt])
 }

@@ -163,3 +163,21 @@ src/
 새 로그인은 소유자+활성 팀으로 개인 기록을 읽을 수 있으나 과거 grant로 실행하거나 이전 세션의 작업을 취소하지 못한다. 화면은 최근 50턴·목록 100개이며, 모델에는 완료된 최근 8턴과 원문을 합해 최대 20만 자를 전달하고 생략 여부를 표시한다. 대화 결과는 기존 논문 분석·팀 노트를 자동 변경하지 않는다.
 
 유효 grant 중 서버가 이미 `completed`로 접수한 결과의 검증·렌더·영속은 로그아웃 뒤에도 마친다. 이후 신규/계속 추론과 미접수 결과는 거절하며 Inngest가 웹 허가를 갱신하지 않는다. 최종 분석 저장은 현재 멤버십·팀·최신 실행 CAS를 다시 확인한다. 운영 스키마는 아직 미적용이며 [수동 적용 단계](./DB.md#local-ai-schema)와 추가 전체 품질 검증을 완료해야 한다.
+
+## PT 제작 경로 (ADR-032)
+
+`components/seminar`는 논문 선택·제작 대화·방향·목차·도식 미리보기·파일 상태를 담당한다. 서버 RSC가 활성 팀의 논문과 개인 작업을 읽고, 변이는 `/api/agent/tasks/:id/seminar`와 exports/save를 호출한다. `lib/seminar/contract.ts`는 공유 구조, workflow.ts는 검증된 대화 전이, render.ts는 결정된 HTML/PDF 기하, exports.ts는 소유자·원문·덱 결속과 내구성 출력이다. `worker/seminar-export.ts`는 Inngest 실행·재접수를 제공한다. 요청 경로에는 모델 추론·덱 렌더를 넣지 않는다.
+
+모델은 실제 읽은 원문과 Figure 메타데이터로 구조화 JSON만 제안한다. 화면 그림 확인을 했다고 주장하지 않는다. 실제 원문 자산 다운로드·페이지 렌더·이미지 정규화·자체 포함 HTML과 한글 PDF 생성은 정해진 서버 코드가 수행한다. 저장한 PDF는 기존 발표 자료/라이브 공유 경계를 재사용한다. 새 CLI 도구·별도 범용 에이전트·외부 유료 모델 자동 대체는 추가하지 않는다.
+
+## 목표 작업 경로 (ADR-031)
+
+`/presentations → /ai-chat?work=seminar` 또는 논문이 첨부된 AI 채팅 → `/api/agent/tasks` → `AgentTask` → Inngest `worker/agent-task.ts` → `lib/agent/service.ts`의 짧은 상태 전이 → `LocalAgentJob(purpose=agent_step)` → PC 브릿지의 구조화된 텍스트 추론 → 서버 읽기/초안 검증 순서다. 요청 경로는 추론을 기다리지 않는다.
+
+별도 검토 API는 `lib/section-notes.ts` 또는 `lib/presentation-writes.ts`의 기존 UI 공통 쓰기를 사용한다. 권한·원문·버전 검사와 원장을 같은 트랜잭션으로 묶고 커밋 후 DB 재조회로 검증한다. 클라이언트는 private DTO·검토 편집만 담당한다.
+
+> **정본은 루트의 `README.md`(핸드오프)와 `AGENTS.md`다.** 이 문서는 그 내용을 통합한 요약이며, 충돌 시 루트 문서를 따른다.
+>
+> 현재 코드는 **고충실도 디자인 프로토타입**이다(빌드 없음, 브라우저 내 Babel JSX 트랜스파일, `window.*` 목 데이터). 프로덕션은 이 디자인을 실제 스택(번들러, 라우터, 실제 상태/비디오/PDF 파이프라인)으로 재구축한다.
+>
+> 형제 문서: [`DB.md`](./DB.md) · [`API.md`](./API.md) · [`SEQUENCE_DIAGRAM.md`](./SEQUENCE_DIAGRAM.md) · [`CODING_CONVENTION.md`](./CODING_CONVENTION.md) · [`ENV.md`](./ENV.md). 앱 상태는 [`../agent/STATE.md`](../agent/STATE.md), 결정 근거는 [`../agent/ADR.md`](../agent/ADR.md).

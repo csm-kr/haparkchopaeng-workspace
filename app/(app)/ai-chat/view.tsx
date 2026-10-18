@@ -8,7 +8,7 @@ import { getConversation, listConversations, listResearchPapers, listResearchPre
 import type { ResearchConversationDetail, ResearchConversationView, ResearchPaperOption, ResearchPresentationOption } from "@/types/research-chat";
 
 /** Private history is server-scoped; the session credential never becomes a client prop. */
-export async function ResearchChatPage({ conversationId, initialPaperId }: { conversationId?: string; initialPaperId?: string } = {}) {
+export async function ResearchChatPage({ conversationId, initialPaperId, initialWork }: { conversationId?: string; initialPaperId?: string; initialWork?: "seminar" } = {}) {
   const session = await getConnectionSession();
   if (!session) redirect("/");
   const team = await getActiveTeam(session.memberId);
@@ -23,6 +23,6 @@ export async function ResearchChatPage({ conversationId, initialPaperId }: { con
     error = cause instanceof HttpError && cause.status === 404 ? "현재 팀에서 열 수 없는 대화예요." : "대화를 불러오지 못했어요. 잠시 뒤 상태를 다시 확인해 주세요.";
   }
   return <><Topbar crumbs={[{ label: "AI 채팅", ...(conversationId ? { href: "/ai-chat" } : {}) }, ...(detail ? [{ label: detail.conversation.title }] : [])]} />
-    <ResearchChat teamId={team.id} initialPapers={papers} initialPresentations={presentations} initialConversations={conversations} initialDetail={detail} initialConversationId={conversationId} initialPaperId={papers.some((paper) => paper.id === initialPaperId) ? initialPaperId : undefined} initialError={error} />
+    <ResearchChat teamId={team.id} agentTasksEnabled={process.env.AGENT_TASKS_ENABLED === "1"} initialWork={initialWork} initialPapers={papers} initialPresentations={presentations} initialConversations={conversations} initialDetail={detail} initialConversationId={conversationId} initialPaperId={papers.some((paper) => paper.id === initialPaperId) ? initialPaperId : undefined} initialError={error} />
   </>;
 }

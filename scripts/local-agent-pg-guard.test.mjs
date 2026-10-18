@@ -69,6 +69,8 @@ test('builds the application base before the five LocalAgent models and the exac
   assert.doesNotMatch(base, /^model ResearchConversation\b/m);
   assert.doesNotMatch(base, /^\s*researchConversations\s+ResearchConversation/m);
   assert.equal(/^model LocalAgent/m.test(base), false);
+  assert.doesNotMatch(base, /^model Agent(?:Task|Operation)\b/m);
+  assert.doesNotMatch(base, /^\s*(agentTasks|seminarPresentations|sourcePaperId|sourcePaper)\s/m);
   assert.equal(/^\s*localAgent\w+\s+LocalAgent/m.test(base), false);
   for (const broken of [
     source.replace(/^model LocalAgentJob \{[\s\S]*?^\}/m, ''),
@@ -134,7 +136,7 @@ test('creates only the base schema, applies phase12 then phase13 SQL, checks dri
     command: async (args, env) => { calls.push({ args, env }); },
     assertDisposableServer: async () => { calls.push({ identity: true }); },
   });
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 8);
   assert.equal(calls[0].args[1], 'generate');
   assert.equal(calls[1].identity, true);
   assert.deepEqual(calls[2].args.slice(1, 4), ['db', 'push', '--skip-generate']);
@@ -146,9 +148,10 @@ test('creates only the base schema, applies phase12 then phase13 SQL, checks dri
   assert.ok(calls[3].args[4].endsWith('20261017-local-agent-connection.sql'));
   assert.deepEqual(calls[4].args.slice(1, 4), ['db', 'execute', '--file']);
   assert.ok(calls[4].args[4].endsWith('20261017-local-ai-research-chat.sql'));
-  assert.deepEqual(calls[5].args.slice(1, 3), ['migrate', 'diff']);
-  assert.ok(calls[5].args.includes('--exit-code'));
-  assert.ok(calls[6].args.some(value => value.endsWith('postgres.integration.test.ts')));
+  assert.ok(calls[5].args[4].endsWith('20261018-agent-centric-foundation.sql'));
+  assert.deepEqual(calls[6].args.slice(1, 3), ['migrate', 'diff']);
+  assert.ok(calls[6].args.includes('--exit-code'));
+  assert.ok(calls[7].args.some(value => value.endsWith('postgres.integration.test.ts')));
   assert.doesNotMatch(base, /^model ResearchConversation\b/m);
   assert.doesNotMatch(base.match(/^model Paper \{[\s\S]*?^\}/m)?.[0] ?? '', /^\s*(sourceText|sourceDigest|analysisRequestId|analysisError)\s/m);
   for (const call of calls.filter(call => call.args)) {
