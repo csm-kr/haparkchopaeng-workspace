@@ -45,7 +45,7 @@ async function prepareQuestion() {
   fireEvent.change(input, { target: { value: turn.prompt } });
   await waitFor(() => expect(screen.getByRole("button", { name: "보내기" })).toBeEnabled());
 }
-beforeEach(() => { window.sessionStorage.clear(); window.history.replaceState(null, "", "/ai-chat"); });
+beforeEach(() => { window.sessionStorage.clear(); window.localStorage.clear(); window.history.replaceState(null, "", "/ai-chat"); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("AI 연구 채팅", () => {

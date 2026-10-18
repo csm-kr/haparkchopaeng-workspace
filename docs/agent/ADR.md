@@ -309,3 +309,12 @@
 웹은 게시된 OS·칩별 최신 파일과 실제 설치 버전을 semantic version으로 비교한다. 최신·더 높은 설치 버전에는 다운그레이드 링크를 제공하지 않는다. 칩 미확인은 선택을 요구하며, 최신 조회는 표시 중 60초와 포커스 복귀·사용자 요청 시 갱신한다. 업데이트는 게시 파일 다운로드 → 사용자가 설치 파일 열기 → 동일 앱 ID·프로필·프로토콜의 새 앱 실행 → 새 heartbeat 확인이다. 웹 배포나 다운로드를 앱 업데이트 완료로 간주하지 않는다. 구 서버는 추가 필드를 거부하므로 호환 웹을 먼저 배포한 뒤 앱을 게시한다.
 
 구현·릴리스 인수는 [phase 20](../../phases/20-ai-connection-controls/index.json)로 추적한다.
+
+
+## ADR-029 — 승인한 기기의 탭 간 복원
+
+**결정(2026-10-18):** 팀별 비밀이 아닌 device ID와 승인마다 새로 만드는 revision만 localStorage에서 공유한다. 새 탭과 storage event는 명시 ID를 `status(deviceId)`로 검증한 뒤 복원하며 서버의 로그인·팀 멤버십·session grant 검증을 생략하지 않는다. 온라인 기기 목록에서 임의 대상을 선택하지 않는다. PIN·launch token·기기 인증값은 공유하지 않으며 모델·effort·pending attempt는 sessionStorage에 유지한다.
+
+legacy session hint는 서버 검증 후 한 번 공유하고, 배경 heartbeat/status는 승인 revision을 새로 게시하지 않는다. 이전 요청의 성공·오류·폴링 재예약은 승인 raw와 generation을 모두 비교하며, 해제는 자신이 확인한 값만 compare-and-swap으로 삭제한다. 같은 기기를 재승인해도 새 revision으로 이전 응답을 무효화한다.
+
+실제 브라우저의 새 탭과 native storage event, StrictMode 및 승인 전후 경합 검증은 [phase 22](../../phases/22-ai-connection-ux/index.json)로 추적한다.

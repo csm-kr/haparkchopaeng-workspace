@@ -97,8 +97,8 @@ test("사이드바 점·도구별 모델과 effort·실제 설치 버전 갱신�
   await expect(model).toHaveValue("");
   await expect(model.locator("option")).toHaveText(["모델을 선택해 주세요", "Claude 실제 목록 fixture"]);
   await model.selectOption("claude:claude-fixture");
-  await dialog.getByRole("radio", { name: "높음", exact: true }).check();
-  await expect(dialog.getByRole("radio", { name: "높음", exact: true })).toBeChecked();
+  await dialog.getByRole("radio", { name: "high", exact: true }).check();
+  await expect(dialog.getByRole("radio", { name: "high", exact: true })).toBeChecked();
   await expect(dialog.getByText("설치 버전 미확인", { exact: true })).toBeVisible();
   const update = dialog.getByRole("link", { name: "업데이트 받기", exact: true });
   await expect(update).toHaveAttribute("href", release.url);

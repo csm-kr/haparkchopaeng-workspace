@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QuotaBadge } from "../quota-badge";
 import { ConnectionDialog } from "../connection-dialog";
 import { InstallHelp } from "../install-help";
 import { LocalAgentProvider } from "../provider";
 import { localAgentApi, type ConnectorRelease } from "../client";
 
+beforeEach(() => { window.sessionStorage.clear(); window.localStorage.clear(); });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function renderInstallHelp(releases: ConnectorRelease[]) {
@@ -110,6 +112,13 @@ describe("작은 사용량 표시", () => {
     { id: "7d", label: "7일 한도", remainingPercent: null, resetsAt: null, observedAt: null, freshness: "unknown" as const },
   ];
 
+  function tap(button: HTMLElement) {
+    fireEvent.pointerDown(button, { pointerType: "touch" });
+    act(() => { button.focus(); });
+    fireEvent.pointerUp(button, { pointerType: "touch" });
+    fireEvent.click(button, { detail: 1 });
+  }
+
   it("20px 링만 표시하고 상세는 호버·포커스할 때 보여 준다", () => {
     render(<QuotaBadge windows={windows} />);
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -127,6 +136,24 @@ describe("작은 사용량 표시", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("간결한 표시도 독립된 이름으로 키보드와 터치에서 실제 한도를 확인한다", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    render(<QuotaBadge windows={[windows[0]]} compact label="현재 모델 사용량 상세" />);
+    const button = screen.getByRole("button", { name: "현재 모델 사용량 상세" });
+    expect(button).not.toHaveTextContent("5h");
+    expect(screen.getByTestId("usage-ring")).toHaveAttribute("width", "20");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.focus(button);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("62% 남음");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("초기화");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("확인");
+    fireEvent.blur(button);
+    tap(button);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("정확한 잔여 토큰 수를 의미하지 않아요");
+    tap(button);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("0%·미제공·이전 관측값을 구분하고 잔여 토큰으로 표현하지 않는다", () => {
     render(<QuotaBadge windows={[
       { ...windows[0], remainingPercent: 0, freshness: "stale" },
@@ -140,13 +167,52 @@ describe("작은 사용량 표시", () => {
     expect(screen.getAllByTestId("usage-ring")[0]).toHaveAttribute("data-state", "stale");
   });
 
-  it("터치 환경에서는 탭으로 상세를 열고 닫는다", () => {
+  it("첫 터치의 pointerdown·focus·click 뒤에도 상세가 열리고 두 번째 터치는 닫는다", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
     render(<QuotaBadge windows={windows} />);
     const button = screen.getByRole("button", { name: "사용량 상세" });
-    fireEvent.click(button);
+    tap(button);
     expect(screen.getByRole("tooltip")).toBeInTheDocument();
-    fireEvent.click(button);
+    expect(button).toHaveFocus();
+    tap(button);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("호버 없는 환경의 키보드 focus·Enter는 열린 상세를 닫지 않고 Escape 뒤에도 다시 연다", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    render(<QuotaBadge windows={windows} />);
+    const button = screen.getByRole("button", { name: "사용량 상세" });
+    act(() => { button.focus(); });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.click(button, { detail: 0 });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(button).toHaveFocus();
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.click(button, { detail: 0 });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+  });
+
+  it("터치 상세는 외부 포커스·Escape·외부 누르기로 닫히며 취소된 포인터 뒤에도 키보드로 다시 연다", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    render(<><QuotaBadge windows={windows} compact /><button type="button">다른 항목</button></>);
+    const button = screen.getByRole("button", { name: "사용량 상세" });
+    tap(button);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    act(() => { screen.getByRole("button", { name: "다른 항목" }).focus(); });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    tap(button);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.pointerDown(button, { pointerType: "touch" });
+    fireEvent.pointerCancel(button, { pointerType: "touch" });
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.click(button, { detail: 0 });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "다른 항목" }), { pointerType: "touch" });
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
