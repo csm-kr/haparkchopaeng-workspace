@@ -23,7 +23,7 @@ async function safeDirectory(directory, parent) {
   return realpath(directory);
 }
 
-export async function runPetRendererQa({ evidenceDirectory = join(connector, 'artifacts', `pet-renderer-${process.platform}`) } = {}) {
+export async function runPetRendererQa({ evidenceDirectory = join(connector, 'artifacts', `pet-renderer-${process.platform}`), dependenciesRoot = join(connector, 'desktop') } = {}) {
   evidenceDirectory = resolve(evidenceDirectory);
   const allowed = [join(connector, 'artifacts'), taskTemporary].some(parent => {
     const part = relative(resolve(parent), evidenceDirectory); return part && !part.startsWith('..') && !isAbsolute(part);
@@ -38,9 +38,13 @@ export async function runPetRendererQa({ evidenceDirectory = join(connector, 'ar
   const owned = await mkdtemp(join(temporaryRoot, 'renderer-')); await mkdir(join(owned, 'profile')); await mkdir(join(owned, 'session'));
   let child, exited = false, closed = false, forcedCleanup = false, receipt, exitCode = null, profileRemoved = false;
   try {
-    const packageDirectory = join(connector, 'desktop/node_modules/electron');
+    const packageDirectory = join(resolve(dependenciesRoot), 'node_modules/electron');
     try { await access(join(packageDirectory, 'path.txt')); }
-    catch { await execute(process.execPath, [join(packageDirectory, 'install.js')], { windowsHide: true, shell: false, timeout: 120_000 }); }
+    catch (error) {
+      // A borrowed QA runtime is read-only; install only into this worktree's own dependencies.
+      if (resolve(dependenciesRoot) !== join(connector, 'desktop')) throw error;
+      await execute(process.execPath, [join(packageDirectory, 'install.js')], { windowsHide: true, shell: false, timeout: 120_000 });
+    }
     const executable = join(packageDirectory, 'dist', (await readFile(join(packageDirectory, 'path.txt'), 'utf8')).trim());
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
     child = spawn(executable, [script, '--pet-native-qa', owned, evidenceDirectory], { windowsHide: true, shell: false, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -144,6 +148,37 @@ async function nativePetQa() {
         for (const name of ['face', 'leftPlug', 'rightPlug']) assert.ok(samples[0][name].every((value, index) => Math.abs(value - samples[1][name][index]) <= 2), 'Opaque parts must not depend on the background.');
         return samples;
       });
+      await check('PET_ANTENNA_TIP_GRAPHITE_OUTLINE_ON_LIGHT_AND_DARK', async () => {
+        const tip = await js(`(()=>{const element=document.querySelector('circle[cx="24"][cy="5.5"]');if(!element)return null;const r=element.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,radius:r.width/2}})()`);
+        assert.ok(tip && tip.radius > 3 && tip.radius < 4);
+        const samples = [];
+        for (const [background, name] of [['#ffffff', 'light-neutral.png'], ['#101216', 'dark-neutral.png']]) {
+          await js(`document.body.style.background=${JSON.stringify(background)}`); await frame();
+          const image = await win.webContents.capturePage(), bitmap = image.toBitmap({ scaleFactor: 1 }), size = image.getSize(1);
+          assert.equal(bitmap.length, size.width * size.height * 4);
+          const outline = { top: 0, left: 0, right: 0 };
+          for (let y = Math.floor(tip.y - tip.radius - 2); y <= Math.ceil(tip.y + tip.radius + 2); y += 1) {
+            for (let x = Math.floor(tip.x - tip.radius - 2); x <= Math.ceil(tip.x + tip.radius + 2); x += 1) {
+              if (x < 0 || x >= size.width || y < 0 || y >= size.height) continue;
+              const dx = x + .5 - tip.x, dy = y + .5 - tip.y, radius = Math.hypot(dx, dy);
+              if (radius < tip.radius || radius > tip.radius + 2) continue;
+              const [blue, green, red, alpha] = bitmap.subarray((y * size.width + x) * 4, (y * size.width + x) * 4 + 4);
+              // A white-background rim must be visibly dark; on graphite it must differ from the flat backdrop.
+              // Edge antialiasing can blend a little lime into graphite, but not the blue backdrop into a rim.
+              const graphite = alpha === 255 && (background === '#ffffff' ? Math.max(blue, green, red) < 100 : blue < 20 && green <= 35 && red <= 35);
+              if (!graphite) continue;
+              if (dy < -tip.radius * .5) outline.top += 1;
+              if (dx < -tip.radius * .5 && Math.abs(dy) < tip.radius) outline.left += 1;
+              if (dx > tip.radius * .5 && Math.abs(dy) < tip.radius) outline.right += 1;
+            }
+          }
+          samples.push({ background, rimPixels: outline, bitmapScaleFactor: 1 });
+          receipt.antennaTipOutline = samples;
+          assert.ok(outline.top > 0 && outline.left > 0 && outline.right > 0, 'The antenna tip needs a visible graphite rim above and on both sides.');
+          await writeFile(join(evidenceDirectory, name), image.toPNG());
+        }
+        return samples;
+      });
       await check('PET_REAL_EYE_CLOSURE_6000MS', async () => {
         const observed = await js(`(()=>{const eye=document.querySelector('.eyes'),animation=document.getAnimations().find(item=>item.animationName==='bri-blink');if(!eye||!animation)return null;const duration=animation.effect.getTiming().duration;animation.pause();animation.currentTime=0;const open=eye.getBoundingClientRect().height;animation.currentTime=3000;const closed=eye.getBoundingClientRect().height;return {duration,open,closed}})()`);
         assert.equal(observed?.duration, 6000); assert.ok(observed.open > 5 && observed.closed < observed.open * .2); await frame(); await screenshot('eyes-closed.png'); await pause(0);
@@ -203,8 +238,14 @@ async function nativePetQa() {
 
 if (process.versions.electron) { try { await nativePetQa(); } catch { const { app } = await import('electron'); app.exit(1); } }
 else if (resolve(process.argv[1] ?? '') === script) {
-  const option = process.argv.slice(2); assert.ok(option.length <= 1 && option.every(value => value.startsWith('--evidence-dir=')));
-  const receipt = await runPetRendererQa(option.length ? { evidenceDirectory: option[0].slice('--evidence-dir='.length) } : {});
-  const finalReceipt = JSON.parse(await readFile(join(resolve(option[0]?.slice('--evidence-dir='.length) ?? join(connector, 'artifacts', `pet-renderer-${process.platform}`)), 'result.json'), 'utf8'));
+  const options = {};
+  for (const option of process.argv.slice(2)) {
+    const match = /^(--evidence-dir|--dependencies-root)=(.+)$/.exec(option);
+    assert.ok(match, 'Unexpected pet QA option.');
+    const key = match[1] === '--evidence-dir' ? 'evidenceDirectory' : 'dependenciesRoot';
+    assert.equal(Object.hasOwn(options, key), false, 'Duplicate pet QA option.'); options[key] = match[2];
+  }
+  const receipt = await runPetRendererQa(options);
+  const finalReceipt = JSON.parse(await readFile(join(resolve(options.evidenceDirectory ?? join(connector, 'artifacts', `pet-renderer-${process.platform}`)), 'result.json'), 'utf8'));
   console.log(JSON.stringify(finalReceipt)); if (!receipt.passed) process.exitCode = 1;
 }
