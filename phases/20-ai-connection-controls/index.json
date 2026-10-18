@@ -65,10 +65,30 @@
       "summary": "connection-controls-release-verification: 4 AC commands passed"
     }
   ],
-  "productionDeployed": false,
-  "connectorReleased": false,
-  "installedUpgradeVerified": false,
+  "productionDeployed": true,
+  "connectorReleased": true,
+  "installedUpgradeVerified": true,
   "created_at": "2026-10-18T15:23:28+0900",
   "completed_at": "2026-10-18T15:35:32+0900",
-  "releaseStatus": "Local gates passed; exact-source CI and production release pending."
+  "releaseStatus": "PR 30 and production alias verified; four 0.1.5 public installer hashes verified; actual Windows 0.1.2 to 0.1.5 upgrade, preserved device identity and Codex/Claude low-effort chat completed.",
+  "releaseEvidence": {
+    "source": "2191ad7abd4ee62b5a2209562411c47064bbe60c",
+    "mergeSource": "be78da5073e7abe9c5ab3048392efc4d2a1cb2d7",
+    "productionUrl": "https://hapark.vercel.app",
+    "deploymentId": "dpl_GcVRLy3Jn81MCHUf1DuTCjTrU4UJ",
+    "validationUrl": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39104667718",
+    "publisherUrl": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39105067883",
+    "releaseUrl": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.5-preview.1",
+    "webPassed": 1071,
+    "webSkipped": 15,
+    "connectorPassed": 211,
+    "e2ePassed": 11,
+    "installedAsarSourceFiles": 18,
+    "installedCoreModules": 9,
+    "sameWindowsDevice": true,
+    "webHeartbeatVersion": "0.1.5",
+    "realCompletedChatTurns": 2,
+    "credentialFilesRead": false,
+    "verifiedAt": "2026-10-18T16:12:50+0900"
+  }
 }

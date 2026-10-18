@@ -97,8 +97,14 @@
     },
     {
       "dir": "20-ai-connection-controls",
+      "status": "completed",
+      "completed_at": "2026-10-18T16:12:50+0900",
+      "summary": "PR 30 deployed; four 0.1.5 installers published; existing Windows profile upgraded; live version, green status and two-provider low-effort conversation verified."
+    },
+    {
+      "dir": "21-ai-bridge-pet",
       "status": "in_progress",
-      "summary": "Local gates passed; exact-source CI, release and installed upgrade pending."
+      "summary": "Local Harness passed: Node 211 passed/1 skipped; pet native 9 checks and desktop flow passed. Exact-source multi-OS CI and 0.1.6 release pending."
     }
   ]
 }

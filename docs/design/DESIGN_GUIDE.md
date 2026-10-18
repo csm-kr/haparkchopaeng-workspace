@@ -95,6 +95,7 @@ radius var(--r-sm); focus → border --accent + 0 0 0 3px var(--accent-soft)
 - `livepulse` 1.6s — LIVE 알약/도트 깜빡임 (라이브 상태 전용)
 - `fade-up`, `floatup`(미팅 이모지 반응), 히어로 전용 `aurora-drift`/`ring-spin`
 - 그 외 모든 애니메이션 금지. 트랜지션은 0.1s 수준의 border/shadow/transform만.
+- 사용자 명시 요청 예외: 사용자가 켠 데스크톱 AI 브릿지 펫에서만 호흡·눈깜빡임·짧은 미소를 허용한다. reduced-motion을 존중하며, 웹 UI의 위 허용 목록은 확대하지 않는다. [펫 설계](./AI_BRIDGE_TRAY_CHARACTER.md)를 따른다.
 
 ## 아이콘
 - `<Icon name="…" />` 인라인 SVG 세트 (`video`, `play`, `calendar`, `users`, `sparkles`, `download`, `plus`, `x`, `chevron-*` 등). 프로덕션은 Lucide로 매핑하면 거의 전부 커버.
