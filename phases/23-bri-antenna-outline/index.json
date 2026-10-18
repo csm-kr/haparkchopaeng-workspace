@@ -1,0 +1,196 @@
+{
+  "project": "hapark",
+  "phase": "23-bri-antenna-outline",
+  "baselineCommit": "6e44b22ee297c2da7ca8e49a3bc14eb9489b838c",
+  "targetVersion": "0.1.7",
+  "execution": "Isolated worktree; native pixel TDD; preserve original user work and existing profiles.",
+  "steps": [
+    {
+      "step": 1,
+      "name": "antenna-outline-and-version-regression",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "--check",
+          "connector/scripts/pet-qa.mjs"
+        ],
+        [
+          "node",
+          "--test",
+          "connector/test/pet-renderer.test.mjs",
+          "connector/test/desktop-packaging-identity.test.mjs",
+          "connector/test/desktop-version-display.test.mjs"
+        ]
+      ],
+      "summary": "Corrected QA syntax and packaging identity tests passed: five pure tests and one explicit native opt-in skip.",
+      "started_at": "2026-10-18T17:46:37+0900",
+      "completed_at": "2026-10-18T17:46:37+0900"
+    },
+    {
+      "step": 2,
+      "name": "native-pet-and-connector-regression",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "connector/scripts/pet-qa.mjs"
+        ],
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ]
+      ],
+      "summary": "Differential coverage QA Harness passed ten native Windows checks, 211 connector tests and one explicit native opt-in skip; independent hidden-outline and original RED images stay rejected.",
+      "priorVerification": {
+        "source": "5b9daccf7defd069d2a934fcf8c1fd81a18f61de",
+        "status": "completed",
+        "completed_at": "2026-10-18T17:47:20+0900",
+        "summary": "Windows renderer already passed ten checks with borrowed read-only Electron dependencies. Harness and exact-source multi-OS CI must be recorded separately."
+      },
+      "started_at": "2026-10-18T18:01:26+0900",
+      "completed_at": "2026-10-18T18:14:25+0900"
+    }
+  ],
+  "localEvidence": {
+    "recordedOn": "2026-10-18",
+    "scope": "Corrected QA patch over preview.1 source; renderer/CSS/version unchanged; not an installed 0.1.7 package.",
+    "receipt": "%TEMP%/hapark-ai-pet-20261018/outline-paired-isolated/result.json",
+    "redReceipt": "%TEMP%/hapark-ai-pet-20261018/outline-subpixel-red/result.json",
+    "windowsNativePassed": 10,
+    "purePassed": 5,
+    "nativeTestSkippedByDefault": 1,
+    "rendererSha256": "cd676f142694194dc6a3b4d21a936a040efb60dca74100dd1cf22aea55a87a66",
+    "qaSha256": "51ddb266d800782b0ca5152a2e4b1965c4866d6431cf7185e4a32f64918394d8",
+    "focusObserved": false,
+    "cliRequests": 0,
+    "rendererNetworkRequests": 0,
+    "ownedElectronExited": true,
+    "ownedProfileRemoved": true,
+    "forcedCleanup": false,
+    "originalRedReceipt": "%TEMP%/hapark-ai-pet-20261018/outline-red/result.json",
+    "qaWindowRegion": "work-area-top-left",
+    "nativeCursorHover": true,
+    "cursorRestored": true
+  },
+  "validationDocument": "VALIDATION.md",
+  "nativeOsStatus": {
+    "windowsX64": "corrected-local-renderer-passed; exact-source-ci-pending",
+    "macosArm64": "corrected-checker-ci-pending",
+    "macosX64": "preview1-checker-failed; corrected-checker-ci-pending",
+    "ubuntuX64": "preview1-checker-failed; corrected-checker-ci-pending"
+  },
+  "overallGoalComplete": false,
+  "targetReleasePublished": false,
+  "installedUpgradeVerified": false,
+  "releaseStatus": "QA correction passed local Windows native ten checks; corrected-source Harness, multi-OS CI, publication and installed-user verification are pending.",
+  "created_at": "2026-10-18T17:46:37+0900",
+  "historicalLocalEvidence": {
+    "recordedOn": "2026-10-18",
+    "scope": "Uncommitted renderer/QA patch over the baseline; not an installed 0.1.7 package.",
+    "receipt": "%TEMP%/hapark-ai-pet-20261018/outline-final/result.json",
+    "redReceipt": "%TEMP%/hapark-ai-pet-20261018/outline-red/result.json",
+    "windowsNativePassed": 10,
+    "purePassed": 5,
+    "nativeTestSkippedByDefault": 1,
+    "rendererSha256": "cd676f142694194dc6a3b4d21a936a040efb60dca74100dd1cf22aea55a87a66",
+    "qaSha256": "ee2c5f48d40bd0f3cff46e962a05f79759777cc6297918cf30a230c0f1534952",
+    "focusObserved": false,
+    "cliRequests": 0,
+    "rendererNetworkRequests": 0,
+    "ownedElectronExited": true,
+    "ownedProfileRemoved": true,
+    "forcedCleanup": false
+  },
+  "qaCorrection": {
+    "previousSource": "5b9daccf7defd069d2a934fcf8c1fd81a18f61de",
+    "previousCiRun": "39112898344",
+    "previousCiFailures": [
+      "117632599699",
+      "117632599660",
+      "117632599648"
+    ],
+    "previousFailure": "Fixed RGB cutoff rejected a visible antialiased rim; CI did not record exact tip geometry or paint colors.",
+    "subpixelRed": {
+      "offsetCssPx": 0.25,
+      "whiteRim": [
+        7,
+        7,
+        4
+      ],
+      "darkRim": [
+        0,
+        0,
+        0
+      ]
+    },
+    "method": "Real light/dark paired capture: background alpha plus graphite/accent/halo foreground mixture in projected annulus; original limits retained.",
+    "graphiteRgb": [
+      14,
+      15,
+      12
+    ],
+    "accentRgb": [
+      198,
+      255,
+      61
+    ],
+    "haloRgb": [
+      236,
+      237,
+      232
+    ],
+    "positiveSamples": [
+      {
+        "offsetCssPx": 0,
+        "rim": [
+          8,
+          4,
+          4
+        ]
+      },
+      {
+        "offsetCssPx": 0.25,
+        "rim": [
+          4,
+          4,
+          2
+        ]
+      }
+    ],
+    "liveMissingOutlineNegativeControls": [
+      {
+        "offsetCssPx": 0,
+        "passedAsPositive": false,
+        "rim": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "offsetCssPx": 0.25,
+        "passedAsPositive": false,
+        "rim": [
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "originalRealRedCapture": {
+      "checked": true,
+      "passedAsPositive": false,
+      "rim": [
+        0,
+        0,
+        0
+      ]
+    },
+    "hoverIsolation": "Right-bottom QA window failed physical hover while the installed user pet was on; moving only the owned QA window top-left restored hover. Exact occluding HWND was not measured.",
+    "harnessReverificationPending": true,
+    "correctedExactSourceCiPending": true
+  },
+  "completed_at": "2026-10-18T18:14:25+0900"
+}

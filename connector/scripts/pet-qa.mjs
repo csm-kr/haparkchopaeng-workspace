@@ -10,6 +10,72 @@ import { fileURLToPath } from 'node:url';
 const script = fileURLToPath(import.meta.url), connector = dirname(dirname(script));
 const execute = promisify(execFile), delay = ms => new Promise(done => setTimeout(done, ms));
 const taskTemporary = join(tmpdir(), 'hapark-ai-pet-20261018');
+
+// Two real backdrops separate opaque ink from antialiasing, glow and shadow.
+// Geometry and paint colors come from the rendered SVG, never a fixed RGB cutoff.
+function inspectAntennaRim(light, dark, tip, withoutOutline) {
+  assert.deepEqual(light.size, dark.size);
+  if (withoutOutline) for (const image of withoutOutline) assert.deepEqual(light.size, image.size);
+  assert.ok(light.backgroundRgb.every((value, index) => value - dark.backgroundRgb[index] > 200));
+  const limits = { minimumInkAlpha: .6, minimumGraphiteShare: .75, maximumColorResidual: 16 };
+  const rimPixels = { top: 0, left: 0, right: 0 }, examples = { top: [], left: [], right: [] };
+  const addedGraphiteArea = { top: 0, left: 0, right: 0 };
+  const delta = tip.accentRgb.map((value, index) => value - tip.graphiteRgb[index]);
+  const glowDelta = tip.glowRgb.map((value, index) => value - tip.graphiteRgb[index]);
+  const accentNorm = delta.reduce((sum, value) => sum + value * value, 0);
+  const glowNorm = glowDelta.reduce((sum, value) => sum + value * value, 0);
+  const cross = delta.reduce((sum, value, index) => sum + value * glowDelta[index], 0);
+  const determinant = accentNorm * glowNorm - cross * cross;
+  assert.ok(determinant > 10000);
+  const pixel = (image, x, y) => {
+    const offset = (y * image.size.width + x) * 4;
+    return [image.bitmap[offset + 2], image.bitmap[offset + 1], image.bitmap[offset], image.bitmap[offset + 3]];
+  };
+  const foreground = (pair, x, y) => {
+    const white = pixel(pair[0], x, y), graphite = pixel(pair[1], x, y);
+    if (white[3] !== 255 || graphite[3] !== 255) return null;
+    const uncovered = [0, 1, 2].map(index => (white[index] - graphite[index]) /
+      (pair[0].backgroundRgb[index] - pair[1].backgroundRgb[index])).sort((a, b) => a - b)[1];
+    const alpha = Math.max(0, Math.min(1, 1 - uncovered));
+    if (!alpha) return { alpha: 0, graphiteShare: 0, glowShare: 0, residual: 0, coverage: 0 };
+    const ink = [0, 1, 2].map(index => (white[index] - (1 - alpha) * pair[0].backgroundRgb[index]) / alpha);
+    const accentDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * delta[index], 0);
+    const glowDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * glowDelta[index], 0);
+    const accentShare = Math.max(0, Math.min(1, (accentDot * glowNorm - glowDot * cross) / determinant));
+    const glowShare = Math.max(0, Math.min(1, (glowDot * accentNorm - accentDot * cross) / determinant));
+    const graphiteShare = Math.max(0, 1 - accentShare - glowShare);
+    const residual = Math.hypot(...ink.map((value, index) => value - tip.graphiteRgb[index] - accentShare * delta[index] - glowShare * glowDelta[index]));
+    return { alpha, graphiteShare, glowShare, residual, coverage: residual <= limits.maximumColorResidual ? alpha * graphiteShare : 0 };
+  };
+  for (let y = Math.floor(tip.y - tip.radius - tip.rimWidth - 1); y <= Math.ceil(tip.y + tip.radius + tip.rimWidth + 1); y += 1) {
+    for (let x = Math.floor(tip.x - tip.radius - tip.rimWidth - 1); x <= Math.ceil(tip.x + tip.radius + tip.rimWidth + 1); x += 1) {
+      if (x < 0 || y < 0 || x >= light.size.width || y >= light.size.height) continue;
+      const dx = x + .5 - tip.x, dy = y + .5 - tip.y, radius = Math.hypot(dx, dy);
+      if (radius < tip.radius || radius > tip.radius + tip.rimWidth + .75) continue;
+      // The existing SVG filter also paints the --fg halo. Fit that real third paint separately.
+      const observed = foreground([light, dark], x, y);
+      if (!observed) continue;
+      const { alpha, graphiteShare, glowShare, residual } = observed;
+      const baseline = withoutOutline ? foreground(withoutOutline, x, y) : null;
+      for (const [sector, matches] of [['top', dy < -tip.radius * .5], ['left', dx < -tip.radius * .5 && Math.abs(dy) < tip.radius], ['right', dx > tip.radius * .5 && Math.abs(dy) < tip.radius]]) {
+        if (!matches) continue;
+        // Integrate premultiplied ink instead of requiring the thin AA curve to occupy
+        // one pixel. Subtract the same-geometry hidden-outline render, including its halo.
+        if (baseline) addedGraphiteArea[sector] += observed.coverage - baseline.coverage;
+        if (alpha < limits.minimumInkAlpha || graphiteShare < limits.minimumGraphiteShare || residual > limits.maximumColorResidual) continue;
+        rimPixels[sector] += 1;
+        if (examples[sector].length < 3) examples[sector].push({ x, y, inkAlpha: Number(alpha.toFixed(3)), graphiteShare: Number(graphiteShare.toFixed(3)), glowShare: Number(glowShare.toFixed(3)), colorResidual: Number(residual.toFixed(3)) });
+      }
+    }
+  }
+  const minimumAddedGraphiteArea = limits.minimumInkAlpha * limits.minimumGraphiteShare;
+  return { passed: withoutOutline ? Object.values(addedGraphiteArea).every(value => value >= minimumAddedGraphiteArea) : Object.values(rimPixels).every(value => value > 0),
+    rimPixels, limits, examples, ...(withoutOutline ? {
+      comparison: 'paired-foreground-coverage-minus-same-geometry-outline-hidden', minimumAddedGraphiteArea,
+      addedGraphiteArea: Object.fromEntries(Object.entries(addedGraphiteArea).map(([key, value]) => [key, Number(value.toFixed(4))])),
+    } : {}) };
+}
+
 function inside(value, parent) { const part = relative(parent, value); assert.ok(part && !part.startsWith('..') && !isAbsolute(part)); }
 async function safeDirectory(directory, parent) {
   inside(directory, parent);
@@ -23,7 +89,7 @@ async function safeDirectory(directory, parent) {
   return realpath(directory);
 }
 
-export async function runPetRendererQa({ evidenceDirectory = join(connector, 'artifacts', `pet-renderer-${process.platform}`) } = {}) {
+export async function runPetRendererQa({ evidenceDirectory = join(connector, 'artifacts', `pet-renderer-${process.platform}`), dependenciesRoot = join(connector, 'desktop') } = {}) {
   evidenceDirectory = resolve(evidenceDirectory);
   const allowed = [join(connector, 'artifacts'), taskTemporary].some(parent => {
     const part = relative(resolve(parent), evidenceDirectory); return part && !part.startsWith('..') && !isAbsolute(part);
@@ -34,13 +100,17 @@ export async function runPetRendererQa({ evidenceDirectory = join(connector, 'ar
   const taskPart = relative(taskTemporary, evidenceDirectory);
   const evidenceParent = taskPart.startsWith('..') || isAbsolute(taskPart) ? await safeDirectory(artifacts, connector) : taskTemporary;
   evidenceDirectory = await safeDirectory(evidenceDirectory, evidenceParent);
-  for (const name of ['result.json', 'light-neutral.png', 'dark-neutral.png', 'eyes-closed.png', 'spontaneous-smile.png', 'hover-smile.png', 'native-hover.png', 'reduced-motion-hover.png']) await unlink(join(evidenceDirectory, name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  for (const name of ['result.json', 'light-neutral.png', 'dark-neutral.png', 'light-tip-quarter.png', 'dark-tip-quarter.png', 'eyes-closed.png', 'spontaneous-smile.png', 'hover-smile.png', 'native-hover.png', 'reduced-motion-hover.png']) await unlink(join(evidenceDirectory, name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
   const owned = await mkdtemp(join(temporaryRoot, 'renderer-')); await mkdir(join(owned, 'profile')); await mkdir(join(owned, 'session'));
   let child, exited = false, closed = false, forcedCleanup = false, receipt, exitCode = null, profileRemoved = false;
   try {
-    const packageDirectory = join(connector, 'desktop/node_modules/electron');
+    const packageDirectory = join(resolve(dependenciesRoot), 'node_modules/electron');
     try { await access(join(packageDirectory, 'path.txt')); }
-    catch { await execute(process.execPath, [join(packageDirectory, 'install.js')], { windowsHide: true, shell: false, timeout: 120_000 }); }
+    catch (error) {
+      // A borrowed QA runtime is read-only; install only into this worktree's own dependencies.
+      if (resolve(dependenciesRoot) !== join(connector, 'desktop')) throw error;
+      await execute(process.execPath, [join(packageDirectory, 'install.js')], { windowsHide: true, shell: false, timeout: 120_000 });
+    }
     const executable = join(packageDirectory, 'dist', (await readFile(join(packageDirectory, 'path.txt'), 'utf8')).trim());
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
     child = spawn(executable, [script, '--pet-native-qa', owned, evidenceDirectory], { windowsHide: true, shell: false, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -75,7 +145,7 @@ export async function runPetRendererQa({ evidenceDirectory = join(connector, 'ar
 }
 
 async function nativePetQa() {
-  const { app, BrowserWindow, screen } = await import('electron');
+  const { app, BrowserWindow, screen, nativeImage } = await import('electron');
   const flagIndex = process.argv.indexOf('--pet-native-qa');
   assert.ok(flagIndex >= 0 && process.argv.length === flagIndex + 3, 'Expected exactly two native QA directories.');
   const owned = resolve(process.argv[flagIndex + 1]), evidenceDirectory = resolve(process.argv[flagIndex + 2]);
@@ -99,9 +169,10 @@ async function nativePetQa() {
     } }); } };
     try {
       const work = screen.getPrimaryDisplay().workArea;
-      win = new BrowserWindow({ width: 104, height: 112, x: work.x + work.width - 130, y: work.y + work.height - 140,
+      win = new BrowserWindow({ width: 104, height: 112, x: work.x + 32, y: work.y + 48,
         frame: false, transparent: true, show: false, focusable: false, alwaysOnTop: true, skipTaskbar: true,
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+      receipt.qaWindowPlacement = { region: 'work-area-top-left', bounds: win.getBounds(), avoidsDefaultInstalledPetLocation: true };
       win.on('focus', () => { receipt.focusObserved = true; });
       win.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_request, done) => { receipt.rendererNetworkRequests += 1; done({ cancel: true }); });
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', event => event.preventDefault());
@@ -143,6 +214,70 @@ async function nativePetQa() {
         }
         for (const name of ['face', 'leftPlug', 'rightPlug']) assert.ok(samples[0][name].every((value, index) => Math.abs(value - samples[1][name][index]) <= 2), 'Opaque parts must not depend on the background.');
         return samples;
+      });
+      await check('PET_ANTENNA_TIP_GRAPHITE_OUTLINE_ON_LIGHT_AND_DARK', async () => {
+        const observation = { pixelFormat: 'BGRA8 converted to RGB', samples: [], originalRed: { checked: false } };
+        receipt.antennaTipOutline = observation;
+        const geometry = () => js(`(()=>{const dot=document.querySelector('svg > g:not(.outline) > circle[cx="24"][cy="5.5"]'),rim=document.querySelector('.outline > circle[cx="24"][cy="5.5"]');if(!dot||!rim)return null;const r=dot.getBoundingClientRect(),rgb=value=>value.match(/[\\d.]+/g).slice(0,3).map(Number),probe=document.createElementNS(dot.namespaceURI,'rect');probe.style.fill='var(--fg)';dot.ownerSVGElement.append(probe);const glowRgb=rgb(getComputedStyle(probe).fill);probe.remove();return {x:r.x+r.width/2,y:r.y+r.height/2,radius:r.width/2,rimWidth:Number.parseFloat(getComputedStyle(rim).strokeWidth)*r.width/(Number(dot.getAttribute('r'))*4),graphiteRgb:rgb(getComputedStyle(rim).stroke),accentRgb:rgb(getComputedStyle(dot).fill),glowRgb}})()`);
+        const capturePair = async () => {
+          const pair = [];
+          for (const background of ['#ffffff', '#101216']) {
+            await js(`document.body.style.background=${JSON.stringify(background)}`); await frame();
+            const tip = await geometry(), image = await win.webContents.capturePage();
+            const value = { image, tip, bitmap: image.toBitmap({ scaleFactor: 1 }), size: image.getSize(1), backgroundRgb: await js(`getComputedStyle(document.body).backgroundColor.match(/[\\d.]+/g).slice(0,3).map(Number)`) };
+            assert.equal(value.bitmap.length, value.size.width * value.size.height * 4); pair.push(value);
+          }
+          assert.ok(pair[0].tip && pair[0].tip.radius > 3 && pair[0].tip.radius < 4);
+          for (const field of ['x', 'y', 'radius', 'rimWidth']) assert.ok(Math.abs(pair[0].tip[field] - pair[1].tip[field]) < .001, 'Both backdrops must use the same rendered geometry.');
+          return pair;
+        };
+        try {
+          for (const offset of [0, .25]) {
+            await js(`document.querySelector('.bri').style.translate='${offset}px ${offset}px'`); await frame();
+            const pair = await capturePair();
+            const sample = { offsetCssPx: offset, geometry: pair[0].tip, backgroundsRgb: pair.map(value => value.backgroundRgb) };
+            observation.samples.push(sample);
+            for (const [index, prefix] of ['light', 'dark'].entries()) {
+              const name = offset ? `${prefix}-tip-quarter.png` : `${prefix}-neutral.png`;
+              await writeFile(join(evidenceDirectory, name), pair[index].image.toPNG());
+              if (offset) receipt.screenshots.push(name);
+            }
+            // A real rendered negative control rejects glow/shadow and cannot pass a missing outline.
+            await js(`document.querySelector('.outline > circle').style.visibility='hidden'`); await frame();
+            const withoutRim = await capturePair();
+            const repeatedWithoutRim = await capturePair();
+            for (const field of ['x', 'y', 'radius', 'rimWidth']) assert.ok(Math.abs(pair[0].tip[field] - withoutRim[0].tip[field]) < .001 &&
+              Math.abs(pair[0].tip[field] - repeatedWithoutRim[0].tip[field]) < .001, 'Outline-hidden controls must use the exact positive geometry.');
+            const positive = inspectAntennaRim(pair[0], pair[1], pair[0].tip, withoutRim);
+            Object.assign(sample, positive);
+            sample.withoutOutline = inspectAntennaRim(repeatedWithoutRim[0], repeatedWithoutRim[1], pair[0].tip, withoutRim);
+            for (const [index, prefix] of ['light', 'dark'].entries()) {
+              const name = `${prefix}-tip-${offset ? 'quarter' : 'default'}-outline-hidden.png`;
+              await writeFile(join(evidenceDirectory, name), withoutRim[index].image.toPNG()); receipt.screenshots.push(name);
+            }
+            await js(`document.querySelector('.outline > circle').style.visibility=''`); await frame();
+            assert.equal(positive.passed, true, 'The painted tip must have graphite ink above and on both sides.');
+            assert.equal(sample.withoutOutline.passed, false, 'A renderer without the tip outline must not pass.');
+            if (!offset) {
+              const reference = join(taskTemporary, 'outline-red'), names = ['light-neutral.png', 'dark-neutral.png'];
+              try {
+                const images = [];
+                for (const [index, name] of names.entries()) {
+                  const file = join(reference, name), stat = await lstat(file);
+                  assert.ok(stat.isFile() && !stat.isSymbolicLink()); inside(await realpath(file), await realpath(taskTemporary));
+                  const image = nativeImage.createFromBuffer(await readFile(file)); assert.equal(image.isEmpty(), false);
+                  images.push({ bitmap: image.toBitmap({ scaleFactor: 1 }), size: image.getSize(1), backgroundRgb: pair[index].backgroundRgb });
+                }
+                assert.deepEqual(images[0].size, pair[0].size);
+                observation.originalRed = { checked: true, geometrySource: 'same 104x112 viewport and unshifted 88px SVG', ...inspectAntennaRim(images[0], images[1], pair[0].tip, withoutRim) };
+                assert.equal(observation.originalRed.passed, false, 'Original real RED captures must still fail.');
+              } catch (error) { if (error.code !== 'ENOENT') throw error; }
+            }
+          }
+        } finally {
+          await js(`document.querySelector('.outline > circle').style.visibility='';document.querySelector('.bri').style.translate=''`); await frame();
+        }
+        return observation;
       });
       await check('PET_REAL_EYE_CLOSURE_6000MS', async () => {
         const observed = await js(`(()=>{const eye=document.querySelector('.eyes'),animation=document.getAnimations().find(item=>item.animationName==='bri-blink');if(!eye||!animation)return null;const duration=animation.effect.getTiming().duration;animation.pause();animation.currentTime=0;const open=eye.getBoundingClientRect().height;animation.currentTime=3000;const closed=eye.getBoundingClientRect().height;return {duration,open,closed}})()`);
@@ -203,8 +338,14 @@ async function nativePetQa() {
 
 if (process.versions.electron) { try { await nativePetQa(); } catch { const { app } = await import('electron'); app.exit(1); } }
 else if (resolve(process.argv[1] ?? '') === script) {
-  const option = process.argv.slice(2); assert.ok(option.length <= 1 && option.every(value => value.startsWith('--evidence-dir=')));
-  const receipt = await runPetRendererQa(option.length ? { evidenceDirectory: option[0].slice('--evidence-dir='.length) } : {});
-  const finalReceipt = JSON.parse(await readFile(join(resolve(option[0]?.slice('--evidence-dir='.length) ?? join(connector, 'artifacts', `pet-renderer-${process.platform}`)), 'result.json'), 'utf8'));
+  const options = {};
+  for (const option of process.argv.slice(2)) {
+    const match = /^(--evidence-dir|--dependencies-root)=(.+)$/.exec(option);
+    assert.ok(match, 'Unexpected pet QA option.');
+    const key = match[1] === '--evidence-dir' ? 'evidenceDirectory' : 'dependenciesRoot';
+    assert.equal(Object.hasOwn(options, key), false, 'Duplicate pet QA option.'); options[key] = match[2];
+  }
+  const receipt = await runPetRendererQa(options);
+  const finalReceipt = JSON.parse(await readFile(join(resolve(options.evidenceDirectory ?? join(connector, 'artifacts', `pet-renderer-${process.platform}`)), 'result.json'), 'utf8'));
   console.log(JSON.stringify(finalReceipt)); if (!receipt.passed) process.exitCode = 1;
 }
