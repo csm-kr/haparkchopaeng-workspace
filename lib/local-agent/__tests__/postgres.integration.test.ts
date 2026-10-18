@@ -436,7 +436,7 @@ describe.skipIf(!enabled)("real isolated PostgreSQL 16 concurrency", () => {
     await bounded(holding.promise, "preparation owning the seminar parent key lock");
     const inserting = prisma.presentationAsset.create({ data: { id: "la-pg-new-first-pdf", presentationId: seminarId, name: "synthetic-new.pdf", type: "pdf", size: "100 B", url: "presentations/synthetic-new.pdf" } }).then(result => { inserted = true; return result; });
     let blocked = false;
-    let completed: Awaited<typeof finished> = [];
+    let completed: Awaited<typeof finished>;
     try {
       await bounded(insertAttempted.promise, "first PDF FK insert attempted while parent is locked");
       await new Promise(resolve => setTimeout(resolve, 100));

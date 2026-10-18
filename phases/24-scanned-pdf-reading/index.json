@@ -77,6 +77,21 @@
     "pureTestsPassed": 71,
     "postgresTestUnchanged": true,
     "explicitForUpdateBeforeCas": true,
+    "exactSourceCiPending": true,
+    "postgresVerifiedSource": "0ce6228aefb6929c58ab32abee8d70be31e97b5f",
+    "postgresVerifiedCiRun": 39115624488,
+    "postgresTestsPassed": 16,
+    "fixtureTupleInitializationTypeOnlyFix": true,
+    "assertionsAndConcurrencyUnchanged": true,
+    "overallCiSuccessAtVerifiedSource": false
+  },
+  "materialSelectionFollowup": {
+    "controlledChromiumRed": true,
+    "controlledRtlRed": true,
+    "remoteTimeoutSameCauseProven": false,
+    "layoutCommitSelection": true,
+    "focusedRtlTestsPassed": 24,
+    "chromiumTestsPassed": 13,
     "exactSourceCiPending": true
   }
 }

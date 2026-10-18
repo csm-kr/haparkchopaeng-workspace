@@ -42,6 +42,7 @@ function ScopedResearchChat(props: ResearchChatProps) {
     if (revalidate) void refreshHistory.current();
   }, [agent?.phase]);
   const input = React.useRef<HTMLTextAreaElement>(null);
+  const pendingSelection = React.useRef<{ text: string; cursor: number } | null>(null);
   const popup = React.useRef<HTMLDivElement>(null);
   const listId = React.useId();
   const [listOpen, setListOpen] = React.useState(false);
@@ -75,6 +76,13 @@ function ScopedResearchChat(props: ResearchChatProps) {
     if (!element) return;
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 144)}px`;
+    const selection = pendingSelection.current;
+    pendingSelection.current = null;
+    // Commit the edited value and caret together before another input can select text.
+    if (selection?.text === chat.prompt) {
+      element.focus();
+      element.setSelectionRange(selection.cursor, selection.cursor);
+    }
   }, [chat.prompt]);
   React.useEffect(() => {
     if (!mention) return;
@@ -91,8 +99,8 @@ function ScopedResearchChat(props: ResearchChatProps) {
     setSelections(previous => ({ ...previous, [key]: [...chosen, item] }));
     const text = chat.prompt.slice(0, mention.start) + chat.prompt.slice(mention.end);
     const cursor = mention.start;
+    pendingSelection.current = { text, cursor };
     chat.setPrompt(text); closeMention();
-    requestAnimationFrame(() => { input.current?.focus(); input.current?.setSelectionRange(cursor, cursor); });
   }
   function send() {
     if (!canSend || !target || !agent?.device) return;
@@ -149,8 +157,8 @@ function ScopedResearchChat(props: ResearchChatProps) {
                 const start = input.current?.selectionStart ?? chat.prompt.length;
                 const text = `${chat.prompt.slice(0, start)}${start && !/\s/.test(chat.prompt[start - 1]) ? " " : ""}@${chat.prompt.slice(start)}`;
                 const cursor = text.length - chat.prompt.slice(start).length;
+                pendingSelection.current = { text, cursor };
                 chat.setPrompt(text); detectMention(text, cursor); void chat.refreshMaterials();
-                requestAnimationFrame(() => { input.current?.focus(); input.current?.setSelectionRange(cursor, cursor); });
               }} className="grid size-10 place-items-center rounded-lg text-fg-muted hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:opacity-50"><Plus size={20} aria-hidden="true" /></button>
               {activeTurn?.canCancel ? <button type="button" aria-label="답변 중지" disabled={chat.cancelling} onClick={() => void chat.cancel(activeTurn)} className="grid size-10 place-items-center rounded-lg bg-fg text-bg disabled:opacity-50"><Square size={15} fill="currentColor" aria-hidden="true" /></button> :
                 <button type="submit" aria-label="보내기" disabled={!canSend} className="grid size-10 place-items-center rounded-lg bg-fg text-bg transition-colors hover:bg-fg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:bg-bg-active disabled:text-fg-faint"><ArrowUp size={19} aria-hidden="true" /></button>}

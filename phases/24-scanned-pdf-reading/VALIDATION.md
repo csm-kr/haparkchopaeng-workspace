@@ -35,7 +35,15 @@
 
 이 수치는 `step1-output.json`, `step2-output.json`, `step3-output.json`의 최종 로컬 영수증이다. 전체 16개 skip은 PostgreSQL 전용 경계를 의미하며 실제 PG 통과로 합산하지 않는다. 이후 lint와 production build도 exit 0이었다. 실제 Next `/api/inngest` 함수의 NFT 파일 목록에 OCR 실행 코드와 전이 의존성·두 언어 데이터·MuPDF WASM 67개가 모두 포함되는 것을 확인했다. 전체 추적 파일은 365개, 104,496,594 bytes다. 영수증은 `%TEMP%/hapark-pdf-release-20261018/{quality.json,runtime-trace.json}`이며, 원격 CI와 운영 OCR은 별도 인수 항목으로 남긴다.
 
+### PostgreSQL 실제 통과와 자료 입력 후속 회귀
+
+`0ce6228a`의 실제 CI `39115624488`에서 PostgreSQL 16개와 데스크톱 4환경이 통과했다. 같은 소스의 격리 전체 회귀는 1,173 PASS·PostgreSQL 전용 16 skip이며 lint·production build도 통과했다. 그러나 해당 CI의 웹 E2E는 기존 12개 중 자료 옵션 대기 1개가 timeout이었으므로 전체 CI 성공으로 기록하지 않는다.
+
+별도 Chromium 재현에서 자료 추가 → 사용자의 전체 선택 → 지연된 커서 복원 프레임 → 문자 입력 순서를 제어하자 `@연구 논문 A` 대신 `@@연구 논문 A`가 들어가 자료 목록이 닫혔다. 자료 선택 뒤에도 늦은 커서 복원이 사용자 선택을 덮는 RTL RED를 확보했다. 두 복원을 DOM 값과 함께 layout effect에서 처리한 뒤 관련 RTL 24개와 기존·신규 Chromium 13개가 통과했고, 테스트의 기존 assertion이나 timeout은 완화하지 않았다. 이 경합이 앞선 원격 CI timeout과 같은 원인인지는 직접 입증하지 않았다. 최종 합친 소스의 전체 CI와 운영 인수는 별도로 확인한다.
+
+후속 strict TypeScript 검사에서 PG fixture의 1원소 `Promise.allSettled` tuple을 빈 배열로 초기화하던 타입 오류도 확인했다. `finally`에서 항상 할당한 뒤에만 사용하는 변수의 불필요한 초기값만 제거했으며, 경합 순서와 단언은 유지했다. 이후 `tsc --noEmit --incremental false`, 수정한 UI/E2E 3파일 및 PG fixture의 명시적 lint, diff whitespace 검사는 모두 exit 0이었다.
+
 - 최종 전체 하네스 수치는 바로 위 재실행 결과를 따른다. 이전 전체 snapshot의 통과 수를 재사용하지 않는다.
 - [격리 분석 DB 회귀](../../lib/local-agent/__tests__/analysis.integration.test.ts)에는 실제 grant 만료, OCR 페이지 전 취소, 최신 캐시 CAS 보존이 있다. [채팅 DB 회귀](../../lib/research-chat/__tests__/service.integration.test.ts)에는 준비 완료/version CAS·grant 불변·취소/만료와 **verify 직후 실제 PDF 교체**를 추가했다. 실제 실행은 최종 격리 SQLite 하네스 결과로 확인해야 한다.
-- [PostgreSQL 16 회귀](../../lib/local-agent/__tests__/postgres.integration.test.ts)는 전용 loopback DB/CI guard를 유지한 **16개**다. 새 case는 부모 key 잠금 동안 첫 PDF의 FK 삽입이 대기하고 queue CAS 커밋 후에만 진행하는지를 실제 PG에서 확인한다. 이 호스트에서는 guarded suite가 생략됐으며 해당 case의 PG 성공을 아직 주장하지 않는다.
+- [PostgreSQL 16 회귀](../../lib/local-agent/__tests__/postgres.integration.test.ts)는 전용 loopback DB/CI guard를 유지한 **16개**다. 새 case는 부모 key 잠금 동안 첫 PDF의 FK 삽입이 대기하고 queue CAS 커밋 후에만 진행하는지를 실제 PG에서 확인한다. 이 호스트의 로컬 실행은 생략됐으며, `0ce6228a`의 전용 CI에서 16개 모두 통과했다.
 - 정확 소스의 원격 CI, Vercel runtime OCR 파일 포함 여부, Inngest 함수 동기화·단계 재개, 운영 PDF 상태 조회 및 스캔 본문 준비는 별도 릴리스 인수 대상이다. 새 DDL·연결 앱 설치 파일·공개 릴리스를 이 변경의 필수 단계로 추가하지 않는다. **이 기록은 배포 완료 보고가 아니다.**
