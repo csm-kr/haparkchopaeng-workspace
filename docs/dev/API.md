@@ -175,19 +175,20 @@
 | 메서드 | 경로 | 요청·응답 |
 |---|---|---|
 | GET | `/api/research-chat/papers` | 팀 논문 최근 100개 `{id,title,sourceReady,sourceError}` |
+| GET | `/api/research-chat/presentations` | 현재 팀 발표 자료 최근 100개 `{id,title,date}` |
 | POST | `/api/research-chat/sources` | `{paperIds}` → 202 `{preparing,ready}` (각 논문 ID 배열), 본문만 준비 |
 | GET | `/api/research-chat/conversations` | 소유자 대화 최근 100개 |
-| POST | `/api/research-chat/conversations` | `{requestId,paperIds,title?}` → 201 대화 1개 |
-| GET | `/api/research-chat/conversations/:id` | `{conversation,papers,turns,hasEarlierTurns}` |
-| POST | `/api/research-chat/conversations/:id/turns` | `{requestId,deviceId,provider,model,prompt}` → 202 턴 1개 |
+| POST | `/api/research-chat/conversations` | `{requestId,paperIds?,presentationIds?,title?}` → 201 대화 1개 (자료 0개 허용) |
+| GET | `/api/research-chat/conversations/:id` | `{conversation,papers,presentations,turns,hasEarlierTurns}` |
+| POST | `/api/research-chat/conversations/:id/turns` | `{requestId,deviceId,provider,model,prompt,paperIds?,presentationIds?,effort?}` → 202 턴 1개 |
 | POST | `/api/research-chat/conversations/:id/turns/:jobId/cancel` | `{}` → 200 갱신된 턴 1개 |
 
 `/sources`는 선택한 논문 1~3개가 모두 활성 팀에 속하는지 검사하고 하나라도 없으면 404다. 원문 캐시가 없는 논문만 `paper/analyze{paperId}`로 적재하며 CLI 연결·모델 선택 없이 본문을 준비한다. 기존 분석 결과는 다시 추론하거나 변경하지 않는다.
 
-`paperIds`는 같은 팀의 서로 다른 논문 1~3개다. 대화의 근거는 고정하며 변경은 새 대화로 진행한다. `requestId`는 UUID로, 대화·질문 모두 동일 payload 재전송은 같은 결과를 반환하고 다른 payload 재사용은 `409 REQUEST_ID_REUSED`다. 질문은 공백 제거 후 1~12,000자, 제공자는 `codex|claude`만 허용한다. 모델·기기·현재 웹 grant와 큐 상한을 다시 검사하며 과거 이력 조회로 허가를 갱신하지 않는다.
+대화 생성과 각 턴의 자료는 선택 사항이며 같은 팀의 서로 다른 `paperIds/presentationIds`를 합계 10개까지 받는다. 생략하면 현재 대화의 선택을, 빈 배열이면 자료 없는 질문을 뜻한다. 자료 변경은 이후 질문에 적용하고 과거 턴의 스냅샷은 보존한다. 기존 대화의 배열 선택과 새 version 2 JSON을 모두 읽는다. `requestId`는 UUID로, 대화·질문 모두 동일 payload 재전송은 같은 결과를 반환하고 다른 payload 재사용은 `409 REQUEST_ID_REUSED`다. 질문은 공백 제거 후 1~12,000자, 제공자는 `codex|claude`만 허용한다. 모델·기기·현재 웹 grant와 큐 상한을 다시 검사하며 과거 이력 조회로 허가를 갱신하지 않는다. 추론 강도는 실제 모델 카탈로그가 지원을 명시한 값만 허용한다.
 
 대화 상세는 최근 50턴을 시간순으로 반환하고 `hasEarlierTurns`로 이전 생략을 알린다. 턴은 기존 작업 DTO에 `conversationId/conversationTurn/canCancel/contextTruncated`를 더한다. `prompt/response/status/error/version`으로 부분 답변과 상태를 짧게 조회하며 별도 장기 SSE 요청을 유지하지 않는다. 실제 타입은 [research-chat DTO](../../types/research-chat.ts)를 따른다.
 
 논문 목록과 상세의 `papers`는 `sourceReady`와 nullable `sourceError`를 제공한다. 후자는 본문 추출 모듈이 소유한 고정 오류 문구만 반환한다. `/sources`는 기존 분석을 재실행하지 않고 PDF 본문만 준비하며, 재시도 시 해당 본문 오류만 지운다. 실패한 스캔·페이지/텍스트 한도와 기존 분석 결과를 구분한다.
 
-본문 미준비는 `409 SOURCE_NOT_READY`, 같은 대화의 진행 중 턴은 `409 CONVERSATION_BUSY`다. 모델 문맥은 서버 원문과 완료된 최근 8턴만으로 최대 20만 자를 구성하며 잘림을 표시한다. 원문/이전 대화는 클라이언트에서 받지 않는다. 새 세션도 개인 이력을 읽을 수 있으나 새 실행과 취소는 현재 세션의 권한을 따른다. 유효 grant 중 서버에 이미 접수된 `completed` 결과의 후처리는 로그아웃 뒤 허용하고, 미접수 결과·새 추론은 거절한다. 최종 분석 저장 시 멤버십을 재검증한다.
+본문 미준비 자료를 포함한 턴은 `preparing`으로 접수해 Inngest에서 본문을 준비하고 실행 권한을 재검사한 뒤 `queued`로 전환한다. 논문 추출의 기존 30쪽 기본 한도는 유지하며 발표 PDF는 최대 150쪽을 지원한다. 같은 대화의 진행 중 턴은 `409 CONVERSATION_BUSY`다. 모델 문맥은 서버 원문과 완료된 최근 8턴만으로 최대 20만 자를 구성하며 잘림을 표시한다. 원문/이전 대화는 클라이언트에서 받지 않는다. 새 세션도 개인 이력을 읽을 수 있으나 새 실행과 취소는 현재 세션의 권한을 따른다. 유효 grant 중 서버에 이미 접수된 `completed` 결과의 후처리는 로그아웃 뒤 허용하고, 미접수 결과·새 추론은 거절한다. 최종 분석 저장 시 멤버십을 재검증한다.

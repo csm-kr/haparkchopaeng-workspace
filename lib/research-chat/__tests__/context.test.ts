@@ -6,6 +6,25 @@ const paper = (id = "paper", text = "원문에서 직접 추출한 실험 증거
 const turn = (n: number, status = "completed") => ({ conversationTurn: n, prompt: `질문 ${n}`, response: `답변 ${n}`, status });
 
 describe("private research context", () => {
+  it("supports a free conversation without selected materials", () => {
+    const { context, truncated } = buildChatContext([], [turn(1)]);
+    const parsed = JSON.parse(context);
+    expect(parsed.papers).toEqual([]);
+    expect(parsed.history).toEqual([{ turn: 1, question: "질문 1", answer: "답변 1" }]);
+    expect(truncated).toBe(false);
+  });
+  it("includes seminar text and original slide numbers alongside papers", () => {
+    const result = buildChatContext([paper()], [], [{ id: "seminar", title: "토요일 세미나", pages: [{ page: 1, text: "표현 학습 발표 내용" }], summary: "발표 요약", keypoints: ["검토할 가정"], slides: [{ title: "실험", subtitle: "조건", body: "대조군의 차이" }] }]);
+    const parsed = JSON.parse(result.context);
+    expect(parsed.presentations[0]).toMatchObject({ id: "seminar", title: "토요일 세미나", pages: [{ page: 1, text: "표현 학습 발표 내용" }], summary: "발표 요약", keypoints: ["검토할 가정"], slides: [{ title: "실험", subtitle: "조건", body: "대조군의 차이" }] });
+    expect(result.context.length).toBeLessThanOrEqual(200_000);
+  });
+  it("accounts for execution options inside the final model context budget", () => {
+    const presentations = [{ id: "seminar", title: "큰 세미나", summary: "요약".repeat(80_000), keypoints: [], slides: [] }];
+    const { context } = buildChatContext([paper("first", "문장".repeat(50_000))], [], presentations, { effort: "high" });
+    expect(context.length).toBeLessThanOrEqual(200_000);
+    expect(JSON.parse(context).execution).toEqual({ effort: "high" });
+  });
   it("uses original numbered paper pages and completed recent turns only", () => {
     const { context, truncated } = buildChatContext([paper()], [turn(1), turn(2, "failed"), turn(3, "running"), turn(4)]);
     const parsed = JSON.parse(context);

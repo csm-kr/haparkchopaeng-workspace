@@ -5,7 +5,8 @@ import type { LocalAgentProviderSnapshot } from "@/types/local-agent";
 const Identifier = z.string().min(1).max(150);
 const Credential = z.string().refine(validateDeviceToken, "올바른 연결 자격이 필요해요.");
 const IsoDate = z.iso.datetime({ offset: true });
-const Model = z.object({ id: z.string().min(1).max(160), name: z.string().min(1).max(160), description: z.string().max(1000).optional() }).strict();
+export const EffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
+const Model = z.object({ id: z.string().min(1).max(160), name: z.string().min(1).max(160), description: z.string().max(1000).optional(), reasoningEfforts: z.array(EffortSchema).min(1).max(5).optional() }).strict();
 const QuotaWindow = z.object({ label: z.string().min(1).max(80), remainingPercent: z.number().finite().min(0).max(100).nullable(), resetsAt: IsoDate.nullable() }).strict();
 export const ProviderSnapshotSchema = z.object({
   provider: z.enum(["codex", "claude"]),

@@ -7,6 +7,15 @@ describe("untrusted connector input", () => {
   it("accepts missing quota without inventing zero remaining tokens", () => {
     expect(ProviderSnapshotSchema.parse(ready).quota).toBeNull();
   });
+  it("accepts legacy models and bounded actual effort metadata without relaxing strict input", () => {
+    const model = { ...ready.models[0], reasoningEfforts: ["low", "high"] };
+    expect(ProviderSnapshotSchema.safeParse({ ...ready, models: [model] }).success).toBe(true);
+    expect(ProviderSnapshotSchema.safeParse(ready).success).toBe(true);
+    for (const reasoningEfforts of [[], ["high; run-shell"], Array(6).fill("high")]) {
+      expect(ProviderSnapshotSchema.safeParse({ ...ready, models: [{ ...model, reasoningEfforts }] }).success).toBe(false);
+    }
+    expect(ProviderSnapshotSchema.safeParse({ ...ready, models: [{ ...model, command: "run-shell" }] }).success).toBe(false);
+  });
   it("separates quota observation time from a newer provider-status observation while accepting legacy snapshots", () => {
     const cached = { ...ready, quota: { short: { label: "5h", remainingPercent: 62, resetsAt: null }, weekly: null }, quotaObservedAt: "2026-10-17T10:00:00.000Z" };
     expect(ProviderSnapshotSchema.parse(cached).quotaObservedAt).toBe("2026-10-17T10:00:00.000Z");

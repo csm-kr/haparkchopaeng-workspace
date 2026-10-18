@@ -45,3 +45,11 @@ heartbeat/claim/result는 `Authorization: Bearer <deviceToken>` 및 `X-Local-Age
 공급자 로그아웃·제거·한도 도달이나 모델 목록 삭제가 확인되면 해당 대기/실행 작업을 취소한다. 카탈로그가 오래된 대기 작업도 claim에서 건너뛰어 다른 공급자의 질문을 막지 않는다. heartbeat는 기기 행을 먼저 잠그고 관측 시각을 비교해 늦은 상태가 최신 로그아웃을 덮어쓰지 않게 한다. 팀 탈퇴·내보내기는 멤버십 삭제와 같은 트랜잭션에서 해당 팀의 연결 시도·기기·허가·작업·snapshot을 회수한다. 재가입하더라도 기존 기기 권한이 되살아나지 않으며 새 번호 확인이 필요하다.
 
 실제 설치 파일 manifest는 배포 설정 경로로 별도 제공한다. 누락된 배포 파일을 다운로드 가능한 것으로 표시하지 않는다. v1은 외부상주 서버/WebSocket/Supabase service role을 연결기에 요구하지 않는다.
+
+## 자유 대화와 추론 강도 확장 (2026-10-18)
+
+REST v1의 ACK/pair/claim/result DTO는 유지한다. 자유 대화는 자료가 없어도 서버가 만든 `research_chat` JSON 문맥과 질문을 같은 claim 계약으로 전달하므로 기존 0.1.2가 실행할 수 있다. 논문·발표 자료의 준비 상태 `preparing`은 서버 내부에만 존재하며 기기는 `queued`만 claim한다. 준비도 활성 작업 상한과 취소·권한 회수에 포함한다.
+
+실제 모델 카탈로그의 `reasoningEfforts?`는 확인된 `low|medium|high|xhigh|max` 값의 목록이다. 미제공이면 UI가 추론 강도를 표시·전송하지 않는다. 명시한 값은 입장과 claim 직전에 현재 카탈로그로 재검사하며, 지원 정보가 사라지면 안전하게 취소한다. 강도는 claim의 새 top-level 키가 아니라 서버 문맥의 `execution.effort`에 넣는다. 새 adapter만 이를 검증해 Codex `model_reasoning_effort` 또는 Claude `--effort`로 전달한다. 기존 앱에서 묵시적으로 지원한다고 표시하지 않는다.
+
+새 필드를 받는 웹을 연결기보다 먼저 배포한다. 새 앱이 기존 strict 서버에 메타데이터를 보내면 거절될 수 있다. 기존 paperIds 배열과 새 version 2 Json 선택을 함께 읽는 호환 reader를 유지하며, 새 대화 데이터를 기록한 뒤에는 이전 배열 전용 서비스로 단순 롤백하지 않는다.

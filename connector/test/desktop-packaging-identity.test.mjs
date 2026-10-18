@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 test('the product macOS package uses an ASCII bundle/executable while preserving its Korean display identity', () => {
   assert.equal(source.build.mac.executableName, 'hapark-connector');
   assert.equal(source.productName, 'AI 브릿지');
-  assert.equal(source.version, '0.1.2');
+  assert.equal(source.version, '0.1.4');
   assert.equal(source.stableProfileName, '하박조팽 연결기');
   assert.equal(source.build.appId, 'kr.hapark.connector');
   assert.deepEqual(source.build.protocols.flatMap(value => value.schemes), ['hapark-connect']);

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/inngest", () => ({ inngest: { send: vi.fn().mockResolvedValue({ ids: ["event"] }) } }));
 vi.mock("@/lib/prisma", async () => {
   const modulePath = process.env.LOCAL_AGENT_TEST_CLIENT_MODULE;
   if (!modulePath) return { prisma: {} };
@@ -61,6 +62,35 @@ describe.skipIf(!enabled)("private research conversations on the isolated databa
     await expect(conversation([ids[2]])).rejects.toMatchObject({ status: 404 });
     expect((await listResearchPapers(scope())).map(paper => paper.id)).not.toContain(ids[2]);
   });
+  it("starts free chat, adds a seminar and paper mid-conversation, and clears them without rewriting past sources", async () => {
+    const identity = await readyDevice();
+    await prisma.presentation.create({ data: { id: "chat-test-presentation", teamId: scope().teamId, presenterId: scope().memberId, title: "토요일 세미나", date: new Date(), tags: [], keypoints: ["실험 가정"], slides: [{ title: "세미나 실험", body: "발표에서 설명한 대조군" }] } });
+    const thread = await conversation([]);
+    const first = await createTurn(scope(), thread.id, { ...target(identity.deviceId), prompt: "안녕! 함께 연구 아이디어를 생각해보자." });
+    expect(first.paperId).toBe("");
+    expect(first.materials).toEqual([]);
+    expect(first.effort).toBeUndefined();
+    expect(JSON.parse((await prisma.localAgentJob.findUniqueOrThrow({ where: { id: first.id } })).context)).not.toHaveProperty("execution");
+    await cancelTurn(scope(), thread.id, first.id);
+    await desktopHeartbeat(identity, [{ provider: "codex", status: "ready", models: [{ id: "actual-model", name: "Actual fixture model", reasoningEfforts: ["low", "high"] }], quota: null, observedAt: new Date().toISOString() }]);
+    const secondInput = { ...target(identity.deviceId), effort: "high" as const, paperIds: [ids[0]], presentationIds: ["chat-test-presentation"] };
+    const second = await createTurn(scope(), thread.id, secondInput);
+    expect(second.materials).toEqual([{ kind: "paper", id: ids[0], title: `Fixture ${ids[0]}` }, { kind: "presentation", id: "chat-test-presentation", title: "토요일 세미나" }]);
+    const claimed = await claimJob(identity);
+    expect(claimed?.context).toContain("발표에서 설명한 대조군");
+    expect(JSON.parse(claimed!.context).execution.effort).toBe("high");
+    await expect(createTurn(scope(), thread.id, { ...secondInput, effort: "low" })).rejects.toMatchObject({ code: "REQUEST_ID_REUSED" });
+    await cancelTurn(scope(), thread.id, second.id);
+    const third = await createTurn(scope(), thread.id, { ...target(identity.deviceId), paperIds: [], presentationIds: [] });
+    expect(third.materials).toEqual([]);
+    const saved = await getConversation(scope(), thread.id);
+    expect(saved.papers).toEqual([]);
+    expect(saved.presentations).toEqual([]);
+    expect(saved.turns[1].materials).toEqual(second.materials);
+    await cancelTurn(scope(), thread.id, third.id);
+    await expect(createTurn(scope(), thread.id, { ...target(identity.deviceId), paperIds: [ids[2]] })).rejects.toMatchObject({ status: 404 });
+    await expect(createTurn(scope(), thread.id, { ...target(identity.deviceId), presentationIds: ["missing-seminar"] })).rejects.toMatchObject({ status: 404 });
+  });
   it("queues raw source context, serializes turns and preserves one request across network retries", async () => {
     const identity = await readyDevice();
     const thread = await conversation();
@@ -79,6 +109,30 @@ describe.skipIf(!enabled)("private research conversations on the isolated databa
     expect(cancelled.status).toBe("cancelled");
     expect(cancelled.canCancel).toBe(false);
     expect((await createTurn(scope(), thread.id, target(identity.deviceId))).conversationTurn).toBe(2);
+  });
+  it("keeps history after selected papers or seminars are removed while new execution remains strict", async () => {
+    const identity = await readyDevice();
+    const seminarId = "chat-test-deleted-presentation";
+    await prisma.presentation.create({ data: { id: seminarId, teamId: scope().teamId, presenterId: scope().memberId,
+      title: "삭제 전 세미나", date: new Date(), tags: [], keypoints: ["당시 세미나 근거"], slides: [] } });
+    const thread = await createConversation(scope(), { requestId: crypto.randomUUID(), paperIds: [ids[0]], presentationIds: [seminarId] });
+    const turn = await createTurn(scope(), thread.id, target(identity.deviceId));
+    const claim = await claimJob(identity);
+    if (!claim) throw new Error("History fixture job was not claimed");
+    await submitResult(identity, { jobId: turn.id, claimToken: claim.claimToken, sequence: 1, status: "completed", response: "삭제 이후에도 남는 답변" });
+    await prisma.paper.delete({ where: { id: ids[0] } });
+    await prisma.presentation.delete({ where: { id: seminarId } });
+    const saved = await getConversation(scope(), thread.id);
+    expect(saved.conversation.paperIds).toEqual([]);
+    expect(saved.conversation.presentationIds).toEqual([]);
+    expect(saved.turns[0]).toMatchObject({ response: "삭제 이후에도 남는 답변", materials: [
+      { id: ids[0], title: `Fixture ${ids[0]}`, kind: "paper" }, { id: seminarId, title: "삭제 전 세미나", kind: "presentation" },
+    ] });
+    await expect(createTurn(scope(), thread.id, { ...target(identity.deviceId), paperIds: [ids[0]], presentationIds: [] })).rejects.toMatchObject({ status: 404 });
+    await expect(createTurn(scope(), thread.id, { ...target(identity.deviceId), paperIds: [], presentationIds: [seminarId] })).rejects.toMatchObject({ status: 404 });
+    const free = await createTurn(scope(), thread.id, { ...target(identity.deviceId), paperIds: [], presentationIds: [] });
+    expect(free.materials).toEqual([]);
+    await cancelTurn(scope(), thread.id, free.id);
   });
   it("keeps history after logout but a new session cannot execute or cancel with old authority", async () => {
     const identity = await readyDevice();
@@ -100,11 +154,13 @@ describe.skipIf(!enabled)("private research conversations on the isolated databa
     expect(history.turns.every(turn => !turn.canCancel)).toBe(true);
     await expect(createTurn(otherSession, thread.id, target(identity.deviceId))).rejects.toMatchObject({ status: 403 });
   });
-  it("refuses unprepared sources without queuing work and preserves the draft conversation", async () => {
+  it("automatically prepares unprepared sources and lets the user cancel before inference", async () => {
     const identity = await readyDevice();
     const thread = await conversation([ids[3]]);
-    await expect(createTurn(scope(), thread.id, target(identity.deviceId))).rejects.toMatchObject({ status: 409, code: "SOURCE_NOT_READY" });
-    expect((await getConversation(scope(), thread.id)).turns).toEqual([]);
+    const pending = await createTurn(scope(), thread.id, target(identity.deviceId));
+    expect(pending.status).toBe("preparing");
+    expect(await claimJob(identity)).toBeNull();
+    expect((await cancelTurn(scope(), thread.id, pending.id)).status).toBe("cancelled");
     expect((await listResearchPapers(scope())).find(paper => paper.id === ids[3])?.sourceReady).toBe(false);
   });
   it("admits only one simultaneous turn and deduplicates simultaneous identical requests", async () => {

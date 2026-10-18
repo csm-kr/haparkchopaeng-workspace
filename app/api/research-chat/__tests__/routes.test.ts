@@ -1,14 +1,15 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), list: vi.fn(), create: vi.fn(), detail: vi.fn(), turn: vi.fn(), cancel: vi.fn(), papers: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), list: vi.fn(), create: vi.fn(), detail: vi.fn(), turn: vi.fn(), cancel: vi.fn(), papers: vi.fn(), presentations: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getConnectionSession: mocks.session }));
 vi.mock("@/lib/active-team", () => ({ getActiveTeam: mocks.team }));
-vi.mock("@/lib/research-chat/service", () => ({ listConversations: mocks.list, createConversation: mocks.create, getConversation: mocks.detail, createTurn: mocks.turn, cancelTurn: mocks.cancel, listResearchPapers: mocks.papers }));
+vi.mock("@/lib/research-chat/service", () => ({ listConversations: mocks.list, createConversation: mocks.create, getConversation: mocks.detail, createTurn: mocks.turn, cancelTurn: mocks.cancel, listResearchPapers: mocks.papers, listResearchPresentations: mocks.presentations }));
 const { GET: list, POST: create } = await import("../conversations/route");
 const { GET: detail } = await import("../conversations/[id]/route");
 const { POST: turn } = await import("../conversations/[id]/turns/route");
 const { POST: cancel } = await import("../conversations/[id]/turns/[jobId]/cancel/route");
 const { GET: papers } = await import("../papers/route");
+const { GET: presentations } = await import("../presentations/route");
 const origin = "https://research.test";
 const request = (body: unknown, from = origin) => new Request(origin + "/api/research-chat/conversations", { method: "POST", headers: { origin: from, "content-type": "application/json" }, body: JSON.stringify(body) });
 const requestId = "cba0088a-824a-4d00-8e4b-8a1b80f51624";
@@ -20,6 +21,7 @@ beforeEach(() => {
   mocks.team.mockResolvedValue({ id: "server-team" });
   mocks.list.mockResolvedValue([]);
   mocks.papers.mockResolvedValue([]);
+  mocks.presentations.mockResolvedValue([]);
   mocks.create.mockResolvedValue({ id: "conversation" });
   mocks.detail.mockResolvedValue({ conversation: { id: "conversation" }, turns: [] });
   mocks.turn.mockResolvedValue({ id: "job", status: "queued" });
@@ -31,8 +33,10 @@ describe("research chat API boundaries", () => {
     mocks.session.mockResolvedValue(null);
     expect((await list(new Request(origin + "/api/research-chat/conversations"))).status).toBe(401);
     expect((await papers(new Request(origin + "/api/research-chat/papers"))).status).toBe(401);
+    expect((await presentations(new Request(origin + "/api/research-chat/presentations"))).status).toBe(401);
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.papers).not.toHaveBeenCalled();
+    expect(mocks.presentations).not.toHaveBeenCalled();
   });
   it("injects owner/team from server and applies private cache headers", async () => {
     const response = await create(request({ requestId, title: "실험 비교", paperIds: ["paper-a", "paper-b"] }));
@@ -48,14 +52,18 @@ describe("research chat API boundaries", () => {
     }
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it("accepts only one to three unique paper references and bounded explicit model turns", async () => {
-    for (const paperIds of [[], ["a", "a"], ["a", "b", "c", "d"]]) expect((await create(request({ requestId, paperIds }))).status).toBe(400);
+  it("allows free chat and accepts only bounded unique references and explicit model turns", async () => {
+    expect((await create(request({ requestId, paperIds: [] }))).status).toBe(201);
+    expect((await create(request({ requestId }))).status).toBe(201);
+    for (const paperIds of [["a", "a"], Array.from({ length: 11 }, (_, n) => `paper-${n}`)]) expect((await create(request({ requestId, paperIds }))).status).toBe(400);
     const input = { requestId, deviceId: "device", provider: "codex", model: "actual-model", prompt: "실험을 비교해줘" };
     expect((await turn(request(input), params())).status).toBe(202);
     expect(mocks.turn).toHaveBeenCalledWith(expect.objectContaining({ teamId: "server-team" }), "conversation", input);
     expect((await turn(request({ ...input, context: "forged" }), params())).status).toBe(400);
     expect((await turn(request({ ...input, prompt: "x".repeat(12_001) }), params())).status).toBe(400);
     expect((await turn(request({ ...input, provider: "gemini" }), params())).status).toBe(400);
+    expect((await turn(request({ ...input, effort: "high; run-shell" }), params())).status).toBe(400);
+    expect((await turn(request({ ...input, effort: "high", presentationIds: ["seminar"] }), params())).status).toBe(202);
   });
   it("routes history and cancellation to the owned conversation with a strict empty cancel body", async () => {
     expect((await detail(new Request(origin + "/api/research-chat/conversations/conversation"), params())).status).toBe(200);

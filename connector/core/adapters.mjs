@@ -19,8 +19,13 @@ export function versionSupported(provider, version) {
   return true;
 }
 
-export function claudeArguments(model) {
-  return ['-p', '--verbose', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--tools', '', '--restricted', '--safe-mode', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence', '--permission-mode', 'dontAsk', ...(model ? ['--model', validModel(model)] : [])];
+function validEffort(effort, provider) {
+  if (!['low', 'medium', 'high', 'xhigh', ...(provider === 'claude' ? ['max'] : [])].includes(effort)) throw new Error('사용 가능한 effort를 선택해 주세요.');
+  return effort;
+}
+
+export function claudeArguments(model, effort) {
+  return ['-p', '--verbose', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--tools', '', '--restricted', '--safe-mode', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence', '--permission-mode', 'dontAsk', ...(model ? ['--model', validModel(model)] : []), ...(effort ? ['--effort', validEffort(effort, 'claude')] : [])];
 }
 
 export function claudeUserMessage(text) {
@@ -28,8 +33,8 @@ export function claudeUserMessage(text) {
   return { type: 'user', session_id: '', parent_tool_use_id: null, client_composed: true, message: { role: 'user', content: [{ type: 'text', text }] } };
 }
 
-export function codexArguments(model) {
-  return ['--no-daemon', '-a', 'never', 'exec', '--ignore-user-config', '--ephemeral', '--json', '--skip-git-repo-check', '--sandbox', 'read-only', ...CODEX_DISABLED_FEATURES.flatMap(feature => ['-c', `features.${feature}=false`]), '-c', 'web_search="disabled"', '-c', 'mcp_servers={}', '-c', 'project_doc_max_bytes=0', '-c', 'skills.include_instructions=false', '-c', 'memories.use_memories=false', '-c', 'memories.generate_memories=false', '-c', `developer_instructions=${JSON.stringify(RESEARCH_INSTRUCTIONS)}`, '--model', validModel(model), '-'];
+export function codexArguments(model, effort) {
+  return ['--no-daemon', '-a', 'never', 'exec', '--ignore-user-config', '--ephemeral', '--json', '--skip-git-repo-check', '--sandbox', 'read-only', ...CODEX_DISABLED_FEATURES.flatMap(feature => ['-c', `features.${feature}=false`]), '-c', 'web_search="disabled"', '-c', 'mcp_servers={}', '-c', 'project_doc_max_bytes=0', '-c', 'skills.include_instructions=false', '-c', 'memories.use_memories=false', '-c', 'memories.generate_memories=false', '-c', `developer_instructions=${JSON.stringify(RESEARCH_INSTRUCTIONS)}`, ...(effort ? ['-c', `model_reasoning_effort=${JSON.stringify(validEffort(effort, 'codex'))}`] : []), '--model', validModel(model), '-'];
 }
 
 export function codexMetadataArguments() {
@@ -73,7 +78,8 @@ export function normalizeModels(provider, items) {
     const name = value?.displayName ?? value?.name;
     if (id === 'default' || value?.hidden || typeof name !== 'string') continue;
     try { validModel(id); } catch { continue; }
-    if (!models.some(item => item.id === id)) models.push({ id, name: name.replace(/[\p{Cc}\p{Cf}]/gu, '').slice(0, 100) || id });
+    const efforts = (Array.isArray(value.supportedReasoningEfforts) ? value.supportedReasoningEfforts : []).map(item => item?.reasoningEffort).filter(item => ['low', 'medium', 'high', 'xhigh'].includes(item));
+    if (!models.some(item => item.id === id)) models.push({ id, name: name.replace(/[\p{Cc}\p{Cf}]/gu, '').slice(0, 100) || id, ...(efforts.length ? { reasoningEfforts: [...new Set(efforts)] } : {}) });
     if (models.length >= 64) break;
   }
   return models;
@@ -194,10 +200,13 @@ export function createProviderAdapter(provider, { workspaceRoot, environment = p
     if (!spec || snapshot.status !== 'ready' || !snapshot.models.some(item => item.id === model)) throw new Error('사용 가능한 모델을 다시 선택해 주세요.');
     if (typeof prompt !== 'string' || typeof context !== 'string' || prompt.length > 12000 || context.length > 250000) throw new Error('논문과 질문의 길이를 확인해 주세요.');
     if (signal?.aborted) throw Object.assign(new Error('취소했어요.'), { name: 'AbortError' });
+    let effort;
+    try { const value = JSON.parse(context); if (value?.kind === 'research_chat' && value.version === 1 && value.execution?.effort) effort = value.execution.effort; } catch { /* Other server contexts are also supported. */ }
+    if (effort) validEffort(effort, provider);
     const text = `<paper_context>\n${context}\n</paper_context>\n\n<question>\n${prompt}\n</question>`;
     return workspace(async cwd => {
       let completed = false, error = null, emitted = false;
-      const handle = processFactory(spec, provider === 'claude' ? claudeArguments(model) : codexArguments(model), { cwd, env: env(), signal, onMessage: message => {
+      const handle = processFactory(spec, provider === 'claude' ? claudeArguments(model, effort) : codexArguments(model, effort), { cwd, env: env(), signal, onMessage: message => {
         const delta = providerText(provider, message);
         if (delta && !signal?.aborted) { onText(delta); emitted = true; }
         if (provider === 'claude') {

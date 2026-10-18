@@ -1,16 +1,19 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { z } from "zod";
 import type { Prisma, LocalAgentAttempt, LocalAgentDevice, LocalAgentGrant, LocalAgentJob } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
-import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
+import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
 import { ATTEMPT_MS, DESKTOP_HEARTBEAT_SECONDS, LEASE_MS, MAX_JOB_MS, MAX_PAIR_FAILURES, SNAPSHOT_FRESH_MS, WEB_HEARTBEAT_SECONDS, assertGrantUsable, hashCredential, pairingCode, sameCredential, validateDeviceToken } from "./security";
-import { JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
+import { EffortSchema, JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
 
 type Database = Prisma.TransactionClient;
 export interface LocalAgentScope { memberId: string; teamId: string; sessionKey: string; sessionExpiresAt: Date }
 export interface DesktopIdentity { deviceId: string; deviceToken: string }
 const pendingStatuses = ["awaiting_app", "awaiting_code"];
-const activeJobStatuses = ["queued", "running"];
+const activeJobStatuses = ["preparing", "queued", "running"];
+const ChatPreparedSchema = JobCreateSchema.extend({ paperId: z.string().max(150) });
+const ChatExecutionSchema = z.object({ version: z.literal(1), kind: z.literal("research_chat"), execution: z.object({ effort: EffortSchema }).strict().optional() });
 
 function unavailable(): never { throw new HttpError(404, "NOT_FOUND", "연결 요청을 찾을 수 없어요. 웹에서 다시 연결해주세요."); }
 function conflict(): never { throw new HttpError(409, "CONNECTION_CHANGED", "연결 상태가 바뀌었어요. 다시 확인해주세요."); }
@@ -271,12 +274,20 @@ function jobView(job: LocalAgentJob): LocalAgentJobView {
   return { id: job.id, version: job.version, paperId: job.paperId, provider: job.provider as LocalAgentProvider, model: job.model, prompt: job.prompt, status: job.status as LocalAgentJobView["status"], response: job.response, error: job.error, createdAt: job.createdAt.toISOString(), updatedAt: job.updatedAt.toISOString() };
 }
 
-async function assertUsableModel(db: Database, deviceId: string, provider: LocalAgentProvider, model: string, now: Date): Promise<void> {
+function claimEffort(job: Pick<LocalAgentJob, "purpose" | "context">): LocalAgentEffort | undefined {
+  if (job.purpose !== "chat") return undefined;
+  try { return ChatExecutionSchema.parse(JSON.parse(job.context)).execution?.effort; }
+  catch { throw new HttpError(409, "EFFORT_UNAVAILABLE", "연결 설정에서 사용할 effort를 확인한 뒤 다시 보내주세요."); }
+}
+
+async function assertUsableModel(db: Database, deviceId: string, provider: LocalAgentProvider, model: string, now: Date, effort?: LocalAgentEffort): Promise<void> {
   const row = await db.localAgentSnapshot.findUnique({ where: { deviceId_provider: { deviceId, provider } } });
   const parsed = row ? ProviderSnapshotSchema.safeParse(row.payload) : null;
   if (!row || !parsed?.success || now.getTime() - row.observedAt.getTime() > SNAPSHOT_FRESH_MS || parsed.data.status !== "ready" || !parsed.data.models.some((item) => item.id === model)) {
     throw new HttpError(409, "MODEL_UNAVAILABLE", "현재 사용할 수 있는 모델을 다시 선택해주세요.");
   }
+  const supported = parsed.data.models.find(item => item.id === model)?.reasoningEfforts;
+  if (effort && (!supported || !supported.includes(effort))) throw new HttpError(409, "EFFORT_UNAVAILABLE", "연결 설정에서 이 모델이 지원하는 effort를 선택해주세요.");
 }
 
 async function paperContext(db: Database, paperId: string, teamId: string): Promise<string> {
@@ -291,11 +302,15 @@ interface JobIntent {
   context?: string;
   conversationId?: string;
   conversationTurn?: number;
+  initialStatus?: "preparing" | "queued";
+  effort?: LocalAgentEffort;
 }
 export interface PreparedJobOptions {
   purpose: "paper_analysis" | "chat";
   conversationId?: string;
   conversationTurn?: number;
+  initialStatus?: "preparing" | "queued";
+  effort?: LocalAgentEffort;
   /** Internal transaction only. Never parsed from a web request. */
   transaction?: Database;
 }
@@ -324,12 +339,12 @@ export async function createJob(scope: LocalAgentScope, input: LocalAgentJobCrea
 
 /** Only server-prepared source text can enter the inference queue through this seam. */
 export async function createPreparedJob(scope: LocalAgentScope, input: LocalAgentJobCreateInput, context: string, options: PreparedJobOptions): Promise<LocalAgentJobView> {
-  if (!JobCreateSchema.safeParse(input).success || typeof context !== "string" || !context.trim() || context.length > 250_000 ||
+  if (!(options.purpose === "chat" ? ChatPreparedSchema : JobCreateSchema).safeParse(input).success || typeof context !== "string" || !context.trim() || context.length > 250_000 ||
       !["paper_analysis", "chat"].includes(options.purpose) ||
       (options.purpose === "chat" ? !options.conversationId || !Number.isInteger(options.conversationTurn) || (options.conversationTurn ?? 0) < 1 : options.conversationId !== undefined || options.conversationTurn !== undefined)) {
     throw new HttpError(400, "BAD_REQUEST", "준비한 논문 문맥과 실행 요청을 확인해주세요.");
   }
-  return enqueueJob(scope, input, { purpose: options.purpose, context, conversationId: options.conversationId, conversationTurn: options.conversationTurn }, options.transaction);
+  return enqueueJob(scope, input, { purpose: options.purpose, context, conversationId: options.conversationId, conversationTurn: options.conversationTurn, initialStatus: options.initialStatus, effort: options.effort }, options.transaction);
 }
 
 async function enqueueJob(scope: LocalAgentScope, input: LocalAgentJobCreateInput, intent: JobIntent, transaction?: Database): Promise<LocalAgentJobView> {
@@ -349,12 +364,12 @@ async function enqueueJob(scope: LocalAgentScope, input: LocalAgentJobCreateInpu
     if (!grantLock.count) throw new HttpError(403, "WEB_PERMISSION_EXPIRED", "웹 연결 권한이 끝났어요. 웹에서 AI 연결을 다시 눌러주세요.");
     const now = new Date();
     assertGrantUsable(grant, now);
-    await assertUsableModel(tx, input.deviceId, input.provider, input.model, now);
+    await assertUsableModel(tx, input.deviceId, input.provider, input.model, now, intent.effort);
     const active = await tx.localAgentJob.count({ where: { deviceId: input.deviceId, status: { in: activeJobStatuses } } });
     if (active >= 5) throw new HttpError(429, "QUEUE_FULL", "진행 중인 질문이 많아요. 답변을 받은 뒤 다시 보내주세요.");
-    if (intent.context !== undefined && !(await tx.paper.findFirst({ where: { id: input.paperId, teamId: scope.teamId }, select: { id: true } }))) throw new HttpError(404, "PAPER_NOT_FOUND", "이 팀에서 논문을 찾을 수 없어요.");
+    if (intent.context !== undefined && input.paperId && !(await tx.paper.findFirst({ where: { id: input.paperId, teamId: scope.teamId }, select: { id: true } }))) throw new HttpError(404, "PAPER_NOT_FOUND", "이 팀에서 논문을 찾을 수 없어요.");
     const context = intent.context ?? await paperContext(tx, input.paperId, scope.teamId);
-    const job = await tx.localAgentJob.create({ data: { ...scopeWhere(scope), deviceId: input.deviceId, grantId: grant.id, paperId: input.paperId, provider: input.provider, model: input.model, prompt: input.prompt, requestId: input.requestId, context, purpose: intent.purpose, conversationId: intent.conversationId ?? null, conversationTurn: intent.conversationTurn ?? null, expiresAt: new Date(now.getTime() + MAX_JOB_MS) } });
+    const job = await tx.localAgentJob.create({ data: { ...scopeWhere(scope), deviceId: input.deviceId, grantId: grant.id, paperId: input.paperId, provider: input.provider, model: input.model, prompt: input.prompt, requestId: input.requestId, context, purpose: intent.purpose, status: intent.initialStatus ?? "queued", conversationId: intent.conversationId ?? null, conversationTurn: intent.conversationTurn ?? null, expiresAt: new Date(now.getTime() + MAX_JOB_MS) } });
     return jobView(job);
   };
   // The caller must catch a database conflict only after its outer transaction rolls back.
@@ -406,9 +421,9 @@ export async function claimJob(identity: DesktopIdentity): Promise<LocalAgentCla
       const job = await tx.localAgentJob.findFirst({ where: { deviceId: device.id, status: "queued", expiresAt: { gt: now }, grant: { revokedAt: null, leaseExpiresAt: { gt: now } } }, include: { grant: true }, orderBy: { createdAt: "asc" } });
       if (!job) return null;
       assertGrantUsable(job.grant, now);
-      try { await assertUsableModel(tx, device.id, job.provider as LocalAgentProvider, job.model, now); } catch (error) {
-        if (!(error instanceof HttpError) || error.code !== "MODEL_UNAVAILABLE") throw error;
-        await tx.localAgentJob.updateMany({ where: { id: job.id, status: "queued", version: job.version }, data: { status: "cancelled", error: "사용할 수 있는 모델 정보를 다시 확인해주세요.", version: { increment: 1 } } });
+      try { await assertUsableModel(tx, device.id, job.provider as LocalAgentProvider, job.model, now, claimEffort(job)); } catch (error) {
+        if (!(error instanceof HttpError) || !["MODEL_UNAVAILABLE", "EFFORT_UNAVAILABLE"].includes(error.code)) throw error;
+        await tx.localAgentJob.updateMany({ where: { id: job.id, status: "queued", version: job.version }, data: { status: "cancelled", error: error.code === "EFFORT_UNAVAILABLE" ? "선택한 effort를 사용할 수 없어요. 연결 설정을 확인한 뒤 다시 보내주세요." : "사용할 수 있는 모델 정보를 다시 확인해주세요.", version: { increment: 1 } } });
         continue;
       }
       const claimToken = randomBytes(32).toString("base64url");

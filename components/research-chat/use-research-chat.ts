@@ -1,13 +1,16 @@
 "use client";
 
 import * as React from "react";
-import type { ResearchChatTurn, ResearchChatTurnInput, ResearchConversationDetail, ResearchConversationView, ResearchPaperOption } from "@/types/research-chat";
+import type { ResearchChatTurn, ResearchChatTurnInput, ResearchConversationDetail, ResearchConversationView, ResearchPaperOption, ResearchPresentationOption } from "@/types/research-chat";
 import { chatError, ResearchChatApiError, researchChatApi, type ResearchChatApi } from "./client";
 
-export function useResearchChat({ initialPapers, initialConversations, initialDetail, initialConversationId, initialError, api = researchChatApi }: {
+export function useResearchChat({ initialPapers, initialPresentations = [], initialConversations, initialDetail, initialConversationId, initialError, api = researchChatApi }: {
   initialPapers: ResearchPaperOption[]; initialConversations: ResearchConversationView[]; initialDetail?: ResearchConversationDetail | null; initialConversationId?: string; initialError?: string | null; api?: ResearchChatApi;
+  initialPresentations?: ResearchPresentationOption[];
 }) {
   const [papers, setPapers] = React.useState(initialPapers);
+  const [presentations, setPresentations] = React.useState(initialPresentations);
+  const [materialsLoading, setMaterialsLoading] = React.useState(false);
   const [conversations, setConversations] = React.useState(initialConversations);
   const [detail, setDetail] = React.useState(initialDetail ?? null);
   const [prompt, setPrompt] = React.useState("");
@@ -38,7 +41,7 @@ export function useResearchChat({ initialPapers, initialConversations, initialDe
   function fail(cause: unknown) {
     setError(chatError(cause));
     if (cause instanceof ResearchChatApiError && (cause.status === 401 || cause.status === 403)) {
-      epoch.current += 1; setBlocked(true); setDetail(null); setConversations([]); setPapers([]); drafts.current.clear(); intent.current = null;
+      epoch.current += 1; setBlocked(true); setDetail(null); setConversations([]); setPapers([]); setPresentations([]); drafts.current.clear(); intent.current = null;
       atomic.current = false; cancelAtomic.current = false; setSending(false); setCancelling(false); setLoading(false);
       setBlockedTarget(cause.status === 401 ? "/" : "/teams");
       requestedId.current = undefined;
@@ -98,9 +101,9 @@ export function useResearchChat({ initialPapers, initialConversations, initialDe
     const revision = epoch.current;
     const id = currentDetail.current?.conversation.id ?? requestedId.current;
     try {
-      const [nextPapers, nextList, nextDetail] = await Promise.all([api.papers(), api.list(), id ? api.get(id) : Promise.resolve(null)]);
+      const [nextPapers, nextPresentations, nextList, nextDetail] = await Promise.all([api.papers(), api.presentations(), api.list(), id ? api.get(id) : Promise.resolve(null)]);
       if (!valid(revision)) return;
-      setPapers(nextPapers); setConversations(nextList); setError(null);
+      setPapers(nextPapers); setPresentations(nextPresentations); setConversations(nextList); setError(null);
       if (nextDetail) setDetail((previous) => {
         if (!previous) return nextDetail;
         if (previous.conversation.id !== nextDetail.conversation.id) return previous;
@@ -113,7 +116,7 @@ export function useResearchChat({ initialPapers, initialConversations, initialDe
     } catch (cause) { if (valid(revision)) fail(cause); }
   }
   const id = detail?.conversation.id;
-  const needsPolling = sending || !!intent.current || !!detail?.turns.some((turn) => turn.status === "queued" || turn.status === "running");
+  const needsPolling = sending || !!intent.current || !!detail?.turns.some((turn) => ["preparing", "queued", "running"].includes(turn.status));
   React.useEffect(() => {
     if (!id || blocked || !needsPolling) return;
     let stopped = false, syncing = false;
@@ -125,7 +128,7 @@ export function useResearchChat({ initialPapers, initialConversations, initialDe
         const next = await api.get(id);
         if (!stopped && valid(revision)) {
           for (const turn of next.turns) putTurn(turn);
-          setDetail((previous) => previous?.conversation.id === id ? { ...previous, papers: next.papers, hasEarlierTurns: next.hasEarlierTurns } : previous);
+          setDetail((previous) => previous?.conversation.id === id ? { ...previous, papers: next.papers, presentations: next.presentations, hasEarlierTurns: next.hasEarlierTurns } : previous);
           setError(null);
         }
       } catch (cause) { if (!stopped && valid(revision)) fail(cause); }
@@ -147,19 +150,25 @@ export function useResearchChat({ initialPapers, initialConversations, initialDe
     if (intent.current?.fingerprint !== fingerprint) intent.current = { fingerprint, createId: crypto.randomUUID(), turnId: crypto.randomUUID() };
     const pending = intent.current;
     try {
+      const knownPapers = new Map([...(currentDetail.current?.papers ?? []), ...papers].map(paper => [paper.id, paper]));
+      const knownPresentations = new Map([...(currentDetail.current?.presentations ?? []), ...presentations].map(item => [item.id, item]));
+      const selectedPapers = paperIds.flatMap(id => { const paper = knownPapers.get(id); return paper ? [paper] : []; });
+      const selectedPresentations = (input.presentationIds ?? []).flatMap(id => { const item = knownPresentations.get(id); return item ? [item] : []; });
       let conversation = currentDetail.current?.conversation ?? pending.conversation;
       if (!conversation) {
-        conversation = await api.create({ requestId: pending.createId, paperIds, title: input.prompt.slice(0, 80) });
+        conversation = await api.create({ requestId: pending.createId, paperIds, presentationIds: input.presentationIds ?? [], title: input.prompt.slice(0, 80) });
         pending.conversation = conversation;
         if (!valid(revision)) return;
         requestedId.current = conversation.id;
-        setDetail({ conversation, papers: papers.filter((paper) => paperIds.includes(paper.id)), turns: [], hasEarlierTurns: false });
+        setDetail({ conversation, papers: selectedPapers, presentations: selectedPresentations, turns: [], hasEarlierTurns: false });
         remember(conversation); url(conversation.id, true);
       }
       const next = await api.send(conversation.id, { ...input, requestId: pending.turnId });
       if (!valid(revision)) return;
+      const updatedConversation = { ...conversation, paperIds, presentationIds: input.presentationIds ?? [], updatedAt: next.updatedAt };
+      setDetail(previous => previous?.conversation.id === conversation.id ? { ...previous, conversation: updatedConversation, papers: selectedPapers, presentations: selectedPresentations } : previous);
       putTurn(next); setPrompt(""); drafts.current.delete("new"); drafts.current.delete(conversation.id); intent.current = null;
-      remember({ ...conversation, updatedAt: next.updatedAt });
+      remember(updatedConversation);
     } catch (cause) { if (valid(revision)) fail(cause); }
     finally { if (valid(revision)) { atomic.current = false; setSending(false); } }
   }
@@ -190,5 +199,15 @@ export function useResearchChat({ initialPapers, initialConversations, initialDe
       }
     } finally { if (valid(revision)) { sourceAtomic.current = false; setSourcePreparing(false); } }
   }
-  return { papers, conversations, detail, prompt, setPrompt, error, loading, sending, cancelling, blocked, blockedTarget, sourcePreparing, sourceRequestedIds, open, newChat, refresh, submit, cancel, prepareSources };
+  async function refreshMaterials() {
+    if (blocked || materialsLoading) return;
+    const revision = epoch.current;
+    setMaterialsLoading(true);
+    try {
+      const [nextPapers, nextPresentations] = await Promise.all([api.papers(), api.presentations()]);
+      if (valid(revision)) { setPapers(nextPapers); setPresentations(nextPresentations); }
+    } catch (cause) { if (valid(revision)) fail(cause); }
+    finally { if (alive.current) setMaterialsLoading(false); }
+  }
+  return { papers, presentations, materialsLoading, refreshMaterials, conversations, detail, prompt, setPrompt, error, loading, sending, cancelling, blocked, blockedTarget, sourcePreparing, sourceRequestedIds, open, newChat, refresh, submit, cancel, prepareSources };
 }

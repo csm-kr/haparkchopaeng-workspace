@@ -2,7 +2,8 @@
 export type LocalAgentProvider = "codex" | "claude";
 export type LocalAgentPlatform = "windows" | "macos" | "linux";
 export type LocalAgentProviderStatus = "ready" | "login_required" | "not_installed" | "limited" | "error";
-export interface LocalAgentModel { id: string; name: string; description?: string }
+export type LocalAgentEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export interface LocalAgentModel { id: string; name: string; description?: string; reasoningEfforts?: LocalAgentEffort[] }
 export interface LocalAgentQuotaWindow {
   label: string;
   remainingPercent: number | null;
@@ -74,7 +75,7 @@ export interface LocalAgentDesktopPairInput {
   deviceToken: string;
   code: string;
 }
-export type LocalAgentJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type LocalAgentJobStatus = "preparing" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export interface LocalAgentJobView {
   id: string;
   version: number;

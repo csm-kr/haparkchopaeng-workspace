@@ -2,7 +2,7 @@
   "name": "hapark-connector-desktop",
   "productName": "AI 브릿지",
   "stableProfileName": "하박조팽 연결기",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "private": true,
   "author": "하박조팽",
   "homepage": "https://hapark.vercel.app",
