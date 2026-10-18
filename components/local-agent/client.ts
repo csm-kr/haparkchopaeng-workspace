@@ -9,6 +9,7 @@ export interface ConnectorRelease {
   version: string;
   filename?: string;
   architecture?: string;
+  unsigned?: boolean;
 }
 
 export class LocalAgentApiError extends Error {

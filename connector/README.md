@@ -1,6 +1,6 @@
-# 하박조팽 연결기
+# AI 브릿지
 
-웹에서 내 PC에 설치하고 로그인한 Codex·Claude Code를 사용하기 위한 연결기다. Node 기반 실행 코어와 Electron 데스크톱 앱을 별도 패키지로 나눴다. 최종 사용자는 연결기 설치본만 설치하며 Node·npm을 따로 설치하지 않는다. 사용할 CLI와 해당 구독 계정 로그인은 필요하다.
+웹에서 내 PC에 설치하고 로그인한 Codex·Claude Code를 사용하는 앱이다. 표시 이름은 **AI 브릿지**다. Node 기반 실행 코어와 Electron 데스크톱 앱을 별도 패키지로 나눴다. 최종 사용자는 AI 브릿지 설치본만 설치하며 Node·npm을 따로 설치하지 않는다. 사용할 CLI와 해당 구독 계정 로그인은 필요하다.
 
 현재 하박조팽 배포 주소는 **https://hapark.vercel.app** 이다. URI나 웹 요청이 새 서버 주소를 지정할 수 없으며 빌드에 등록한 origin으로만 통신한다.
 
@@ -79,7 +79,7 @@ Codex는 ChatGPT 계정, Claude Code는 `claude.ai`·`firstParty` 구독 OAuth �
 
 Codex는 read-only sandbox, 사용자 설정 무시, 임시 세션, 셸·이미지·멀티에이전트·MCP·웹·훅·플러그인 차단을 적용한다. Claude는 `--tools ''`, restricted/safe-mode, 빈 strict MCP, 빈 setting sources, slash command/세션 저장 차단과 verbatim 사용자 입력을 적용한다. 둘 다 격리한 임시 작업 디렉터리와 stdin 입력을 사용하며 셸 문자열로 질문을 합치지 않는다. 예상하지 못한 도구·승인 요청은 거절한다.
 
-앱은 OS의 `app.getPath('userData')` 아래에 설정과 암호화된 `devices.enc.json`을 저장한다. 일반적으로 Windows는 Roaming AppData, macOS는 Library/Application Support, Linux는 사용자 config 영역이다. Linux의 보안 저장소가 `basic_text`이면 연결 키를 저장하지 않고 키링을 켜도록 안내한다.
+앱은 OS의 `app.getPath('userData')` 아래에 설정과 암호화된 `devices.enc.json`을 저장한다. 이름이 바뀌어도 기존 키를 유지하도록 프로필 폴더와 내부 암호화 서비스명은 `하박조팽 연결기`로 고정한다. 일반적으로 Windows는 Roaming AppData, macOS는 Library/Application Support, Linux는 사용자 config 영역이다. Linux의 보안 저장소가 `basic_text`이면 연결 키를 저장하지 않고 키링을 켜도록 안내한다.
 
 보안 저장소는 활성 상태인데 기존 암호문을 읽을 수 없으면 원본을 `devices.enc.json.unreadable-UUID.enc.bak`으로 보존하고 새 6자리 번호로 다시 확인한다. 백업을 자동으로 복호화하거나 이전 키로 재승인하지 않는다. 보안 저장소 비활성·접근 권한·파일 읽기 오류는 이 복구로 처리하지 않는다. 정상 키와 다른 웹앱의 연결은 유지하며 읽기·저장·제거·백업은 같은 큐로 처리한다.
 

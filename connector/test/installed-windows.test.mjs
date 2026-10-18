@@ -217,9 +217,9 @@ test('two host layouts keep native executable, protocol and production profile i
   assert.equal(first.executableFilename, 'research-notebook-connector.exe');
   assert.deepEqual(first.profileRelativePath, ['org.example.research-notebook', 'production']);
   assert.equal(first.installationPrefix, 'research-notebook-connector-install-');
-  const second = windowsSmokeLayout({ appId: 'kr.hapark.connector', productName: 'Hapark Connector', scheme: 'hapark-connect', profileRelativePath: [] }, { applicationId: 'hapark' });
-  assert.equal(second.executableFilename, 'Hapark Connector.exe');
-  assert.deepEqual(second.profileRelativePath, ['Hapark Connector']);
+  const second = windowsSmokeLayout({ appId: 'kr.hapark.connector', productName: 'AI Bridge', stableProfileName: '하박조팽 연결기', scheme: 'hapark-connect', profileRelativePath: [] }, { applicationId: 'hapark' });
+  assert.equal(second.executableFilename, 'AI Bridge.exe');
+  assert.deepEqual(second.profileRelativePath, ['하박조팽 연결기']);
   assert.notEqual(first.scheme, second.scheme);
   for (const candidate of [{ ...configuration, profileRelativePath: ['..', 'production'] }, { ...configuration, profileRelativePath: ['org.other', 'production'] }, { ...configuration, profileRelativePath: ['org.example.research-notebook', 'development'] }]) assert.throws(() => windowsSmokeLayout(candidate, { applicationId: 'research-notebook' }));
   for (const executableName of ['..\\other', 'other/exe', 'name.exe', '', 'C:\\Windows\\other']) assert.throws(() => windowsSmokeLayout(configuration, { applicationId: 'research-notebook', executableName }));

@@ -1,0 +1,50 @@
+{
+  "project": "hapark",
+  "phase": "15-ai-bridge-preview",
+  "execution": "Collaborative TDD; manifest, branded install guidance and stable encrypted profile.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "ai-bridge-brand-and-preview-guidance",
+      "status": "completed",
+      "paths": [
+        "components/local-agent",
+        "lib/local-agent-releases.ts",
+        "lib/__tests__/local-agent-releases.test.ts",
+        "connector/desktop",
+        "connector/test",
+        "connector/scripts",
+        ".github/workflows/ai-bridge-preview.yml"
+      ],
+      "checks": [
+        [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "lib/__tests__/local-agent-releases.test.ts",
+          "lib/local-agent/__tests__/request.test.ts",
+          "lib/local-agent/__tests__/prepared-jobs.test.ts",
+          "app/api/local-agent/__tests__/routes.test.ts",
+          "components/local-agent/__tests__/connection-widgets.test.tsx",
+          "components/local-agent/__tests__/local-agent-flow.test.tsx",
+          "--reporter=dot"
+        ],
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ],
+        [
+          "node",
+          "connector/scripts/mac-builder.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-18T09:41:47+0900",
+      "summary": "AI 브릿지 0.1.1 표시명·기존 프로필 보존·미서명 설치 안내와 exact-source draft 업로드 guard를 TDD로 검증했다. 웹/API 70개, 연결기 179개, 실제 builder 구현 5개가 통과했다. 설치 파일 공개와 운영 웹 확인은 별도 배포 영수증 대상이다.",
+      "completed_at": "2026-10-18T09:43:47+0900"
+    }
+  ],
+  "scope": "Code regression only. Installer publication and production browser verification require separate evidence.",
+  "created_at": "2026-10-18T09:41:47+0900",
+  "completed_at": "2026-10-18T09:43:47+0900"
+}

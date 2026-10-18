@@ -1,6 +1,6 @@
 # 로컬 AI 연결
 
-운영 origin은 `https://hapark.vercel.app`이다. 웹의 **AI 연결** 버튼이 설치된 Electron 연결기를 `hapark-connect` 전용 링크로 연다. 연결기는 이 PC의 기존 Codex·Claude Code 로그인을 사용한다. 모델은 실제 CLI 목록에서 사용자가 선택하며 처음에는 비어 있다. [ADR-026](../agent/ADR.md#adr-026)에 따라 업로드는 Inngest에서 PDF 본문만 준비하며, 논문 분석과 `/ai-chat`은 사용자가 선택한 로컬 AI를 사용한다. Gemini 자동 분석은 실행하지 않는다.
+운영 origin은 `https://hapark.vercel.app`이다. 웹의 **AI 연결** 버튼이 설치된 **AI 브릿지**를 `hapark-connect` 전용 링크로 연다. AI 브릿지는 이 PC의 기존 Codex·Claude Code 로그인을 사용한다. 모델은 실제 CLI 목록에서 사용자가 선택하며 처음에는 비어 있다. [ADR-026](../agent/ADR.md#adr-026)에 따라 업로드는 Inngest에서 PDF 본문만 준비하며, 논문 분석과 `/ai-chat`은 사용자가 선택한 로컬 AI를 사용한다. Gemini 자동 분석은 실행하지 않는다.
 
 ## 처음 설치와 다시 연결
 
@@ -31,7 +31,7 @@
 ## 환경·패키징
 
 - `AUTH_SECRET`: 기존 로그인 서명 키. 없으면 관련 API는 한국어 503으로 안내한다.
-- 서버 `LOCAL_AGENT_RELEASES`: 실제 배포한 설치 파일의 JSON 배열. 미설정은 `[]`이며 가짜 다운로드를 제공하지 않는다. 필드: `platform` (`windows`/`macos`/`linux`), `url` (HTTPS/같은 origin 절대 경로), `version`, 선택 `filename`, `architecture`.
+- 서버 `LOCAL_AGENT_RELEASES`: 실제 배포한 설치 파일의 JSON 배열. 미설정은 `[]`이며 가짜 다운로드를 제공하지 않는다. 필드: `platform` (`windows`/`macos`/`linux`), `url` (HTTPS/같은 origin 절대 경로), `version`, 선택 `filename`, `architecture`, `unsigned` (boolean). 미서명 테스트 파일은 `unsigned: true`로 등록해 다운로드 전에 표시한다.
 - 앱 `CONNECTOR_APP_ORIGIN=https://hapark.vercel.app`: 설치 패키지에 허용 origin을 고정한다. localhost 개발 manifest는 배포를 거부한다.
 - `npm --prefix connector/desktop ci` 뒤 해당 OS의 `package:win`, `package:mac`, `package:linux`를 실행한다. 서명·공증은 배포 환경에서 설정한다.
 - 앱에 Node 런타임이 포함된다. 사용할 Codex/Claude Code CLI 자체는 PC에 설치·로그인되어 있어야 한다. 미설치·로그인 만료·버전 미지원·한도 상태를 안내한다.

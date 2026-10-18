@@ -81,7 +81,8 @@ test('actual Mac plist and Helper renaming preserve the display brand and a cohe
 test('the actual package transformer retains the original runtime product name', async () => {
   const transformed = await createTransformer(desktop, config, config.extraMetadata)(packageFile);
   const packaged = JSON.parse(transformed);
-  assert.equal(packaged.productName, '하박조팽 연결기');
+  assert.equal(packaged.productName, 'AI 브릿지');
+  assert.equal(packaged.stableProfileName, '하박조팽 연결기');
   assert.equal(packaged.name, source.name);
   assert.equal(packaged.version, source.version);
   const owned = await mkdtemp(join(tmpdir(), 'connector-builder-asar-'));
@@ -94,6 +95,7 @@ test('the actual package transformer retains the original runtime product name',
     assert.equal(extracted.productName, source.productName);
     assert.equal(extracted.name, source.name);
     assert.equal(extracted.version, source.version);
+    assert.equal(extracted.stableProfileName, source.stableProfileName);
   } finally { assertInside(owned, tmpdir()); await rm(owned, { recursive: true }); }
 });
 

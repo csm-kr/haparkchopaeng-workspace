@@ -54,7 +54,7 @@ test("연결 한 곳에서 시작하고 웹 번호·설치 안내·취소가 이
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveText("048 217");
   await expect(dialog.getByRole("textbox")).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "설치 파일 준비 중" })).toBeDisabled();
-  await expect(dialog.getByRole("link", { name: "연결기 다시 열기" })).toHaveAttribute("href", /^hapark-connect:/);
+  await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toHaveAttribute("href", /^hapark-connect:/);
   expect(connector.attempts()).toBe(1);
   expect(downloaded).toBeFalsy();
   await dialog.screenshot({ path: test.info().outputPath("web-connection.png") });

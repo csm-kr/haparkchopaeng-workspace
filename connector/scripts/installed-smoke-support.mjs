@@ -37,7 +37,7 @@ export function validateConfiguration(value) {
     && !/[<>:"/\\|?*\u0000-\u001f]/.test(value.productName) && !['.', '..'].includes(value.productName));
   assert.ok(typeof value.macBundleName === 'string' && value.macBundleName.length <= 100 && value.macBundleName.trim()
     && !/[<>:"/\\|?*\u0000-\u001f]/.test(value.macBundleName) && !['.', '..'].includes(value.macBundleName));
-  for (const key of ['runtimeProductName', 'macInternalName', 'macDisplayName']) if (value[key] !== undefined) {
+  for (const key of ['runtimeProductName', 'macInternalName', 'macDisplayName', 'stableProfileName']) if (value[key] !== undefined) {
     assert.ok(typeof value[key] === 'string' && value[key].length <= 100 && value[key].trim()
       && !/[<>:"/\\|?*\u0000-\u001f]/.test(value[key]) && !['.', '..'].includes(value[key]));
   }
@@ -80,7 +80,7 @@ export async function loadConfiguration(connectorRoot) {
   assert.equal(macInternalName.normalize('NFC'), (macBuild.productName ?? productName).normalize('NFC'),
     'CFBundleName must match the builder Helper name');
   return validateConfiguration({ appId: build.appId, productName,
-    runtimeProductName, macInternalName, macDisplayName,
+    runtimeProductName, macInternalName, macDisplayName, stableProfileName: pkg.stableProfileName,
     macBundleName: macBuild.mac?.executableName ?? macBuild.executableName ?? macBuild.productName ?? productName,
     scheme: runtime.applications[0].scheme, packageVersion: build.extraMetadata?.version ?? pkg.version, connectorRoot,
     packageName: build.deb?.packageName ?? build.extraMetadata?.name ?? pkg.name,

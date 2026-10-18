@@ -7,6 +7,7 @@ const release = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/),
   filename: z.string().min(1).max(200).optional(),
   architecture: z.enum(["x64", "arm64", "universal"]).optional(),
+  unsigned: z.boolean().optional(),
 }).strict();
 
 export type LocalAgentRelease = z.infer<typeof release>;
@@ -31,6 +32,6 @@ export function readLocalAgentReleases(raw: string | undefined): LocalAgentRelea
     if (releases.some((item) => !safeDownloadUrl(item.url))) throw new Error("Invalid URL");
     return releases;
   } catch {
-    throw new HttpError(503, "CONNECTOR_RELEASES_UNAVAILABLE", "연결기 다운로드를 준비하고 있어요. 잠시 후 다시 확인해주세요.");
+    throw new HttpError(503, "CONNECTOR_RELEASES_UNAVAILABLE", "AI 브릿지 다운로드를 준비하고 있어요. 잠시 후 다시 확인해주세요.");
   }
 }

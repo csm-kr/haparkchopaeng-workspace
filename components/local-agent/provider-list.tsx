@@ -12,8 +12,8 @@ export function LocalAgentProviderList() {
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="text-[13px] font-medium text-fg">{providerName[provider.provider]}</span>
         <span className="text-[12px] text-fg-muted">{providerStatus[provider.status]}</span>
-        {provider.status === "login_required" && <span className="text-[11px] text-fg-muted">연결기에서 공식 로그인 안내를 확인해 주세요.</span>}
-        {provider.status === "not_installed" && <span className="text-[11px] text-fg-muted">연결기에서 CLI 설치 안내를 확인해 주세요.</span>}
+        {provider.status === "login_required" && <span className="text-[11px] text-fg-muted">AI 브릿지에서 공식 로그인 안내를 확인해 주세요.</span>}
+        {provider.status === "not_installed" && <span className="text-[11px] text-fg-muted">AI 브릿지에서 CLI 설치 안내를 확인해 주세요.</span>}
       </div>
       {agent.phase === "connected" && <QuotaBadge windows={quotaWindows(provider)} />}
     </li>)}

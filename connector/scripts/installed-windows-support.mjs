@@ -99,7 +99,7 @@ export function windowsSmokeLayout(configuration, { applicationId, executableNam
   const relative = configuration.profileRelativePath;
   assert.ok(Array.isArray(relative));
   if (relative.length) assert.deepEqual(relative, [configuration.appId, 'production']);
-  const profileRelativePath = relative.length ? [...relative] : [configuration.productName];
+  const profileRelativePath = relative.length ? [...relative] : [configuration.stableProfileName ?? configuration.productName];
   assert.ok(profileRelativePath.every(value => typeof value === 'string' && value && path.basename(value) === value && !/[<>:"/\\|?*\p{Cc}\p{Cf}]/u.test(value) && !['.', '..'].includes(value)));
   return { appId: configuration.appId, productName: configuration.productName, scheme: configuration.scheme,
     executableFilename: `${filename}.exe`, profileRelativePath, installationPrefix: `${applicationId}-connector-install-` };

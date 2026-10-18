@@ -118,12 +118,12 @@ async function connectAttempt(db: Database, attempt: LocalAgentAttempt, device: 
 }
 
 export async function acknowledgeDesktop(input: LocalAgentDesktopAckInput): Promise<LocalAgentDesktopAttempt> {
-  if (!validateDeviceToken(input.deviceToken)) throw new HttpError(400, "BAD_REQUEST", "연결기 정보를 확인해주세요.");
+  if (!validateDeviceToken(input.deviceToken)) throw new HttpError(400, "BAD_REQUEST", "AI 브릿지 정보를 확인해주세요.");
   return prisma.$transaction(async (tx) => {
     const now = new Date();
     const attempt = await loadDesktopAttempt(tx, input.attemptId, input.launchToken, now);
     const secretHash = hashCredential(input.deviceToken);
-    if (attempt.pendingSecretHash && attempt.pendingSecretHash !== secretHash) throw new HttpError(409, "ANOTHER_CONNECTOR", "다른 연결기가 이 요청을 확인했어요. 웹에서 다시 연결해주세요.");
+    if (attempt.pendingSecretHash && attempt.pendingSecretHash !== secretHash) throw new HttpError(409, "ANOTHER_CONNECTOR", "다른 AI 브릿지가 이 요청을 확인했어요. 웹에서 다시 연결해주세요.");
     const device = await tx.localAgentDevice.findFirst({ where: { memberId: attempt.memberId, teamId: attempt.teamId, secretHash, revokedAt: null } });
     const grant = device ? await tx.localAgentGrant.findUnique({ where: { sessionKey_teamId_deviceId: { sessionKey: attempt.sessionKey, teamId: attempt.teamId, deviceId: device.id } } }) : null;
     if (attempt.status === "connected") {
@@ -168,7 +168,7 @@ export async function renewWebPermission(scope: LocalAgentScope, deviceId: strin
   const now = new Date();
   const expiry = leaseUntil(now, scope.sessionExpiresAt);
   const updated = await prisma.localAgentGrant.updateMany({ where: { ...scopeWhere(scope), deviceId, revokedAt: null, device: { revokedAt: null } }, data: { leaseExpiresAt: expiry, version: { increment: 1 } } });
-  if (!updated.count) throw new HttpError(403, "PAIRING_REQUIRED", "웹과 연결기를 다시 확인해주세요.");
+  if (!updated.count) throw new HttpError(403, "PAIRING_REQUIRED", "웹과 AI 브릿지를 다시 확인해주세요.");
   return { leaseExpiresAt: expiry.toISOString() };
 }
 
@@ -208,7 +208,7 @@ export async function revokeDevice(scope: LocalAgentScope, deviceId: string): Pr
 
 async function authenticateDesktop(db: Database, identity: DesktopIdentity): Promise<LocalAgentDevice> {
   const device = await db.localAgentDevice.findUnique({ where: { id: identity.deviceId } });
-  if (!device || device.revokedAt || !sameCredential(identity.deviceToken, device.secretHash)) throw new HttpError(401, "DEVICE_UNAUTHORIZED", "연결기 승인이 필요해요. 웹에서 다시 연결해주세요.");
+  if (!device || device.revokedAt || !sameCredential(identity.deviceToken, device.secretHash)) throw new HttpError(401, "DEVICE_UNAUTHORIZED", "AI 브릿지 승인이 필요해요. 웹에서 다시 연결해주세요.");
   await assertMembership(db, device.memberId, device.teamId);
   return device;
 }
@@ -224,13 +224,13 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
     // otherwise allows two heartbeats to read the same prior row and overwrite
     // a newer logout/catalogue with an older ready result.
     const locked = await tx.localAgentDevice.updateMany({ where: { id: identity.deviceId, secretHash: hashCredential(identity.deviceToken), revokedAt: null }, data: { lastSeenAt: now } });
-    if (!locked.count) throw new HttpError(401, "DEVICE_UNAUTHORIZED", "연결기 승인이 필요해요. 웹에서 다시 연결해주세요.");
+    if (!locked.count) throw new HttpError(401, "DEVICE_UNAUTHORIZED", "AI 브릿지 승인이 필요해요. 웹에서 다시 연결해주세요.");
     const device = await authenticateDesktop(tx, identity);
     const grant = await tx.localAgentGrant.findFirst({ where: { deviceId: device.id, revokedAt: null, leaseExpiresAt: { gt: now } }, orderBy: { leaseExpiresAt: "desc" } });
     if (!grant) throw new HttpError(403, "WEB_PERMISSION_EXPIRED", "웹에서 AI 연결을 다시 눌러주세요.");
     for (const candidate of providers) {
       const observedAt = new Date(candidate.observedAt);
-      if (observedAt.getTime() > now.getTime() + 30_000) throw new HttpError(400, "BAD_SNAPSHOT", "연결기의 시간을 확인해주세요.");
+      if (observedAt.getTime() > now.getTime() + 30_000) throw new HttpError(400, "BAD_SNAPSHOT", "AI 브릿지의 시간을 확인해주세요.");
       const payload = sanitizeProviderSnapshot(candidate);
       const previous = await tx.localAgentSnapshot.findUnique({ where: { deviceId_provider: { deviceId: device.id, provider: payload.provider } } });
       if (previous && previous.observedAt > observedAt) continue;

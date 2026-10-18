@@ -136,7 +136,8 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
   const originalHandler = (await run('xdg-mime', ['query', 'default', mime])).stdout.trim();
   assert.equal(originalHandler, '', 'An existing URI handler must not be changed');
   const appData = resolve(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'));
-  const profilePaths = [...new Set([productName, pkg.name].map(name => assertInside(join(appData, name), appData)))];
+  const profilePaths = [...new Set([productName, pkg.name, configuration.stableProfileName].filter(name => typeof name === 'string')
+    .map(name => assertInside(join(appData, name), appData)))];
   if (configuration.profileRelativePath?.length) profilePaths.push(assertInside(join(appData, ...configuration.profileRelativePath), appData));
   for (const profile of profilePaths) assert.equal(await exists(profile), false, 'Existing app profile must not be changed');
   const inspection = await createOwnedDirectory(qaRoot, 'linux-deb-inspection-');
@@ -304,6 +305,13 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     for (const profile of profilePaths) {
       assert.equal(await exists(join(profile, 'devices.enc.json')), false, 'Invalid URI must not create device credentials');
       assert.equal(await exists(join(profile, 'preferences.json')), false, 'Invalid URI must not start the first-run web flow');
+    }
+    if (configuration.stableProfileName && !configuration.profileRelativePath?.length) {
+      assert.equal(await exists(join(appData, configuration.stableProfileName)), true, 'The stable credential profile must be retained.');
+      if (configuration.stableProfileName !== productName) {
+        assert.equal(await exists(join(appData, productName)), false, 'Display branding must not move the credential profile.');
+      }
+      details.profile = { mode: 'stable-profile-name', stableProfileCreated: true, displayNameProfileCreated: false };
     }
     details.warm = { launchedBy: 'xdg-open', sameMainPid: true, distinctParserErrorObserved: true, deviceCredentialsCreated: false };
     evidence.checks.push('linux_warm_protocol_single_instance_rejection_before_device_credentials');

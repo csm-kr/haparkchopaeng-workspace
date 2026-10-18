@@ -13,7 +13,7 @@ const fixture = vi.hoisted(() => {
   return { db, prisma: { ...db, $transaction: vi.fn(async (run: (tx: typeof db) => Promise<unknown>) => run(db)) } };
 });
 vi.mock("@/lib/prisma", () => ({ prisma: fixture.prisma }));
-import { assertJobTarget, createPreparedJob, type LocalAgentScope } from "../service";
+import { acknowledgeDesktop, assertJobTarget, createPreparedJob, type LocalAgentScope } from "../service";
 const scope = (): LocalAgentScope => ({ teamId: "team", memberId: "member", sessionKey: "session", sessionExpiresAt: new Date(Date.now() + 100_000) });
 const input = () => ({ deviceId: "device", paperId: "paper", provider: "codex" as const, model: "actual", prompt: "서버가 구성한 분석 요청", requestId: "cbcf8003-7f9a-40ca-ab7a-aa62831c4617" });
 
@@ -33,6 +33,10 @@ beforeEach(() => {
 });
 
 describe("server-prepared local execution", () => {
+  it("names the AI Bridge app when rejecting invalid device credentials", async () => {
+    await expect(acknowledgeDesktop({ attemptId: "attempt", launchToken: "launch", deviceToken: "invalid", deviceName: "PC", platform: "windows" }))
+      .rejects.toMatchObject({ status: 400, code: "BAD_REQUEST", message: "AI 브릿지 정보를 확인해주세요." });
+  });
   it("stores trusted raw source context and an explicit analysis purpose through existing admission", async () => {
     const context = '[{"page":1,"text":"원문에만 있는 새로운 증거"}]';
     const job = await createPreparedJob(scope(), input(), context, { purpose: "paper_analysis" });

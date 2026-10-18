@@ -9,6 +9,7 @@ function render(value) {
   const previousStage = state?.stage, newAttempt = state?.attemptId !== value.attemptId;
   if (!state || newAttempt || value.stage !== 'pairing') { $('code').value = ''; $('code').removeAttribute('aria-invalid'); $('code-error').textContent = ''; }
   state = value;
+  if (state.appName) { document.title = state.appName; $('app-name').textContent = state.appName; }
   $('site-name').textContent = state.siteName;
   $('title').textContent = state.title; $('description').textContent = state.description;
   $('status').textContent = stageNames[state.stage] ?? '확인 중'; $('status').dataset.ready = String(state.stage === 'connected');
