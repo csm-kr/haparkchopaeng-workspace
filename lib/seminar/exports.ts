@@ -1,17 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { Prisma, Job, AgentTask } from "@prisma/client";
-import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
 import { downloadObject, uploadGeneratedPresentation, assertGeneratedPresentationStorage } from "@/lib/storage";
-import { countPdfPages, renderPdfPageToPng } from "@/lib/pdf-page-render";
 import { sourceRevision } from "@/lib/agent/contract";
 import type { LocalAgentScope } from "@/lib/local-agent/service";
 import { SeminarDraftSchema, type SeminarDraft } from "./contract";
 import { readSeminarWorkspace } from "./workflow";
 import { ExportPayloadSchema, type ExportPayload, type SeminarExportView } from "./export-contract";
-import { renderSeminarDeck, type DeckAsset } from "./render";
+import type { DeckAsset } from "./render";
 
 type Database = Prisma.TransactionClient;
 const missing = () => new HttpError(404, "NOT_FOUND", "현재 팀에서 이 출력 파일을 찾을 수 없어요.");
@@ -90,6 +88,9 @@ export async function attachSeminarExport(db: Database, scope: LocalAgentScope, 
 }
 
 async function sourceAssets(input: ExportPayload) {
+  const [{ default: sharp }, { countPdfPages, renderPdfPageToPng }] = await Promise.all([
+    import("sharp"), import("@/lib/pdf-page-render"),
+  ]);
   const result = new Map<string, DeckAsset>(); let original: Buffer | null = null;
   const originalPage = async (page: number) => {
     if (!original) { const paper = await prisma.paper.findFirst({ where: { id: input.paperId, teamId: input.teamId }, select: { pdfUrl: true } }); if (!paper?.pdfUrl) throw stale(); original = await downloadObject(paper.pdfUrl); }
@@ -125,6 +126,11 @@ export async function runSeminarExport(jobId: string) {
   const input = parsed.data;
   try {
     if (!await current(prisma, input)) throw stale();
+    // Native rendering assets are included only in the durable Inngest function.
+    // Reading tasks or download metadata must also work without these worker assets.
+    const [{ default: sharp }, { countPdfPages, renderPdfPageToPng }, { renderSeminarDeck }] = await Promise.all([
+      import("sharp"), import("@/lib/pdf-page-render"), import("./render"),
+    ]);
     const rendered = await renderSeminarDeck(input.draft, await sourceAssets(input));
     if (countPdfPages(Buffer.from(rendered.pdf)) !== input.draft.slides.length) throw new Error("출력한 PDF의 페이지 수를 확인해주세요.");
     // Rasterize every generated page as part of renderer verification, including embedded fonts/images.
