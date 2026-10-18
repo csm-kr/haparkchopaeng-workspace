@@ -42,7 +42,7 @@
           "connector/test/*.test.mjs"
         ]
       ],
-      "summary": "Corrected-source Harness rerun passed: ten native Windows renderer checks and 211 connector tests; one explicit native opt-in skip.",
+      "summary": "Differential coverage QA Harness passed ten native Windows checks, 211 connector tests and one explicit native opt-in skip; independent hidden-outline and original RED images stay rejected.",
       "priorVerification": {
         "source": "5b9daccf7defd069d2a934fcf8c1fd81a18f61de",
         "status": "completed",
@@ -50,7 +50,7 @@
         "summary": "Windows renderer already passed ten checks with borrowed read-only Electron dependencies. Harness and exact-source multi-OS CI must be recorded separately."
       },
       "started_at": "2026-10-18T18:01:26+0900",
-      "completed_at": "2026-10-18T18:01:52+0900"
+      "completed_at": "2026-10-18T18:14:25+0900"
     }
   ],
   "localEvidence": {
@@ -192,5 +192,5 @@
     "harnessReverificationPending": true,
     "correctedExactSourceCiPending": true
   },
-  "completed_at": "2026-10-18T18:01:52+0900"
+  "completed_at": "2026-10-18T18:14:25+0900"
 }

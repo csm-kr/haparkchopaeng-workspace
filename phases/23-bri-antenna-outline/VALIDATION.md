@@ -1,6 +1,26 @@
 # 브리 안테나 외곽선 · 0.1.7 준비 검증
 
-## 현재: preview.1 CI 이후 검사 보정
+## 최신: preview.2 CI의 0.25px 판정 보정
+
+소스 `005bb0be`, exact-tag CI `39114075357`의 Windows `117636144417`·Mac Intel `117636144291`·Ubuntu `117636144262` 기록을 보존했다. 세 환경 모두 기본 위치의 실제 외곽선은 `8/4/5`, outline-hidden 대조는 `0/0/0`이었다. 인공적인 0.25px 이동에서는 실제 외곽선의 개별 픽셀 게이트가 `4/3/0`이 되어 실패했고, 외곽선을 숨긴 영상에도 `0/1/0`이 남았다. 색상과 도형 geometry가 같아도 얇은 곡선의 안티앨리어싱 분산에 개별 픽셀 판정이 민감했음을 보여준다. CI 원본 PNG는 없으므로 당시 화면을 재구성했다고 주장하지 않는다. 원문·추출한 RED 영수증은 `%TEMP%/hapark-bri-outline-release-20261018/job-*.log`와 `quarter-pixel-ci-red.json`이다.
+
+제품 HTML·CSS·버전은 바꾸지 않고 QA만 고쳤다. 흰색·다크 쌍에서 복원한 graphite의 **알파를 곱한 픽셀별 면적**을 위·좌·우에서 합산하고, 같은 위치에서 outline만 숨긴 실제 렌더의 면적을 뺀다. 라임·기존 halo 성분과 색상 잔차 16 모델은 유지한다. 기존 픽셀 게이트의 0.6×0.75, 즉 **0.45 픽셀 상당의 실제 graphite 추가 면적**을 각 방향에서 요구한다. 단일 픽셀의 색상/알파 문턱을 낮추지 않으며, 그 개별 판정 값은 `rimPixels` 진단으로 계속 남긴다. 양성·대조의 geometry도 직접 비교한다.
+
+| 최종 실제 Windows 렌더 | 위·좌·우 추가 graphite 면적 | 판정 |
+| --- | --- | --- |
+| 기본 위치, 외곽선 있음 − 숨김 | `9.4560 / 7.0412 / 7.0405` | PASS |
+| 0.25px 이동, 외곽선 있음 − 숨김 | `10.7952 / 7.3541 / 6.7943` | PASS |
+| 기본 위치, 독립적으로 다시 캡처한 outline-hidden − 숨김 | `0 / 0 / 0` | FAIL 유지 |
+| 0.25px 이동, 독립적으로 다시 캡처한 outline-hidden − 숨김 | `0 / 0 / 0` | FAIL 유지 |
+| 최초 실제 RED 원본 PNG − 같은 위치의 outline-hidden | `0 / 0 / 0` | FAIL 유지 |
+
+두 번의 outline-hidden 캡처는 같은 이미지 객체를 자기 자신에게 빼는 검사가 아니다. 실제 별도 캡처를 비교하고 없어진 외곽선은 계속 실패시킨다. 양성/음성 PNG를 모두 저장한다. 최신 영수증은 `%TEMP%/hapark-ai-pet-20261018/outline-differential/result.json`이고, 이 폴더에 `light/dark-tip-default-outline-hidden.png`와 `light/dark-tip-quarter-outline-hidden.png`도 있다.
+
+이 작업트리 자체 Electron에서 **10/10 PASS**, 실제 6초·14초 주기 관측, 물리 호버·미소·커서 복원, 포커스 보존, 정상 종료·소유 QA 프로필 삭제를 확인했다. QA 창은 작업 영역 왼쪽 위이며 사용자 설치 앱·펫은 조작하지 않았다. 네트워크·CLI 요청·실계정 프로필 읽기는 0이다. `npm --prefix connector test`는 **총 212개 중 211 PASS / 1 native opt-in SKIP**, `node --check`와 scoped `git diff --check`도 PASS다. 전체 Node 원문은 `%TEMP%/hapark-bri-outline-release-20261018/node-final.log`에 남겼다.
+
+새 QA의 실제 Mac/Ubuntu CI는 아직 실행하지 않았다. 이 로컬 GREEN은 실패한 preview.2 태그의 성공·릴리스 게시·사용자 설치 증거가 아니다. 재태그·하네스 상태 기록은 부모 작업으로 남긴다.
+
+## 이전: preview.1 CI 이후 검사 보정
 
 소스 `5b9daccf7defd069d2a934fcf8c1fd81a18f61de`, CI `39112898344`의 Windows `117632599699`·Mac Intel `117632599660`·Ubuntu `117632599648`은 기존 검사에서 흰 배경 `8/6/6`, 다크 배경 `2/0/2`로 실패했다. 당시 CI는 정확한 tip geometry·전경색을 기록하지 않아 그 값을 추정하지 않는다. 로그의 얼굴 `[26,24,22,255]`는 BGRA 형식의 `--subtle` 색이며 안테나의 RGB 색으로 사용하지 않는다.
 

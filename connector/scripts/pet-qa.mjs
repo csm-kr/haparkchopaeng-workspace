@@ -13,11 +13,13 @@ const taskTemporary = join(tmpdir(), 'hapark-ai-pet-20261018');
 
 // Two real backdrops separate opaque ink from antialiasing, glow and shadow.
 // Geometry and paint colors come from the rendered SVG, never a fixed RGB cutoff.
-function inspectAntennaRim(light, dark, tip) {
+function inspectAntennaRim(light, dark, tip, withoutOutline) {
   assert.deepEqual(light.size, dark.size);
+  if (withoutOutline) for (const image of withoutOutline) assert.deepEqual(light.size, image.size);
   assert.ok(light.backgroundRgb.every((value, index) => value - dark.backgroundRgb[index] > 200));
   const limits = { minimumInkAlpha: .6, minimumGraphiteShare: .75, maximumColorResidual: 16 };
   const rimPixels = { top: 0, left: 0, right: 0 }, examples = { top: [], left: [], right: [] };
+  const addedGraphiteArea = { top: 0, left: 0, right: 0 };
   const delta = tip.accentRgb.map((value, index) => value - tip.graphiteRgb[index]);
   const glowDelta = tip.glowRgb.map((value, index) => value - tip.graphiteRgb[index]);
   const accentNorm = delta.reduce((sum, value) => sum + value * value, 0);
@@ -29,33 +31,49 @@ function inspectAntennaRim(light, dark, tip) {
     const offset = (y * image.size.width + x) * 4;
     return [image.bitmap[offset + 2], image.bitmap[offset + 1], image.bitmap[offset], image.bitmap[offset + 3]];
   };
+  const foreground = (pair, x, y) => {
+    const white = pixel(pair[0], x, y), graphite = pixel(pair[1], x, y);
+    if (white[3] !== 255 || graphite[3] !== 255) return null;
+    const uncovered = [0, 1, 2].map(index => (white[index] - graphite[index]) /
+      (pair[0].backgroundRgb[index] - pair[1].backgroundRgb[index])).sort((a, b) => a - b)[1];
+    const alpha = Math.max(0, Math.min(1, 1 - uncovered));
+    if (!alpha) return { alpha: 0, graphiteShare: 0, glowShare: 0, residual: 0, coverage: 0 };
+    const ink = [0, 1, 2].map(index => (white[index] - (1 - alpha) * pair[0].backgroundRgb[index]) / alpha);
+    const accentDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * delta[index], 0);
+    const glowDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * glowDelta[index], 0);
+    const accentShare = Math.max(0, Math.min(1, (accentDot * glowNorm - glowDot * cross) / determinant));
+    const glowShare = Math.max(0, Math.min(1, (glowDot * accentNorm - accentDot * cross) / determinant));
+    const graphiteShare = Math.max(0, 1 - accentShare - glowShare);
+    const residual = Math.hypot(...ink.map((value, index) => value - tip.graphiteRgb[index] - accentShare * delta[index] - glowShare * glowDelta[index]));
+    return { alpha, graphiteShare, glowShare, residual, coverage: residual <= limits.maximumColorResidual ? alpha * graphiteShare : 0 };
+  };
   for (let y = Math.floor(tip.y - tip.radius - tip.rimWidth - 1); y <= Math.ceil(tip.y + tip.radius + tip.rimWidth + 1); y += 1) {
     for (let x = Math.floor(tip.x - tip.radius - tip.rimWidth - 1); x <= Math.ceil(tip.x + tip.radius + tip.rimWidth + 1); x += 1) {
       if (x < 0 || y < 0 || x >= light.size.width || y >= light.size.height) continue;
       const dx = x + .5 - tip.x, dy = y + .5 - tip.y, radius = Math.hypot(dx, dy);
       if (radius < tip.radius || radius > tip.radius + tip.rimWidth + .75) continue;
-      const white = pixel(light, x, y), graphite = pixel(dark, x, y);
-      if (white[3] !== 255 || graphite[3] !== 255) continue;
-      const uncovered = [0, 1, 2].map(index => (white[index] - graphite[index]) / (light.backgroundRgb[index] - dark.backgroundRgb[index])).sort((a, b) => a - b)[1];
-      const alpha = Math.max(0, Math.min(1, 1 - uncovered));
-      if (alpha < limits.minimumInkAlpha) continue;
-      const ink = [0, 1, 2].map(index => (white[index] - (1 - alpha) * light.backgroundRgb[index]) / alpha);
       // The existing SVG filter also paints the --fg halo. Fit that real third paint separately.
-      const accentDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * delta[index], 0);
-      const glowDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * glowDelta[index], 0);
-      const accentShare = Math.max(0, Math.min(1, (accentDot * glowNorm - glowDot * cross) / determinant));
-      const glowShare = Math.max(0, Math.min(1, (glowDot * accentNorm - accentDot * cross) / determinant));
-      const graphiteShare = 1 - accentShare - glowShare;
-      const residual = Math.hypot(...ink.map((value, index) => value - tip.graphiteRgb[index] - accentShare * delta[index] - glowShare * glowDelta[index]));
-      if (graphiteShare < limits.minimumGraphiteShare || residual > limits.maximumColorResidual) continue;
+      const observed = foreground([light, dark], x, y);
+      if (!observed) continue;
+      const { alpha, graphiteShare, glowShare, residual } = observed;
+      const baseline = withoutOutline ? foreground(withoutOutline, x, y) : null;
       for (const [sector, matches] of [['top', dy < -tip.radius * .5], ['left', dx < -tip.radius * .5 && Math.abs(dy) < tip.radius], ['right', dx > tip.radius * .5 && Math.abs(dy) < tip.radius]]) {
         if (!matches) continue;
+        // Integrate premultiplied ink instead of requiring the thin AA curve to occupy
+        // one pixel. Subtract the same-geometry hidden-outline render, including its halo.
+        if (baseline) addedGraphiteArea[sector] += observed.coverage - baseline.coverage;
+        if (alpha < limits.minimumInkAlpha || graphiteShare < limits.minimumGraphiteShare || residual > limits.maximumColorResidual) continue;
         rimPixels[sector] += 1;
         if (examples[sector].length < 3) examples[sector].push({ x, y, inkAlpha: Number(alpha.toFixed(3)), graphiteShare: Number(graphiteShare.toFixed(3)), glowShare: Number(glowShare.toFixed(3)), colorResidual: Number(residual.toFixed(3)) });
       }
     }
   }
-  return { passed: Object.values(rimPixels).every(value => value > 0), rimPixels, limits, examples };
+  const minimumAddedGraphiteArea = limits.minimumInkAlpha * limits.minimumGraphiteShare;
+  return { passed: withoutOutline ? Object.values(addedGraphiteArea).every(value => value >= minimumAddedGraphiteArea) : Object.values(rimPixels).every(value => value > 0),
+    rimPixels, limits, examples, ...(withoutOutline ? {
+      comparison: 'paired-foreground-coverage-minus-same-geometry-outline-hidden', minimumAddedGraphiteArea,
+      addedGraphiteArea: Object.fromEntries(Object.entries(addedGraphiteArea).map(([key, value]) => [key, Number(value.toFixed(4))])),
+    } : {}) };
 }
 
 function inside(value, parent) { const part = relative(parent, value); assert.ok(part && !part.startsWith('..') && !isAbsolute(part)); }
@@ -216,8 +234,8 @@ async function nativePetQa() {
         try {
           for (const offset of [0, .25]) {
             await js(`document.querySelector('.bri').style.translate='${offset}px ${offset}px'`); await frame();
-            const pair = await capturePair(), positive = inspectAntennaRim(pair[0], pair[1], pair[0].tip);
-            const sample = { offsetCssPx: offset, geometry: pair[0].tip, backgroundsRgb: pair.map(value => value.backgroundRgb), ...positive };
+            const pair = await capturePair();
+            const sample = { offsetCssPx: offset, geometry: pair[0].tip, backgroundsRgb: pair.map(value => value.backgroundRgb) };
             observation.samples.push(sample);
             for (const [index, prefix] of ['light', 'dark'].entries()) {
               const name = offset ? `${prefix}-tip-quarter.png` : `${prefix}-neutral.png`;
@@ -227,7 +245,16 @@ async function nativePetQa() {
             // A real rendered negative control rejects glow/shadow and cannot pass a missing outline.
             await js(`document.querySelector('.outline > circle').style.visibility='hidden'`); await frame();
             const withoutRim = await capturePair();
-            sample.withoutOutline = inspectAntennaRim(withoutRim[0], withoutRim[1], pair[0].tip);
+            const repeatedWithoutRim = await capturePair();
+            for (const field of ['x', 'y', 'radius', 'rimWidth']) assert.ok(Math.abs(pair[0].tip[field] - withoutRim[0].tip[field]) < .001 &&
+              Math.abs(pair[0].tip[field] - repeatedWithoutRim[0].tip[field]) < .001, 'Outline-hidden controls must use the exact positive geometry.');
+            const positive = inspectAntennaRim(pair[0], pair[1], pair[0].tip, withoutRim);
+            Object.assign(sample, positive);
+            sample.withoutOutline = inspectAntennaRim(repeatedWithoutRim[0], repeatedWithoutRim[1], pair[0].tip, withoutRim);
+            for (const [index, prefix] of ['light', 'dark'].entries()) {
+              const name = `${prefix}-tip-${offset ? 'quarter' : 'default'}-outline-hidden.png`;
+              await writeFile(join(evidenceDirectory, name), withoutRim[index].image.toPNG()); receipt.screenshots.push(name);
+            }
             await js(`document.querySelector('.outline > circle').style.visibility=''`); await frame();
             assert.equal(positive.passed, true, 'The painted tip must have graphite ink above and on both sides.');
             assert.equal(sample.withoutOutline.passed, false, 'A renderer without the tip outline must not pass.');
@@ -242,7 +269,7 @@ async function nativePetQa() {
                   images.push({ bitmap: image.toBitmap({ scaleFactor: 1 }), size: image.getSize(1), backgroundRgb: pair[index].backgroundRgb });
                 }
                 assert.deepEqual(images[0].size, pair[0].size);
-                observation.originalRed = { checked: true, geometrySource: 'same 104x112 viewport and unshifted 88px SVG', ...inspectAntennaRim(images[0], images[1], pair[0].tip) };
+                observation.originalRed = { checked: true, geometrySource: 'same 104x112 viewport and unshifted 88px SVG', ...inspectAntennaRim(images[0], images[1], pair[0].tip, withoutRim) };
                 assert.equal(observation.originalRed.passed, false, 'Original real RED captures must still fail.');
               } catch (error) { if (error.code !== 'ENOENT') throw error; }
             }
