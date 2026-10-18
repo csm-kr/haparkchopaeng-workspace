@@ -39,18 +39,61 @@ beforeEach(() => { window.sessionStorage.clear(); window.history.replaceState(nu
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("로컬 AI 연결 흐름", () => {
-  it("AI 연결 한 번으로 시도를 만들고 웹에만 6자리 번호를 보여 준다", async () => {
+  it("앱 응답 전에는 번호를 숨기고 ACK 뒤에만 6자리와 남은 시간을 보여 준다", async () => {
+    vi.useFakeTimers();
     const api = makeApi();
     const launch = vi.fn(() => true);
-    render(<View api={api} launch={launch} />);
-    await waitFor(() => expect(api.status).toHaveBeenCalled());
-    fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
-    const dialog = await screen.findByRole("dialog", { name: "AI 연결" });
-    await waitFor(() => expect(launch).toHaveBeenCalledWith(created.deepLink));
+    vi.mocked(api.getAttempt).mockResolvedValue({ ...created, status: "awaiting_code", version: 2,
+      expiresAt: new Date(Date.now() + 301000).toISOString() });
+    await act(async () => { render(<View api={api} launch={launch} />); });
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    const dialog = screen.getByRole("dialog", { name: "AI 연결" });
+    expect(launch).toHaveBeenCalledWith(created.deepLink);
+    expect(within(dialog).queryByLabelText("연결 확인 번호")).toBeNull();
+    expect(within(dialog).queryByRole("timer")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(within(dialog).getByLabelText("연결 확인 번호")).toHaveTextContent("048 217");
+    expect(within(dialog).getByRole("timer")).toHaveTextContent("05:00 남음");
     expect(within(dialog).queryByRole("textbox")).toBeNull();
-    expect(within(dialog).getByText(/웹의 번호를 AI 브릿지에 입력/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "웹의 번호를 AI 브릿지에 입력해 주세요" })).toBeInTheDocument();
     expect(api.createAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("앱이 응답하지 않으면 설치 안내에서도 확인 번호를 표시하지 않는다", async () => {
+    vi.useFakeTimers();
+    const api = makeApi();
+    vi.mocked(api.getAttempt).mockResolvedValue(created);
+    await act(async () => { render(<View api={api} />); });
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(screen.getByLabelText("설치할 운영체제")).toBeInTheDocument();
+    expect(screen.queryByLabelText("연결 확인 번호")).toBeNull();
+    expect(screen.queryByRole("timer")).toBeNull();
+  });
+
+  it("서버 만료 시각까지 시간을 줄이고 네트워크 응답이 없어도 만료 번호를 숨긴다", async () => {
+    vi.useFakeTimers();
+    const api = makeApi();
+    let reply!: (value: typeof created) => void;
+    const expiresAt = new Date(Date.now() + 301000).toISOString();
+    vi.mocked(api.getAttempt)
+      .mockResolvedValueOnce({ ...created, version: 2, status: "awaiting_code", expiresAt })
+      .mockImplementation(() => new Promise(done => { reply = done; }));
+    await act(async () => { render(<View api={api} />); });
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByRole("timer")).toHaveTextContent("05:00 남음");
+    await act(async () => { await vi.advanceTimersByTimeAsync(61000); });
+    expect(screen.getByRole("timer")).toHaveTextContent("03:59 남음");
+    expect(screen.getByRole("progressbar", { name: "연결 가능 시간" })).toHaveAttribute("aria-valuenow", "239");
+    // A throttled background tab must recompute from wall time on return.
+    vi.setSystemTime(new Date(expiresAt));
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(screen.queryByLabelText("연결 확인 번호")).toBeNull();
+    expect(screen.queryByRole("timer")).toBeNull();
+    expect(screen.getByRole("button", { name: "새 번호로 연결" })).toBeInTheDocument();
+    await act(async () => { reply({ ...created, version: 3, status: "connected", device }); });
+    expect(screen.queryByRole("button", { name: "내 PC 연결됨" })).toBeNull();
   });
 
   it("설치 파일이 있는 macOS는 칩 선택을 안내하고 고른 아키텍처만 내려받는다", async () => {
@@ -60,7 +103,7 @@ describe("로컬 AI 연결 흐름", () => {
       { platform: "macos", architecture: "x64", version: "0.1.0", url: "https://downloads.example/x64.dmg" },
     ] });
     render(<View api={api} />);
-    await waitFor(() => expect(api.status).toHaveBeenCalled());
+    await screen.findAllByRole("button", { name: "AI 연결" });
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     await waitFor(() => expect(api.downloads).toHaveBeenCalled());
@@ -78,7 +121,7 @@ describe("로컬 AI 연결 흐름", () => {
     vi.mocked(api.createAttempt).mockImplementation(() => new Promise((done) => { resolve = done; }));
     const launch = vi.fn(() => true);
     render(<View api={api} launch={launch} />);
-    await waitFor(() => expect(api.status).toHaveBeenCalled());
+    await screen.findAllByRole("button", { name: "AI 연결" });
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "연결 취소" }));
     await act(async () => { resolve(created); });
@@ -91,7 +134,7 @@ describe("로컬 AI 연결 흐름", () => {
     const api = makeApi();
     vi.mocked(api.status).mockResolvedValue({ ...idle, devices: [device] });
     render(<View api={api} />);
-    await waitFor(() => expect(api.status).toHaveBeenCalled());
+    await screen.findAllByRole("button", { name: "AI 연결" });
     expect(screen.queryByRole("button", { name: "내 PC 연결됨" })).toBeNull();
     expect(screen.getByRole("button", { name: "모델을 선택하세요" })).toBeDisabled();
     expect(api.heartbeat).not.toHaveBeenCalled();
@@ -145,7 +188,7 @@ describe("로컬 AI 연결 흐름", () => {
     vi.mocked(api.createAttempt).mockImplementation(() => new Promise((done) => { resolve = done; }));
     const launch = vi.fn(() => true);
     const { rerender } = render(<View api={api} teamId="team-a" launch={launch} />);
-    await waitFor(() => expect(api.status).toHaveBeenCalled());
+    await screen.findAllByRole("button", { name: "AI 연결" });
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
     rerender(<View api={api} teamId="team-b" launch={launch} />);
     await act(async () => { resolve(created); });
@@ -166,7 +209,7 @@ describe("로컬 AI 연결 흐름", () => {
   it("응답 대기만으로 파일을 자동 다운로드하지 않고 미배포 파일을 비활성화한다", async () => {
     const api = makeApi();
     render(<View api={api} />);
-    await waitFor(() => expect(api.status).toHaveBeenCalled());
+    await screen.findAllByRole("button", { name: "AI 연결" });
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     expect(await screen.findByRole("button", { name: /설치 파일 준비 중/ })).toBeDisabled();

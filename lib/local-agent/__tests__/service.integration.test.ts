@@ -1,7 +1,7 @@
 // @vitest-environment node
 // This suite never uses the application's configured/shared database. The verifier supplies
 // an independently generated SQLite client and a temporary file: datasource explicitly.
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/prisma", async () => {
   const clientModule = process.env.LOCAL_AGENT_TEST_CLIENT_MODULE;
   if (!clientModule) return { prisma: {} };
@@ -49,7 +49,101 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
     await prisma.membership.create({ data: { teamId: "la-test-b", memberId: "la-test-bob", role: "member" } });
     for (const [id, teamId] of [["la-test-paper-a", "la-test-a"], ["la-test-paper-b", "la-test-b"]]) await prisma.paper.create({ data: { id, teamId, title: `Paper ${id}`, authors: "Researcher", abstract: "논문 초록", pdfUrl: "papers/private-object.pdf", uploadedBy: "la-test-ha", tags: [], analysisStatus: "ready", analyses: { create: { lens: "research", payload: { problem: "실험으로 검증한 연구 문제" } } } } });
   });
+  afterEach(() => { vi.useRealTimers(); });
   afterAll(async () => { if (enabled) await prisma.$disconnect(); });
+
+  it("starts a fresh five-minute code deadline at the first desktop ACK", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    vi.setSystemTime(started);
+    const s = scope();
+    const attempt = await createAttempt(s);
+    expect(attempt.status).toBe("awaiting_app");
+    expect(attempt.expiresAt).toBe(new Date(started.getTime() + 5 * 60_000).toISOString());
+    vi.setSystemTime(started.getTime() + 4 * 60_000);
+    const ack = await acknowledgeDesktop({ attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken: key, deviceName: "PC", platform: "windows" });
+    expect(ack.status).toBe("awaiting_code");
+    expect(ack.expiresAt).toBe(new Date(started.getTime() + 9 * 60_000).toISOString());
+    expect("code" in ack).toBe(false);
+    expect(await getAttempt(s, attempt.id)).toMatchObject({ status: "awaiting_code", expiresAt: ack.expiresAt, code: attempt.code });
+    vi.setSystemTime(started.getTime() + 6 * 60_000);
+    expect((await pairDesktop({ attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken: key, code: attempt.code ?? "" })).status).toBe("connected");
+  });
+
+  it("caps the code deadline at the web session and rejects its exact expiry boundary", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    vi.setSystemTime(started);
+    const s = { ...scope(), sessionExpiresAt: new Date(started.getTime() + 6 * 60_000) };
+    const attempt = await createAttempt(s);
+    vi.setSystemTime(started.getTime() + 4 * 60_000);
+    const input = { attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken: key, deviceName: "PC", platform: "windows" as const };
+    const ack = await acknowledgeDesktop(input);
+    expect(ack.expiresAt).toBe(s.sessionExpiresAt.toISOString());
+    vi.setSystemTime(s.sessionExpiresAt);
+    await expect(acknowledgeDesktop(input)).rejects.toMatchObject({ status: 410, code: "PAIRING_EXPIRED" });
+    await expect(pairDesktop({ ...input, code: attempt.code ?? "" })).rejects.toMatchObject({ status: 410 });
+    expect(await getAttempt(s, attempt.id)).toMatchObject({ status: "expired", code: null });
+  });
+
+  it("keeps the unopened launch deadline at five minutes without allowing a late ACK", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    vi.setSystemTime(started);
+    const s = scope();
+    const attempt = await createAttempt(s);
+    vi.setSystemTime(started.getTime() + 5 * 60_000);
+    await expect(acknowledgeDesktop({ attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken: key, deviceName: "PC", platform: "windows" })).rejects.toMatchObject({ status: 410, code: "PAIRING_EXPIRED" });
+    expect(await getAttempt(s, attempt.id)).toMatchObject({ status: "expired", expiresAt: attempt.expiresAt });
+    expect((await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).version).toBe(0);
+  });
+
+  it("keeps repeated ACKs idempotent without resetting wrong-code failures or the fixed deadline", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    vi.setSystemTime(started);
+    const s = scope();
+    const attempt = await createAttempt(s);
+    vi.setSystemTime(started.getTime() + 60_000);
+    const input = { attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken: key, deviceName: "Original PC", platform: "windows" as const };
+    const first = await acknowledgeDesktop(input);
+    const wrong = attempt.code === "000000" ? "111111" : "000000";
+    await expect(pairDesktop({ ...input, code: wrong })).rejects.toMatchObject({ code: "WRONG_CODE" });
+    const failed = await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    vi.setSystemTime(started.getTime() + 2 * 60_000);
+    const retried = await acknowledgeDesktop({ ...input, deviceName: "Changed PC" });
+    expect(retried.expiresAt).toBe(first.expiresAt);
+    expect(retried.version).toBe(failed.version);
+    expect(await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).toMatchObject({ failedAttempts: 1, pendingName: "Original PC", expiresAt: failed.expiresAt, version: failed.version });
+    vi.setSystemTime(first.expiresAt);
+    await expect(acknowledgeDesktop(input)).rejects.toMatchObject({ status: 410, code: "PAIRING_EXPIRED" });
+    expect(await getAttempt(s, attempt.id)).toMatchObject({ status: "expired", code: null });
+  });
+
+  it("accepts concurrent ACK retries for the same key as one first acknowledgement", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    vi.setSystemTime(started);
+    const attempt = await createAttempt(scope());
+    vi.setSystemTime(started.getTime() + 4 * 60_000);
+    const input = { attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken: key, deviceName: "PC", platform: "windows" as const };
+    const results = await Promise.all([acknowledgeDesktop(input), acknowledgeDesktop(input)]);
+    expect(results[0]).toEqual(results[1]);
+    const saved = await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(saved).toMatchObject({ version: 1, failedAttempts: 0, status: "awaiting_code", expiresAt: new Date(started.getTime() + 9 * 60_000) });
+  });
+
+  it("rejects another key when two desktops concurrently acknowledge one attempt", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T02:00:00.000Z"));
+    const attempt = await createAttempt(scope());
+    const input = { attemptId: attempt.id, launchToken: attempt.launchToken, deviceName: "PC", platform: "windows" as const };
+    const results = await Promise.allSettled([acknowledgeDesktop({ ...input, deviceToken: key }), acknowledgeDesktop({ ...input, deviceToken: otherKey })]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((result) => result.status === "rejected");
+    if (rejected?.status === "rejected") expect(rejected.reason).toMatchObject({ status: 409, code: "ANOTHER_CONNECTOR" });
+    expect((await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).version).toBe(1);
+  });
 
   it("commits five wrong-code attempts, then refuses the correct code without registering a device", async () => {
     const attempt = await createAttempt(scope());

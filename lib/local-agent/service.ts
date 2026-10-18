@@ -117,27 +117,42 @@ async function connectAttempt(db: Database, attempt: LocalAgentAttempt, device: 
   return { attempt: { ...attempt, status: "connected", deviceId: device.id, consumedAt: now, version: attempt.version + 1 }, grant };
 }
 
+function assertSameDesktop(attempt: LocalAgentAttempt, secretHash: string): void {
+  if (attempt.pendingSecretHash && attempt.pendingSecretHash !== secretHash) throw new HttpError(409, "ANOTHER_CONNECTOR", "다른 AI 브릿지가 이 요청을 확인했어요. 웹에서 다시 연결해주세요.");
+}
+
 export async function acknowledgeDesktop(input: LocalAgentDesktopAckInput): Promise<LocalAgentDesktopAttempt> {
   if (!validateDeviceToken(input.deviceToken)) throw new HttpError(400, "BAD_REQUEST", "AI 브릿지 정보를 확인해주세요.");
   return prisma.$transaction(async (tx) => {
     const now = new Date();
-    const attempt = await loadDesktopAttempt(tx, input.attemptId, input.launchToken, now);
+    let attempt = await loadDesktopAttempt(tx, input.attemptId, input.launchToken, now);
     const secretHash = hashCredential(input.deviceToken);
-    if (attempt.pendingSecretHash && attempt.pendingSecretHash !== secretHash) throw new HttpError(409, "ANOTHER_CONNECTOR", "다른 AI 브릿지가 이 요청을 확인했어요. 웹에서 다시 연결해주세요.");
+    assertSameDesktop(attempt, secretHash);
+    if (attempt.status === "awaiting_app") {
+      const expiresAt = new Date(Math.min(now.getTime() + ATTEMPT_MS, attempt.sessionExpiresAt.getTime()));
+      const acked = await tx.localAgentAttempt.updateMany({ where: { id: attempt.id, version: attempt.version, status: "awaiting_app", pendingSecretHash: null, cancelledAt: null, consumedAt: null, expiresAt: { gt: now }, sessionExpiresAt: { gt: now }, failedAttempts: { lt: MAX_PAIR_FAILURES } }, data: { pendingSecretHash: secretHash, pendingName: input.deviceName, pendingPlatform: input.platform, status: "awaiting_code", expiresAt, version: { increment: 1 } } });
+      if (acked.count === 1) {
+        attempt = { ...attempt, pendingSecretHash: secretHash, pendingName: input.deviceName, pendingPlatform: input.platform, status: "awaiting_code", expiresAt, version: attempt.version + 1 };
+      } else {
+        // A concurrent ACK may have won. Re-read its fixed deadline and failures;
+        // only the same desktop can reuse it, and cancellation/expiry still wins.
+        attempt = await loadDesktopAttempt(tx, input.attemptId, input.launchToken, new Date());
+        assertSameDesktop(attempt, secretHash);
+        if (attempt.status === "awaiting_app") conflict();
+      }
+    }
     const device = await tx.localAgentDevice.findFirst({ where: { memberId: attempt.memberId, teamId: attempt.teamId, secretHash, revokedAt: null } });
     const grant = device ? await tx.localAgentGrant.findUnique({ where: { sessionKey_teamId_deviceId: { sessionKey: attempt.sessionKey, teamId: attempt.teamId, deviceId: device.id } } }) : null;
     if (attempt.status === "connected") {
       if (!device || attempt.deviceId !== device.id || !grant || grant.revokedAt) unavailable();
       return desktopAttemptView(tx, attempt, device.id, grant);
     }
-    const acked = await tx.localAgentAttempt.updateMany({ where: { id: attempt.id, version: attempt.version, cancelledAt: null, consumedAt: null }, data: { pendingSecretHash: secretHash, pendingName: input.deviceName, pendingPlatform: input.platform, status: "awaiting_code", version: { increment: 1 } } });
-    if (acked.count !== 1) conflict();
-    const updated = { ...attempt, pendingSecretHash: secretHash, pendingName: input.deviceName, pendingPlatform: input.platform, status: "awaiting_code", version: attempt.version + 1 };
+    if (attempt.status !== "awaiting_code" || attempt.pendingSecretHash !== secretHash) unavailable();
     if (device && grant && !grant.revokedAt) {
-      const connected = await connectAttempt(tx, updated, device, now);
+      const connected = await connectAttempt(tx, attempt, device, now);
       return desktopAttemptView(tx, connected.attempt, device.id, connected.grant);
     }
-    return desktopAttemptView(tx, updated, null, null);
+    return desktopAttemptView(tx, attempt, null, null);
   });
 }
 

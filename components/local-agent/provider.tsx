@@ -18,6 +18,7 @@ interface ConnectionValue {
   job: LocalAgentJobView | null;
   jobBusy: boolean;
   fallback: boolean;
+  pairingSecondsLeft: number | null;
   open: () => void;
   start: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -56,6 +57,7 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
   const [jobBusy, setJobBusy] = React.useState(false);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [fallback, setFallback] = React.useState(false);
+  const [pairingNow, setPairingNow] = React.useState(Date.now);
   const alive = React.useRef(true);
   const epoch = React.useRef(0);
   const starting = React.useRef(false);
@@ -182,6 +184,33 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     return () => clearTimeout(timer);
   }, [phase]);
 
+  // Use the server deadline, so suspended tabs and failed polls cannot prolong a code.
+  React.useEffect(() => {
+    if (phase !== "awaiting_code" || !attempt) return;
+    const revision = epoch.current;
+    const deadline = Date.parse(attempt.expiresAt);
+    const tick = () => {
+      if (!current(revision) || attemptRef.current?.id !== attempt.id) return;
+      const now = Date.now();
+      setPairingNow(now);
+      if (!Number.isFinite(deadline) || now >= deadline) {
+        epoch.current += 1;
+        attemptRef.current = null; setAttempt(null); setDeepLink(null);
+        setFallback(false); setMessage(null); setPhase("expired");
+        storagePut(attemptKey, null);
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [phase, attempt?.id, attempt?.expiresAt, attemptKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function start(force = false) {
     setModalOpen(true);
     if (!teamId || starting.current || (!force && (phase === "opening" || phase === "awaiting_code"))) return;
@@ -260,7 +289,9 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     catch (error) { if (current(revision)) setMessage(errorMessage(error)); }
   }
 
-  const value: ConnectionValue = { api, phase, device, attempt, deepLink, message, selectedModel, job, jobBusy, fallback,
+  const pairingSecondsLeft = phase === "awaiting_code" && attempt
+    ? Math.max(0, Math.min(300, Math.ceil((Date.parse(attempt.expiresAt) - pairingNow) / 1000))) : null;
+  const value: ConnectionValue = { api, phase, device, attempt, deepLink, message, selectedModel, job, jobBusy, fallback, pairingSecondsLeft,
     open: () => { setModalOpen(true); if (!["connected", "opening", "awaiting_code", "creating", "login_required"].includes(phase)) void start(); },
     resumeFromInstall: () => { setModalOpen(true); if (phase !== "connected" && phase !== "login_required") void start(true); },
     start: () => start(), cancel, refresh, disconnect, showFallback: () => setFallback(true), selectModel, submitJob, cancelJob };
