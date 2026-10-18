@@ -43,6 +43,11 @@ function bundle() {
 }
 
 describe("paper PDF source", () => {
+  it("keeps short selectable text instead of classifying it as a scan", async () => {
+    const source = await extractPdfSource(await pdf(["Intro", "OK"]));
+    expect(parsePaperSource(source.text).map(page => page.text)).toEqual(["Intro", "OK"]);
+  });
+
   it("reads actual PDF pages in order with original text and a byte digest", async () => {
     const bytes = await pdf(pages.map((p) => p.text));
     const source = await extractPdfSource(bytes);
@@ -74,6 +79,13 @@ describe("paper PDF source", () => {
 });
 
 describe("local structured analysis", () => {
+  it("keeps strict page quotes and captions when the canonical source was OCR-derived", () => {
+    const source = JSON.stringify(pages.map(page => ({ ...page, method: "ocr" })));
+    expect(parseLocalAnalysis(JSON.stringify(bundle()), source).research.problem.oneLine).toBe("메모리 사용 감소");
+    const fabricated = bundle(); fabricated.references[0].quote = "This invented sentence is absent from the OCR source.";
+    expect(() => parseLocalAnalysis(JSON.stringify(fabricated), source)).toThrow(/근거/);
+  });
+
   it("accepts a complete cited result and adds an honest text-only Figure interpretation", () => {
     const result = parseLocalAnalysis(JSON.stringify(bundle()), JSON.stringify(pages));
     expect(result.research.problem.oneLine).toBe("메모리 사용 감소");

@@ -101,6 +101,38 @@ test("계정 위 연결 설정에서 모델·effort를 고르고 @로 논문과 
   expect(fixture.lastInput()).toMatchObject({ model: "second-model", effort: "high", paperIds: [papers[0].id], presentationIds: ["seminar"] });
 });
 
+test("자료 추가·선택 뒤 늦은 프레임이 사용자의 전체 선택을 덮지 않는다", async ({ page }) => {
+  await setup(page); await page.goto("/ai-chat");
+  const settings = page.getByRole("button", { name: "AI 연결", exact: true });
+  await settings.click(); await page.keyboard.press("Escape");
+  await expect(settings).toBeFocused();
+  const input = page.getByRole("textbox", { name: "연구 질문" });
+  const holdFrames = () => page.evaluateHandle(() => {
+    const original = window.requestAnimationFrame;
+    const callbacks: FrameRequestCallback[] = [];
+    window.requestAnimationFrame = callback => { callbacks.push(callback); return callbacks.length; };
+    return { flush() { window.requestAnimationFrame = original; for (const callback of callbacks.splice(0)) callback(performance.now()); } };
+  });
+
+  const adding = await holdFrames();
+  await page.getByRole("button", { name: "자료 추가", exact: true }).click();
+  await input.selectText();
+  await adding.evaluate(frames => frames.flush());
+  await page.keyboard.insertText(`@${papers[0].title}`);
+  expect(await input.inputValue()).toBe(`@${papers[0].title}`);
+  await expect(page.getByRole("option", { name: /연구 논문 A/ })).toBeVisible();
+
+  const choosing = await holdFrames();
+  await page.getByRole("option", { name: /연구 논문 A/ }).click();
+  await input.fill("바꿀 초안");
+  await input.selectText();
+  await choosing.evaluate(frames => frames.flush());
+  await page.keyboard.insertText("최종 질문");
+  expect(await input.inputValue()).toBe("최종 질문");
+  await expect(page.getByRole("button", { name: `${papers[0].title} 선택 해제`, exact: true })).toBeVisible();
+  await adding.dispose(); await choosing.dispose();
+});
+
 test("자료를 비운 후속 질문도 같은 대화에 이어지고 이전 턴의 자료·답변을 보존한다", async ({ page }) => {
   const fixture = await setup(page); await page.goto("/ai-chat");
   await addMaterial(page, papers[0].title);

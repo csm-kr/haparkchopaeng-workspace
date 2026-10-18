@@ -1,0 +1,97 @@
+{
+  "project": "hapark",
+  "phase": "24-scanned-pdf-reading",
+  "baselineCommit": "6e44b22ee297c2da7ca8e49a3bc14eb9489b838c",
+  "execution": "Isolated worktree; parallel TDD for OCR/source and durable orchestration; preserve original user work.",
+  "steps": [
+    {
+      "step": 1,
+      "name": "bounded-offline-ocr-and-compatible-source-contract",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "lib/local-ai/__tests__/source-ocr.test.ts",
+          "lib/local-ai/__tests__/pdf-ocr.test.ts",
+          "lib/local-ai/__tests__/pdf-ocr-real.test.ts",
+          "lib/local-ai/__tests__/pdf-ocr-bundle.test.ts",
+          "lib/local-ai/__tests__/source-and-payload.test.ts",
+          "lib/local-ai/__tests__/seminar-source.test.ts"
+        ]
+      ],
+      "started_at": "2026-10-18T18:00:30+0900",
+      "summary": "Final six source/OCR suites passed 31 tests, including real pinned English and Korean recognition.",
+      "completed_at": "2026-10-18T18:07:31+0900"
+    },
+    {
+      "step": 2,
+      "name": "durable-source-preparation-and-permission-regression",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ]
+      ],
+      "started_at": "2026-10-18T18:01:15+0900",
+      "summary": "Final isolated SQLite Harness passed 144 suites and 1167 tests; PostgreSQL-specific 16 tests are reserved for dedicated CI.",
+      "completed_at": "2026-10-18T18:16:03+0900"
+    },
+    {
+      "step": 3,
+      "name": "browser-and-runtime-package-verification",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "e2e"
+        ]
+      ],
+      "additionalEvidenceRequired": [
+        "real HTTP wire",
+        "lint and production build",
+        "OCR worker transitive assets in Inngest function trace",
+        "exact-source CI",
+        "Aside production PDF preparation and safe state API",
+        "original workspace preservation"
+      ],
+      "started_at": "2026-10-18T18:16:03+0900",
+      "completed_at": "2026-10-18T18:17:49+0900",
+      "summary": "Chromium 12 tests, real HTTP wire, lint and production build passed. Actual Next Inngest trace contains all 67 required OCR closure/assets; exact-source CI and production acceptance remain pending."
+    }
+  ],
+  "productionDeployed": false,
+  "connectorUpdateRequired": false,
+  "externalAiApiUsed": false,
+  "created_at": "2026-10-18T18:00:30+0900",
+  "completed_at": "2026-10-18T18:17:49+0900",
+  "integrationBaseCommit": "4017bb52f8a274fd60a76cc67ea0bbcd1aa86e28",
+  "postgresLockFollowup": {
+    "previousSource": "5a00c7dd9d95a6e8cf2a3446978895b64e8bbc37",
+    "redCiRun": 39115126851,
+    "redPgJob": 117639269945,
+    "pureTestsPassed": 71,
+    "postgresTestUnchanged": true,
+    "explicitForUpdateBeforeCas": true,
+    "exactSourceCiPending": true,
+    "postgresVerifiedSource": "0ce6228aefb6929c58ab32abee8d70be31e97b5f",
+    "postgresVerifiedCiRun": 39115624488,
+    "postgresTestsPassed": 16,
+    "fixtureTupleInitializationTypeOnlyFix": true,
+    "assertionsAndConcurrencyUnchanged": true,
+    "overallCiSuccessAtVerifiedSource": false
+  },
+  "materialSelectionFollowup": {
+    "controlledChromiumRed": true,
+    "controlledRtlRed": true,
+    "remoteTimeoutSameCauseProven": false,
+    "layoutCommitSelection": true,
+    "focusedRtlTestsPassed": 24,
+    "chromiumTestsPassed": 13,
+    "exactSourceCiPending": true
+  }
+}

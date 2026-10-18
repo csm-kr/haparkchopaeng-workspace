@@ -14,9 +14,32 @@ function api(): ResearchChatApi {
     create: vi.fn().mockResolvedValue(conversation), send: vi.fn().mockResolvedValue({ id: "turn", version: 1, conversationId: "chat", conversationTurn: 1, status: "queued", prompt: "안녕", response: "", createdAt: conversation.createdAt, updatedAt: conversation.updatedAt }), cancel: vi.fn() };
 }
 beforeEach(() => { window.history.replaceState(null, "", "/ai-chat"); });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("자유 채팅 입력창", () => {
+  it("자료 추가 후 사용자가 선택한 입력 범위를 늦은 프레임이 덮지 않는다", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+    render(<ResearchChat teamId="team" initialPapers={papers} initialConversations={[]} api={api()} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "자료 추가" })); });
+    const input = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "연구 질문" });
+    expect(input.value).toBe("@");
+    input.focus(); input.select();
+    act(() => { for (const callback of frames.splice(0)) callback(performance.now()); });
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 1]);
+  });
+  it("자료 선택 후 사용자가 선택한 남은 문장을 늦은 프레임이 덮지 않는다", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+    render(<ResearchChat teamId="team" initialPapers={papers} initialConversations={[]} api={api()} />);
+    const input = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "연구 질문" });
+    fireEvent.change(input, { target: { value: "앞 문장 @첫 번째" } });
+    fireEvent.click(screen.getByRole("option", { name: /첫 번째 논문/ }));
+    expect(input.value).toBe("앞 문장 ");
+    input.focus(); input.select();
+    act(() => { for (const callback of frames.splice(0)) callback(performance.now()); });
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+  });
   it("자료 없는 팀도 카테고리·모델 선택 단계 없이 바로 질문한다", async () => {
     const client = api();
     render(<ResearchChat teamId="team" initialPapers={[]} initialConversations={[]} api={client} />);

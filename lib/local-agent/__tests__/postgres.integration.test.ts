@@ -41,6 +41,7 @@ import type { LocalAgentProviderSnapshot } from "@/types/local-agent";
 import { cancelTurn, createConversation, createTurn } from "@/lib/research-chat/service";
 import { finishAnalysisRun, prepareAnalysisRun, requestLocalAnalysis } from "@/lib/local-ai/service";
 import { parsePaperSource } from "@/lib/local-ai/source";
+import { beginChatPreparation, finishChatPreparation } from "@/lib/research-chat/preparation";
 import { hashCredential } from "../security";
 
 const enabled = Boolean(process.env.LOCAL_AGENT_PG_TEST_CLIENT_MODULE || process.env.HAPARK_PG_ISOLATED_TESTS === "1");
@@ -81,6 +82,7 @@ async function cleanFixtures() {
     { payload: { path: ["scope", "teamId"], equals: "la-pg-b" } },
   ] } });
   await prisma.paper.deleteMany({ where: { id: { startsWith: "la-pg-" } } });
+  await prisma.presentation.deleteMany({ where: { id: { startsWith: "la-pg-" } } });
   await prisma.team.deleteMany({ where: { id: { startsWith: "la-pg-" } } });
   await prisma.member.deleteMany({ where: { id: { startsWith: "la-pg-" } } });
 }
@@ -407,6 +409,51 @@ describe.skipIf(!enabled)("real isolated PostgreSQL 16 concurrency", () => {
     expect(effects.send).toHaveBeenCalledOnce();
     expect(effects.download).not.toHaveBeenCalled(); expect(effects.render).not.toHaveBeenCalled();
     expect(await prisma.localAgentJob.count({ where: { teamId: scope().teamId } })).toBe(0);
+  }, 30_000);
+
+  it("holds the seminar parent key lock through queue CAS before allowing its first PDF to be inserted", async () => {
+    const { identity } = await paired();
+    const seminarId = "la-pg-source-parent";
+    await prisma.presentation.create({ data: { id: seminarId, teamId: scope().teamId, presenterId: scope().memberId,
+      title: "Synthetic source lock fixture", date: new Date(), tags: [], keypoints: [], slides: [],
+      assets: { create: { id: "la-pg-removed-initial-pdf", name: "synthetic.pdf", type: "pdf", size: "100 B", url: "presentations/synthetic-initial.pdf" } } } });
+    const thread = await createConversation(scope(), { requestId: randomUUID(), paperIds: [], presentationIds: [seminarId] });
+    const pending = await createTurn(scope(), thread.id, { deviceId: identity.deviceId, requestId: randomUUID(), provider: "codex", model: "actual-model", prompt: "Read the synthetic seminar" });
+    expect(pending.status).toBe("preparing");
+    await prisma.presentationAsset.delete({ where: { id: "la-pg-removed-initial-pdf" } });
+    const plan = await beginChatPreparation(pending.id);
+    if (!plan) throw new Error("Missing isolated preparation fixture.");
+    const holding = deferred(), release = deferred(), insertAttempted = deferred();
+    let paused = false, inserted = false;
+    queryHooks.after = async event => {
+      if (!paused && event.model === "Presentation" && event.operation === "updateMany" && whereOf(event).id === seminarId) {
+        paused = true; holding.resolve(); await release.promise;
+      }
+    };
+    queryHooks.before = async event => { if (paused && event.model === "PresentationAsset" && event.operation === "create") insertAttempted.resolve(); };
+    const finishing = finishChatPreparation(plan, [{ target: { kind: "presentation", id: seminarId, teamId: scope().teamId }, objectKey: null, assetId: null, source: null }]);
+    const finished = Promise.allSettled([finishing]);
+    await bounded(holding.promise, "preparation owning the seminar parent key lock");
+    const inserting = prisma.presentationAsset.create({ data: { id: "la-pg-new-first-pdf", presentationId: seminarId, name: "synthetic-new.pdf", type: "pdf", size: "100 B", url: "presentations/synthetic-new.pdf" } }).then(result => { inserted = true; return result; });
+    let blocked = false;
+    let completed: Awaited<typeof finished>;
+    try {
+      await bounded(insertAttempted.promise, "first PDF FK insert attempted while parent is locked");
+      await new Promise(resolve => setTimeout(resolve, 100));
+      blocked = !inserted;
+    } finally {
+      release.resolve();
+      completed = await finished;
+      await inserting;
+      queryHooks.before = undefined; queryHooks.after = undefined;
+    }
+    expect(blocked).toBe(true);
+    expect(completed[0].status).toBe("fulfilled");
+    expect(inserted).toBe(true);
+    const stored = await prisma.localAgentJob.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(stored.status).toBe("queued");
+    expect(JSON.parse(stored.context).presentations[0].pages).toEqual([]);
+    expect(effects.download).not.toHaveBeenCalled(); expect(effects.render).not.toHaveBeenCalled();
   }, 30_000);
 
   it("lets member removal commit while completion holds the paper lock and rechecks membership before storing", async () => {
