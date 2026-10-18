@@ -1,7 +1,8 @@
 {
   "name": "hapark-connector-desktop",
-  "productName": "하박조팽 연결기",
-  "version": "0.1.0",
+  "productName": "AI 브릿지",
+  "stableProfileName": "하박조팽 연결기",
+  "version": "0.1.1",
   "private": true,
   "author": "하박조팽",
   "homepage": "https://hapark.vercel.app",
@@ -27,12 +28,12 @@
     "directories": { "output": "../dist" },
     "files": ["main.mjs", "preload.cjs", "renderer/**", "assets/**", "apps.generated.json", "package.json"],
     "extraResources": [{ "from": "../core", "to": "core", "filter": ["**/*.mjs"] }],
-    "protocols": [{ "name": "하박조팽 AI 연결", "schemes": ["hapark-connect"] }],
+    "protocols": [{ "name": "AI 브릿지", "schemes": ["hapark-connect"] }],
     "asar": true,
     "win": { "target": ["nsis"], "icon": "assets/icon.ico", "signExecutable": false },
-    "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "deleteAppDataOnUninstall": false, "shortcutName": "하박조팽 연결기", "include": "installer.nsh" },
+    "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "deleteAppDataOnUninstall": false, "shortcutName": "AI 브릿지", "include": "installer.nsh" },
     "mac": { "target": ["dmg"], "executableName": "hapark-connector", "icon": "assets/icon.png", "category": "public.app-category.productivity", "hardenedRuntime": true, "gatekeeperAssess": false },
-    "linux": { "target": ["deb"], "maintainer": "Hapark maintainers", "icon": "assets/icon.png", "category": "Utility", "mimeTypes": ["x-scheme-handler/hapark-connect"], "desktop": { "entry": { "Name": "하박조팽 연결기", "Comment": "웹과 내 PC의 AI 연결", "Terminal": "false" } } },
+    "linux": { "target": ["deb"], "maintainer": "Hapark maintainers", "icon": "assets/icon.png", "category": "Utility", "mimeTypes": ["x-scheme-handler/hapark-connect"], "desktop": { "entry": { "Name": "AI 브릿지", "Comment": "웹과 내 PC의 AI 연결", "Terminal": "false" } } },
     "publish": null
   }
 }

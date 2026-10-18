@@ -92,6 +92,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   assert.ok(['arm64', 'x64'].includes(process.arch), 'Unsupported native macOS architecture.');
   const { appId, productName, macBundleName, scheme, packageVersion, connectorRoot } = configuration;
   const runtimeProductName = configuration.runtimeProductName ?? productName;
+  const profileName = configuration.stableProfileName ?? runtimeProductName;
   const macInternalName = configuration.macInternalName ?? productName;
   const macDisplayName = configuration.macDisplayName ?? productName;
   const profileRelativePath = configuration.profileRelativePath ?? [];
@@ -119,7 +120,8 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       runtimeProductName: publicMetadata(runtimeProductName), macInternalName: publicMetadata(macInternalName), macDisplayName: publicMetadata(macDisplayName),
       macBundleName: publicMetadata(macBundleName), packageVersion: publicMetadata(packageVersion), scheme: publicMetadata(scheme) },
     mount: {}, bundle: {},
-    profile: { mode: profileRelativePath.length ? 'app-id-production' : 'runtime-product-name',
+    profile: { mode: profileRelativePath.length ? 'app-id-production' : configuration.stableProfileName ? 'stable-profile-name' : 'runtime-product-name',
+      name: publicMetadata(profileName),
       relativePath: profileRelativePath.map(publicMetadata) },
   };
   const cleanup = evidence.cleanup.macos = { processesStopped: false, protocolUnregistered: false,
@@ -128,7 +130,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   const warmUri = `${scheme}://connect?extra=1`;
   const lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
   let helperDirectory, mountDirectory, mountPoint, installDirectory, installedApp, userData, resources, profileContainer, profileRoot;
-  let installedExecutable, crashBaseline, diagnosticChildRecord = null, unexpectedNativeProfile;
+  let installedExecutable, crashBaseline, diagnosticChildRecord = null, unexpectedNativeProfile, unexpectedDisplayProfile;
   const diagnosticDirectory = join(homedir(), 'Library', 'Logs', 'DiagnosticReports');
   let profileContainerAbsent = false;
   let mounted = false, registered = false, profileAbsent = false, swiftReady = false, connection, failure;
@@ -178,6 +180,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       crash.preferencesPresent = await exists(join(userData, 'preferences.json'));
       crash.deviceCredentialsPresent = await exists(join(userData, 'devices.enc.json'));
       if (unexpectedNativeProfile) crash.unexpectedNativeProfilePresent = await exists(unexpectedNativeProfile);
+      if (unexpectedDisplayProfile) crash.unexpectedDisplayProfilePresent = await exists(unexpectedDisplayProfile);
     }
     if (!crashBaseline || (!crashBaseline.available && crashBaseline.reason !== 'absent')
       || !installedExecutable || result.mainPids.length === 0 || !(await exists(diagnosticDirectory))) return;
@@ -424,6 +427,10 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       assert.equal(await exists(unexpectedNativeProfile), false, 'Native bundle naming must not move the credential profile.');
       metadata.profile.internalNameProfileCreated = false;
     }
+    if (unexpectedDisplayProfile) {
+      assert.equal(await exists(unexpectedDisplayProfile), false, 'Display branding must not move the credential profile.');
+      metadata.profile.displayNameProfileCreated = false;
+    }
   }
 
   try {
@@ -528,7 +535,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     evidence.phase = 'macos_profile_path';
     const profileParent = await canonicalMacPath(join(homedir(), 'Library', 'Application Support'));
     profileRoot = profileParent;
-    userData = profileRelativePath.length ? join(profileParent, ...profileRelativePath) : join(profileParent, runtimeProductName);
+    userData = profileRelativePath.length ? join(profileParent, ...profileRelativePath) : join(profileParent, profileName);
     await assertMacPathInside(userData, profileParent, { allowMissing: true });
     metadata.profile.insideAppData = true;
     if (profileRelativePath.length) {
@@ -551,11 +558,17 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     metadata.profile.exists = profileExists;
     assert.equal(profileExists, false, 'An existing production profile must be preserved.');
     profileAbsent = true;
-    if (!profileRelativePath.length && macInternalName.normalize('NFC') !== runtimeProductName.normalize('NFC')) {
+    if (!profileRelativePath.length && macInternalName.normalize('NFC') !== profileName.normalize('NFC')) {
       unexpectedNativeProfile = join(profileParent, macInternalName);
       await assertMacPathInside(unexpectedNativeProfile, profileParent, { allowMissing: true });
       assert.equal(await exists(unexpectedNativeProfile), false, 'An existing alternate native-name profile must be preserved.');
       metadata.profile.internalNameProfileInitiallyAbsent = true;
+    }
+    if (!profileRelativePath.length && runtimeProductName.normalize('NFC') !== profileName.normalize('NFC')) {
+      unexpectedDisplayProfile = join(profileParent, runtimeProductName);
+      await assertMacPathInside(unexpectedDisplayProfile, profileParent, { allowMissing: true });
+      assert.equal(await exists(unexpectedDisplayProfile), false, 'An existing display-name profile must be preserved.');
+      metadata.profile.displayNameProfileInitiallyAbsent = true;
     }
 
     evidence.phase = 'macos_copy';
@@ -585,8 +598,10 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     const runtimeMetadata = JSON.parse(packagedMetadata.toString('utf8'));
     assert.equal(runtimeMetadata.name, configuration.runtimePackageName, 'Packaged runtime application identity changed.');
     assert.equal(runtimeMetadata.version, packageVersion, 'Packaged runtime version differs from its installed bundle.');
+    assert.equal(runtimeMetadata.stableProfileName, configuration.stableProfileName, 'Packaged credential profile identity changed.');
     metadata.bundle.runtimePackageName = publicMetadata(runtimeMetadata.name);
     metadata.bundle.runtimeProductName = publicMetadata(runtimeMetadata.productName);
+    if (runtimeMetadata.stableProfileName) metadata.bundle.stableProfileName = publicMetadata(runtimeMetadata.stableProfileName);
     const helpers = [];
     for (const parent of [join(installedApp, 'Contents', 'Frameworks'), join(installedApp, 'Contents', 'Library', 'LoginItems')]) {
       if (!(await exists(parent))) continue;
@@ -773,6 +788,10 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
     if (unexpectedNativeProfile && await exists(unexpectedNativeProfile)) {
       cleanup.unexpectedNativeProfileRetained = true;
       cleanup.errors.push('unexpected-native-profile-created');
+    }
+    if (unexpectedDisplayProfile && await exists(unexpectedDisplayProfile)) {
+      cleanup.unexpectedDisplayProfileRetained = true;
+      cleanup.errors.push('unexpected-display-profile-created');
     }
     if (mountDirectory && !mounted) await clean('mount-directory-remove', () => mountDirectory.cleanup());
     // Keep the temporary helper/plist on failure; it contains no credentials.

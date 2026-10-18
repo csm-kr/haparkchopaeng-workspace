@@ -26,7 +26,7 @@ export function desktopIdentity(req: Request): DesktopIdentity {
   const auth = req.headers.get("authorization") ?? "";
   const deviceToken = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!deviceId || deviceId.length > 150 || !validateDeviceToken(deviceToken)) {
-    throw new HttpError(401, "DEVICE_UNAUTHORIZED", "연결기 승인이 필요해요.");
+    throw new HttpError(401, "DEVICE_UNAUTHORIZED", "AI 브릿지 승인이 필요해요.");
   }
   return { deviceId, deviceToken };
 }

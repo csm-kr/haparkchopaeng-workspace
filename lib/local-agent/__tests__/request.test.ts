@@ -10,8 +10,8 @@ describe("connector HTTP trust boundary", () => {
     expect(() => assertWebOrigin(new Request("https://research.test/api/local-agent/attempts", { method: "POST", headers: { origin: "https://research.test" } }))).not.toThrow();
   });
   it("requires both the device identity and a 256-bit bearer credential", () => {
-    expect(() => desktopIdentity(new Request("http://localhost", { headers: { authorization: "Bearer 482107", "x-local-agent-device": "device" } }))).toThrow();
-    expect(() => desktopIdentity(new Request("http://localhost", { headers: { authorization: `Bearer ${Buffer.alloc(32, 7).toString("base64url")}` } }))).toThrow();
+    expect(() => desktopIdentity(new Request("http://localhost", { headers: { authorization: "Bearer 482107", "x-local-agent-device": "device" } }))).toThrow("AI 브릿지 승인이 필요해요.");
+    expect(() => desktopIdentity(new Request("http://localhost", { headers: { authorization: `Bearer ${Buffer.alloc(32, 7).toString("base64url")}` } }))).toThrow("AI 브릿지 승인이 필요해요.");
   });
   it("requires JSON and bounds actual request bytes even with no content-length header", async () => {
     await expect(parseJson(new Request("http://localhost", { method: "POST", body: "{}" }), EmptySchema)).rejects.toMatchObject({ status: 415 });

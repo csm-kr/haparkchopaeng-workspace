@@ -52,6 +52,7 @@ describe("local agent API authentication", () => {
   it("rejects result writes without desktop credentials even with a valid web session", async () => {
     const response = await result(webRequest({}));
     expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: { code: "DEVICE_UNAUTHORIZED", message: "AI 브릿지 승인이 필요해요." } });
     expect(mocks.result).not.toHaveBeenCalled();
   });
 });

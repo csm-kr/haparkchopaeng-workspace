@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, shell, screen } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
 const directory = dirname(fileURLToPath(import.meta.url));
@@ -9,7 +10,14 @@ let readyForLaunches = false, launchRequested = false;
 // Register synchronously: macOS may deliver a cold-start URL during asynchronous imports.
 app.on('open-url', (event, url) => { event.preventDefault(); launchRequested = true; pendingUrls.push(url); if (readyForLaunches) void consumeLaunches(); });
 const configuredDataDirectory = !app.isPackaged ? process.argv.find(value => value.startsWith('--connector-data-dir='))?.slice('--connector-data-dir='.length) : null;
-if (configuredDataDirectory) app.setPath('userData', configuredDataDirectory);
+const { productName, stableProfileName } = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
+if (typeof stableProfileName !== 'string' || !stableProfileName || basename(stableProfileName) !== stableProfileName
+  || /[\\/\u0000-\u001f]/.test(stableProfileName) || ['.', '..'].includes(stableProfileName)) throw new Error('기존 연결 정보의 저장 경로를 확인해 주세요.');
+// Preserve the prior safeStorage service identity and vault location across display-name changes.
+app.setName(stableProfileName);
+const userDataDirectory = configuredDataDirectory || join(app.getPath('appData'), stableProfileName);
+mkdirSync(userDataDirectory, { recursive: true, mode: 0o700 });
+app.setPath('userData', userDataDirectory);
 const coreRoot = app.isPackaged ? join(process.resourcesPath, 'core') : join(directory, '..', 'core');
 const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiClient }, { createCredentialStore }, { createProviderAdapter }, { ConnectorSession }, { desktopAckInput, desktopPairInput }, { shouldExitWithoutWeb, shouldOpenFirstWeb, stopBeforeExit }] = await Promise.all(['security', 'api', 'storage', 'adapters', 'runtime', 'protocol', 'lifetime'].map(name => import(pathToFileURL(join(coreRoot, `${name}.mjs`)).href)));
 const development = !app.isPackaged && process.argv.includes('--connector-dev');
@@ -18,7 +26,7 @@ const quietQa = !app.isPackaged && process.argv.includes('--connector-qa');
 let applications = [], mainWindow, petWindow, selectedApp, store, attempt = null, identity = null, runtime = null, adapters = {}, revision = 0, requestController = null, monitoringController = null, monitorTimer = null, refreshPromise = null;
 let preferences = { autoStart: false, pet: false, firstBrowserOpened: false };
 let quitting = false, qaWindowHidden = false;
-let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform };
+let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], appName: productName, siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform };
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, argv) => { const urls = argv.filter(value => /^[a-z][a-z0-9+.-]*:\/\//i.test(value)); launchRequested ||= urls.length > 0; pendingUrls.push(...urls); showWindow(); if (store) void consumeLaunches(); });
@@ -57,7 +65,7 @@ else {
     }
     if (preferences.pet) showPet();
   } catch (error) {
-    state = { ...state, stage: 'error', title: '연결기를 준비하지 못했어요', description: error.message }; installIpc(); showWindow(); publish();
+    state = { ...state, stage: 'error', title: 'AI 브릿지를 준비하지 못했어요', description: error.message }; installIpc(); showWindow(); publish();
   }
   }).catch(() => app.exit(1));
 }
@@ -66,7 +74,7 @@ function showWindow() {
   qaWindowHidden = false;
   if (!mainWindow || mainWindow.isDestroyed()) {
     const height = Math.min(724, screen.getPrimaryDisplay().workArea.height - 48);
-    mainWindow = new BrowserWindow({ width: 452, height, minWidth: 390, minHeight: Math.min(height, 590), show: false, backgroundColor: '#16151a', icon: join(directory,'assets','icon.png'), title: '하박조팽 연결기', autoHideMenuBar: true, webPreferences: { preload: join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: quietQa, backgroundThrottling: !quietQa, devTools: !app.isPackaged } });
+    mainWindow = new BrowserWindow({ width: 452, height, minWidth: 390, minHeight: Math.min(height, 590), show: false, backgroundColor: '#16151a', icon: join(directory,'assets','icon.png'), title: productName, autoHideMenuBar: true, webPreferences: { preload: join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: quietQa, backgroundThrottling: !quietQa, devTools: !app.isPackaged } });
     mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     mainWindow.webContents.on('will-navigate', event => event.preventDefault());
     mainWindow.loadFile(join(directory, 'renderer', 'index.html'));

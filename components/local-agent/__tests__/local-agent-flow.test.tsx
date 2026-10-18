@@ -49,7 +49,7 @@ describe("로컬 AI 연결 흐름", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledWith(created.deepLink));
     expect(within(dialog).getByLabelText("연결 확인 번호")).toHaveTextContent("048 217");
     expect(within(dialog).queryByRole("textbox")).toBeNull();
-    expect(within(dialog).getByText(/웹의 번호를 연결기에 입력/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/웹의 번호를 AI 브릿지에 입력/)).toBeInTheDocument();
     expect(api.createAttempt).toHaveBeenCalledTimes(1);
   });
 
@@ -62,14 +62,14 @@ describe("로컬 AI 연결 흐름", () => {
     render(<View api={api} />);
     await waitFor(() => expect(api.status).toHaveBeenCalled());
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "연결기가 열리지 않아요" }));
+    fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     await waitFor(() => expect(api.downloads).toHaveBeenCalled());
     fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "macos" } });
     expect(await screen.findByLabelText("칩 종류")).toHaveValue("");
     expect(screen.getByText("칩 종류를 먼저 선택해 주세요.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "연결기 다운로드" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "AI 브릿지 다운로드" })).toBeNull();
     fireEvent.change(screen.getByLabelText("칩 종류"), { target: { value: "arm64" } });
-    expect(screen.getByRole("link", { name: "연결기 다운로드" })).toHaveAttribute("href", "https://downloads.example/arm64.dmg");
+    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAttribute("href", "https://downloads.example/arm64.dmg");
   });
 
   it("취소 뒤 도착한 생성 응답은 실행·연결을 되살리지 않는다", async () => {
@@ -168,7 +168,7 @@ describe("로컬 AI 연결 흐름", () => {
     render(<View api={api} />);
     await waitFor(() => expect(api.status).toHaveBeenCalled());
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "연결기가 열리지 않아요" }));
+    fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     expect(await screen.findByRole("button", { name: /설치 파일 준비 중/ })).toBeDisabled();
     expect(screen.getByText(/응답이 없어도 설치 여부를 확정할 수 없어요/)).toBeInTheDocument();
     expect(document.querySelector('a[download]')).toBeNull();
@@ -268,7 +268,7 @@ describe("로컬 AI 연결 흐름", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledTimes(1));
     expect(window.location.search).toBe("?keep=1");
     expect(window.location.hash).toBe("#ai");
-    expect(await screen.findByRole("link", { name: "연결기 다시 열기" })).toHaveAttribute("href", created.deepLink);
+    expect(await screen.findByRole("link", { name: "AI 브릿지 다시 열기" })).toHaveAttribute("href", created.deepLink);
   });
 
   it("같은 이벤트 배치에서 질문을 두 번 제출해도 한 번만 적재한다", async () => {

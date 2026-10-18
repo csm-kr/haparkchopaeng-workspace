@@ -1,5 +1,15 @@
 # 로컬 AI 연결 운영 배포 런북
 
+## AI 브릿지 테스트 설치 파일 게시
+
+앱 표시 이름은 **AI 브릿지**, desktop 버전은 **0.1.1**이다. 기존 `hapark-connect` 링크·앱 ID·OS 프로필과 내부 암호화 서비스명은 유지한다. 정식 게시자 서명 전에는 테스트 버전으로 구분한다.
+
+Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치를 확인한 뒤 draft prerelease에 올린다. Mac arm64·Intel x64와 Ubuntu x64는 수동 실행 전용 [미리보기 게시 워크플로](../../.github/workflows/ai-bridge-preview.yml)를 사용한다. 기존 PR 검증의 읽기 권한은 유지한다. 이 워크플로는 사전 생성한 태그·정확한 SHA·같은 SHA의 6개 CI 성공·draft prerelease를 확인하고, 네이티브 암호화와 실제 설치를 통과한 자기 아키텍처의 파일 하나와 해시 메타데이터만 직접 업로드한다. Actions artifact 저장소는 사용하지 않는다.
+
+모든 파일의 소스·크기·SHA256을 확인한 뒤 draft를 테스트 릴리스로 공개한다. 기존 동명 파일을 덮어쓰지 않는다. 서버 `LOCAL_AGENT_RELEASES`에는 공개되어 다운로드 가능한 실제 URL만 넣고, 게시자 서명이 없는 파일은 `unsigned: true`로 명시한다. 이 필드는 신뢰할 수 있는 게시자 서명이 없다는 뜻이며 Mac의 ad hoc 서명 여부와 별개다. 운영 웹에서 OS·칩 선택과 다운로드 안내까지 확인한다.
+
+테스트 파일 게시를 Windows 게시자 서명·Mac Developer ID/공증·Gatekeeper 승인이나 실사용자의 전체 페어링·추론 검증으로 보고하지 않는다. 현재 실제 게시 결과와 URL·소스·검증 영수증은 HTML 배포 보고서에 별도로 기록한다.
+
 ## 2026-10-18 운영 반영 기록
 
 사용자의 운영 배포 요청에 따라 Supabase `ocprfnjuakugiraimeoo`의 `postgres/public`을 확인하고 두 20261017 SQL을 한 트랜잭션으로 반영했다. 반영 전 실제 Prisma schema diff는 예정한 6테이블·7컬럼 추가와 일치했고, 반영 후 `prisma migrate diff --exit-code`는 **0 / No difference detected**다. 새 PK 6개·FK 12개·PK 포함 인덱스 19개와 기존 논문 11개·분석 22개·Figure 63개·멤버 12명·팀 4개를 확인했다.

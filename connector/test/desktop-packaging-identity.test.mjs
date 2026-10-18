@@ -11,7 +11,9 @@ const require = createRequire(import.meta.url);
 
 test('the product macOS package uses an ASCII bundle/executable while preserving its Korean display identity', () => {
   assert.equal(source.build.mac.executableName, 'hapark-connector');
-  assert.equal(source.productName, '하박조팽 연결기');
+  assert.equal(source.productName, 'AI 브릿지');
+  assert.equal(source.version, '0.1.1');
+  assert.equal(source.stableProfileName, '하박조팽 연결기');
   assert.equal(source.build.appId, 'kr.hapark.connector');
   assert.deepEqual(source.build.protocols.flatMap(value => value.schemes), ['hapark-connect']);
   assert.equal(source.build.mac.hardenedRuntime, true);
@@ -31,7 +33,8 @@ test('installed-package configuration separates the Mac bundle filename from its
     }), { flag: 'wx' });
     const config = await loadConfiguration(directory);
     assert.equal(config.macBundleName, 'hapark-connector');
-    assert.equal(config.productName, '하박조팽 연결기');
+    assert.equal(config.productName, 'AI 브릿지');
+    assert.equal(config.stableProfileName, '하박조팽 연결기');
     assert.equal(config.appId, 'kr.hapark.connector');
     assert.equal(config.scheme, 'hapark-connect');
     assert.equal(config.macInternalName, 'hapark-connector');
@@ -57,5 +60,18 @@ test('only the Mac build command selects the full native naming override', () =>
   assert.deepEqual(config.linux, source.build.linux);
   assert.deepEqual(config.nsis, source.build.nsis);
   assert.equal(source.build.productName, undefined);
-  assert.equal(source.productName, '하박조팽 연결기');
+  assert.equal(source.productName, 'AI 브릿지');
+});
+
+test('app display names change together while native identity and the encrypted profile stay stable', async () => {
+  assert.equal(source.build.nsis.shortcutName, 'AI 브릿지');
+  assert.equal(source.build.protocols[0].name, 'AI 브릿지');
+  assert.equal(source.build.linux.desktop.entry.Name, 'AI 브릿지');
+  assert.equal(source.build.artifactName, 'hapark-connector-${version}-${os}-${arch}.${ext}');
+  const html = await readFile(new URL('../desktop/renderer/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<title>AI 브릿지<\/title>/);
+  assert.match(html, /<strong[^>]*>AI 브릿지<\/strong>/);
+  const lock = JSON.parse(await readFile(new URL('../desktop/package-lock.json', import.meta.url), 'utf8'));
+  assert.equal(lock.version, source.version);
+  assert.equal(lock.packages[''].version, source.version);
 });

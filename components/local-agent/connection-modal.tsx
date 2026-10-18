@@ -26,17 +26,17 @@ export function ConnectionModal({ onClose }: { onClose: () => void }) {
       <Button onClick={onClose}>완료</Button>
     </> : <>
       <div className="flex flex-col gap-2" aria-live="polite">
-        <h3 className="text-[16px] font-semibold text-fg">{agent.phase === "creating" ? "연결을 준비하고 있어요" : agent.phase === "awaiting_code" ? "웹의 번호를 연결기에 입력해 주세요" : agent.phase === "opening" ? "연결기를 열고 있어요" : agent.phase === "expired" ? "연결 번호가 만료됐어요" : agent.phase === "cancelled" ? "연결을 취소했어요" : agent.phase === "login_required" ? "다시 로그인해 주세요" : agent.phase === "offline" ? "연결기를 다시 열어 주세요" : "내 PC의 AI를 연결해요"}</h3>
-        <p className="text-[13px] leading-relaxed text-fg-muted">{pending ? "브라우저의 앱 열기 요청을 허용해 주세요. 처음에는 연결기에 아래 번호를 입력하면 돼요. 이전에 승인한 기기라면 바로 이어져요." : agent.phase === "expired" ? "새 번호로 다시 연결하면 돼요. 설치 파일은 다시 받을 필요 없어요." : agent.phase === "login_required" ? "로그인한 뒤 웹의 새 번호를 연결기에 입력해 주세요. 연결기를 다시 설치하지 않아도 돼요." : "기존 Codex·Claude Code를 사용해 논문을 읽고 질문할 수 있어요. 연결기는 처음에 한 번 설치해요."}</p>
+        <h3 className="text-[16px] font-semibold text-fg">{agent.phase === "creating" ? "연결을 준비하고 있어요" : agent.phase === "awaiting_code" ? "웹의 번호를 AI 브릿지에 입력해 주세요" : agent.phase === "opening" ? "AI 브릿지를 열고 있어요" : agent.phase === "expired" ? "연결 번호가 만료됐어요" : agent.phase === "cancelled" ? "연결을 취소했어요" : agent.phase === "login_required" ? "다시 로그인해 주세요" : agent.phase === "offline" ? "AI 브릿지를 다시 열어 주세요" : "내 PC의 AI를 연결해요"}</h3>
+        <p className="text-[13px] leading-relaxed text-fg-muted">{pending ? "브라우저의 앱 열기 요청을 허용해 주세요. 처음에는 AI 브릿지에 아래 번호를 입력하면 돼요. 이전에 승인한 기기라면 바로 이어져요." : agent.phase === "expired" ? "새 번호로 다시 연결하면 돼요. 설치 파일은 다시 받을 필요 없어요." : agent.phase === "login_required" ? "로그인한 뒤 웹의 새 번호를 AI 브릿지에 입력해 주세요. AI 브릿지를 다시 설치하지 않아도 돼요." : "기존 Codex·Claude Code를 사용해 논문을 읽고 질문할 수 있어요. AI 브릿지는 처음에 한 번 설치해요."}</p>
       </div>
       {pending && code && <div className="flex flex-col gap-2 rounded-md border border-border-token bg-bg-subtle p-4">
-        <span className="text-[12px] font-medium text-fg-muted">웹의 번호를 연결기에 입력</span>
+        <span className="text-[12px] font-medium text-fg-muted">웹의 번호를 AI 브릿지에 입력</span>
         <output aria-label="연결 확인 번호" className="font-mono text-[30px] font-semibold tracking-[0.15em] text-fg">{code.slice(0, 3)} {code.slice(3)}</output>
-        <span className="text-[11px] text-fg-muted">이 번호는 잠시 뒤 만료돼요. 계정과 팀을 연결기에서 확인해 주세요.</span>
+        <span className="text-[11px] text-fg-muted">이 번호는 잠시 뒤 만료돼요. 계정과 팀을 AI 브릿지에서 확인해 주세요.</span>
       </div>}
       {pending && !agent.fallback && <>
         <div className="h-1 w-full overflow-hidden rounded-full bg-bg-subtle" aria-hidden="true"><div className="h-full w-1/3 bg-accent-soft" /></div>
-        <button type="button" onClick={agent.showFallback} className="self-start rounded-sm py-1 text-[12px] text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft">연결기가 열리지 않아요</button>
+        <button type="button" onClick={agent.showFallback} className="self-start rounded-sm py-1 text-[12px] text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft">AI 브릿지가 열리지 않아요</button>
       </>}
       {agent.fallback && <InstallHelp />}
       {!pending && agent.phase !== "login_required" && <Button onClick={() => void agent.start()}>다시 연결</Button>}

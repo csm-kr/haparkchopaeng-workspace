@@ -1,0 +1,224 @@
+# Root prepares the exact-SHA tag, draft prerelease and Windows installer first.
+# This workflow uploads only native-verified macOS/Ubuntu assets; it never publishes the draft.
+# First run local-agent.yml with --ref the same tag; a PR merge-only run is insufficient.
+name: AI Bridge preview assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing draft prerelease tag (run this workflow with --ref that same tag)
+        required: true
+        type: string
+      expected_sha:
+        description: Exact 40-character source validated by all six Local agent workflow_dispatch jobs
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ai-bridge-preview-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Draft release metadata requires push access; PR validation remains read-only.
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - name: Preview publication guard regression
+        run: node --test connector/test/preview-release.test.mjs
+      - name: Verify tagged source, existing draft and complete validation run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_RELEASE_TAG: ${{ inputs.release_tag }}
+          PREVIEW_EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node connector/scripts/preview-release.mjs preflight
+
+  native:
+    needs: preflight
+    permissions:
+      contents: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: mac
+            architecture: arm64
+          - os: macos-15-intel
+            platform: mac
+            architecture: x64
+          - os: ubuntu-24.04
+            platform: linux
+            architecture: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CONNECTOR_APP_ORIGIN: https://hapark.vercel.app
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      PREVIEW_RELEASE_TAG: ${{ inputs.release_tag }}
+      PREVIEW_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PREVIEW_PLATFORM: ${{ matrix.platform }}
+      PREVIEW_ARCHITECTURE: ${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.architecture }}
+      - name: Verify runtime and runner architecture
+        shell: bash
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const expected = process.env.EXPECTED_ARCHITECTURE;
+          const runnerArchitecture = { x64: 'X64', arm64: 'ARM64' }[expected];
+          assert.ok(runnerArchitecture, 'An explicit supported matrix architecture is required.');
+          assert.equal(process.arch, expected, 'Node architecture differs from the matrix.');
+          assert.equal(process.env.RUNNER_ARCH, runnerArchitecture, 'Runner architecture differs from the matrix.');
+          console.log(JSON.stringify({ architecture: process.arch, runnerArchitecture: process.env.RUNNER_ARCH }));
+          NODE
+      - name: Connector contracts and process cancellation
+        run: npm --prefix connector test
+      - run: npm --prefix connector/desktop ci
+      - name: Native runtime preparation regression
+        run: node connector/scripts/ci-desktop-smoke.mjs --self-test
+      - name: Native encrypted pairing and resume
+        if: runner.os != 'Linux'
+        run: node connector/scripts/ci-desktop-smoke.mjs
+      - name: Linux desktop test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11 fonts-noto-cjk xdg-utils desktop-file-utils shared-mime-info libglib2.0-bin xdotool x11-utils scrot openbox wmctrl
+      - name: Prepare official Linux Electron sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_OS}" = Linux
+          test "$(id -u)" -ne 0
+          test -z "${ELECTRON_OVERRIDE_DIST_PATH:-}"
+          workspace="$(realpath -e "${GITHUB_WORKSPACE}")"
+          electron_package="${workspace}/connector/desktop/node_modules/electron"
+          test -f "${electron_package}/install.js"
+          test ! -L "${electron_package}/install.js"
+          node "${electron_package}/install.js"
+          test "$(cat "${electron_package}/path.txt")" = electron
+          electron_binary="${electron_package}/dist/electron"
+          sandbox="${electron_package}/dist/chrome-sandbox"
+          for executable in "${electron_binary}" "${sandbox}"; do
+            test -f "${executable}"
+            test ! -L "${executable}"
+            test "$(realpath -e "${executable}")" = "${executable}"
+            test -x "${executable}"
+          done
+          mount_options="$(findmnt --noheadings --output OPTIONS --target "${sandbox}")"
+          case ",${mount_options}," in
+            *,nosuid,*) echo '::error::Official Electron sandbox is on a nosuid mount'; exit 1 ;;
+          esac
+          sandbox_sha256="$(sha256sum "${sandbox}" | cut -d ' ' -f 1)"
+          sudo chown root:root "${sandbox}"
+          sudo chmod 4755 "${sandbox}"
+          test "$(stat --format='%u:%g:%a' "${sandbox}")" = 0:0:4755
+          test -u "${sandbox}"
+          test "$(sha256sum "${sandbox}" | cut -d ' ' -f 1)" = "${sandbox_sha256}"
+          printf '%s\n' 'Official Electron sandbox verified: root:root 4755; original binary retained.'
+      - name: Native encrypted pairing and resume in a desktop session
+        if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: |
+          dbus-run-session -- xvfb-run -a bash -euc '
+            printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
+            node connector/scripts/ci-desktop-smoke.mjs
+          '
+      - name: Native installer build (unsigned validation artifact)
+        if: runner.os != 'macOS'
+        run: npm --prefix connector/desktop run package:${{ matrix.platform }}
+      - name: macOS native identity regression and installer build (unsigned)
+        if: runner.os == 'macOS'
+        run: npm --prefix connector/desktop run package:mac
+      - name: Verify Debian sandbox and protocol contents
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$(realpath -e "${GITHUB_WORKSPACE}")"
+          packages=("${workspace}"/connector/dist/*.deb)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          test ! -L "${packages[0]}"
+          inspection="$(mktemp -d "${RUNNER_TEMP%/}/hapark-deb-inspection.XXXXXX")"
+          case "${inspection}" in
+            "${RUNNER_TEMP%/}"/hapark-deb-inspection.*) ;;
+            *) echo '::error::Debian inspection directory is outside the owned runner temp'; exit 1 ;;
+          esac
+          trap 'rm -rf -- "${inspection}"' EXIT
+          dpkg-deb --control "${packages[0]}" "${inspection}/control"
+          dpkg-deb --extract "${packages[0]}" "${inspection}/data"
+          mapfile -t desktop_files < <(find "${inspection}/data/usr/share/applications" -maxdepth 1 -type f -name '*.desktop' -print)
+          test "${#desktop_files[@]}" -eq 1
+          desktop="${desktop_files[0]}"
+          postinst="${inspection}/control/postinst"
+          test -s "${postinst}"
+          if grep -REin -- '--no-sandbox|--disable-sandbox|--disable-setuid-sandbox|--disable-seccomp-filter-sandbox|--disable-namespace-sandbox|--no-zygote-sandbox|ELECTRON_DISABLE_SANDBOX|apparmor_restrict_unprivileged_userns[[:space:]]*=[[:space:]]*0' "${inspection}/control" "${desktop}"; then
+            echo '::error::Debian launcher or maintainer script disables a sandbox boundary'
+            exit 1
+          else
+            scan_status="$?"
+            test "${scan_status}" -eq 1
+          fi
+          grep -Eq '^Exec="?/opt/.* %U$' "${desktop}"
+          grep -Fq 'x-scheme-handler/hapark-connect' "${desktop}"
+          grep -Fq 'unshare --user true' "${postinst}"
+          grep -Eq 'chmod 4755 .*/chrome-sandbox' "${postinst}"
+          grep -Eq 'chmod 0755 .*/chrome-sandbox' "${postinst}"
+          grep -Fq 'update-desktop-database' "${postinst}"
+          test "$(find "${inspection}/data/opt" -type f -name chrome-sandbox | wc -l)" -eq 1
+          dpkg-deb --field "${packages[0]}" Package Version Architecture
+          grep -E '^(Exec|MimeType)=' "${desktop}"
+          printf '%s\n' 'Debian archive verified: official sandbox setup and URI handler; no sandbox bypass. Installation was not performed.'
+      - name: macOS installed DMG and LaunchServices protocol
+        if: runner.os == 'macOS'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+        run: node connector/scripts/ci-installed-smoke.mjs
+      - name: Ubuntu installed Debian package and desktop protocol
+        if: runner.os == 'Linux'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+          XDG_CURRENT_DESKTOP: GNOME
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          dbus-run-session -- xvfb-run -a bash -euc '
+            printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
+            openbox --sm-disable >"${RUNNER_TEMP}/connector-installed-openbox.log" 2>&1 &
+            connector_wm_pid=$!
+            trap '\''kill "${connector_wm_pid}" 2>/dev/null || true'\'' EXIT
+            node connector/scripts/ci-installed-smoke.mjs
+          '
+      - name: Upload this native-verified installer and safe metadata to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node connector/scripts/preview-release.mjs upload

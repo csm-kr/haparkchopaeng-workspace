@@ -5,7 +5,7 @@ import type { ConnectionPhase } from "./provider";
 export const providerName = { codex: "Codex", claude: "Claude Code" } as const;
 export const providerStatus = { ready: "사용 가능", login_required: "로그인 필요", not_installed: "설치 필요", limited: "한도 도달", error: "상태 확인 필요" } as const;
 export const phaseLabel: Record<ConnectionPhase, string> = {
-  loading: "연결 확인 중", idle: "AI 연결", creating: "연결 준비 중", opening: "연결기 여는 중",
+  loading: "연결 확인 중", idle: "AI 연결", creating: "연결 준비 중", opening: "AI 브릿지 여는 중",
   awaiting_code: "번호 입력 대기", connected: "내 PC 연결됨", offline: "다시 연결", cancelled: "AI 연결", expired: "다시 연결", error: "AI 연결", login_required: "로그인 필요",
 };
 
