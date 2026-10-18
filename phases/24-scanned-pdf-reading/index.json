@@ -69,5 +69,14 @@
   "externalAiApiUsed": false,
   "created_at": "2026-10-18T18:00:30+0900",
   "completed_at": "2026-10-18T18:17:49+0900",
-  "integrationBaseCommit": "4017bb52f8a274fd60a76cc67ea0bbcd1aa86e28"
+  "integrationBaseCommit": "4017bb52f8a274fd60a76cc67ea0bbcd1aa86e28",
+  "postgresLockFollowup": {
+    "previousSource": "5a00c7dd9d95a6e8cf2a3446978895b64e8bbc37",
+    "redCiRun": 39115126851,
+    "redPgJob": 117639269945,
+    "pureTestsPassed": 71,
+    "postgresTestUnchanged": true,
+    "explicitForUpdateBeforeCas": true,
+    "exactSourceCiPending": true
+  }
 }

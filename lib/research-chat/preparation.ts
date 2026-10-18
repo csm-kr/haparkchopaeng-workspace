@@ -17,6 +17,30 @@ export interface ChatPreparation {
 }
 const usable = (now: Date) => ({ status: "preparing", expiresAt: { gt: now }, grant: { revokedAt: null, leaseExpiresAt: { gt: now } }, device: { revokedAt: null } });
 
+/** Match the explicit datasource used by the generated-client test factories.
+ * Vitest deliberately replaces DATABASE_URL with a blocked PG URL, including
+ * when the isolated client is SQLite. Never infer a dialect from a DB error.
+ */
+function needsPostgresParentLock(): boolean {
+  const pgClient = process.env.LOCAL_AGENT_PG_TEST_CLIENT_MODULE;
+  const sqliteClient = process.env.LOCAL_AGENT_TEST_CLIENT_MODULE;
+  const invalid = () => { throw new Error("PDF source database configuration is invalid"); };
+  if (pgClient && sqliteClient) return invalid();
+  if (pgClient) {
+    if (process.env.HAPARK_PG_ISOLATED_TESTS !== "1" || !/^postgres(?:ql)?:/.test(process.env.LOCAL_AGENT_PG_TEST_URL ?? "")) return invalid();
+    return true;
+  }
+  if (sqliteClient) {
+    if (process.env.HAPARK_ISOLATED_TESTS !== "1" || !/^file:.+/.test(process.env.LOCAL_AGENT_TEST_DATABASE_URL ?? "")) return invalid();
+    return false;
+  }
+  // The canonical runtime client is PostgreSQL; a build can omit its URL.
+  const url = process.env.DATABASE_URL;
+  if (!url || /^postgres(?:ql)?:/.test(url)) return true;
+  if (/^file:.+/.test(url)) return false;
+  return invalid();
+}
+
 async function currentJob(jobId: string, version?: number) {
   const job = await prisma.localAgentJob.findFirst({ where: { id: jobId, purpose: "chat", ...(version === undefined ? {} : { version }), ...usable(new Date()) } });
   if (!job) {
@@ -55,14 +79,22 @@ export async function finishChatPreparation(plan: ChatPreparation, prepared: Pre
   if (prepared.length !== keys.length || new Set(prepared.map(item => `${item.target.kind}:${item.target.id}`)).size !== keys.length ||
       prepared.some(item => item.target.teamId !== job.teamId || !keys.includes(`${item.target.kind}:${item.target.id}`))) throw new HttpError(409, "INVALID_MATERIALS", "첨부 자료를 다시 준비해주세요.");
   for (const source of prepared) await verifyPreparedPdfSource(source);
+  const postgresParentLock = needsPostgresParentLock();
   await prisma.$transaction(async tx => {
     const ordered = [...prepared].sort((a, b) => {
       const left = `${a.target.kind}:${a.target.id}`, right = `${b.target.kind}:${b.target.id}`;
       return left < right ? -1 : left > right ? 1 : 0;
     });
-    // Parent rows precede assets and the queue row. id=id takes a PostgreSQL key
-    // lock as well: a concurrent first-PDF insert must not bypass an empty snapshot.
+    // Parent rows precede assets and the queue row. A PG no-op UPDATE can use
+    // NO KEY UPDATE, compatible with an FK's KEY SHARE. Take FOR UPDATE first
+    // (no later lock upgrade) so a first-PDF insert also waits for queue CAS.
     for (const source of ordered) {
+      if (postgresParentLock) {
+        const rows = source.target.kind === "paper"
+          ? await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Paper" WHERE "id" = ${source.target.id} AND "teamId" = ${job.teamId} FOR UPDATE`
+          : await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Presentation" WHERE "id" = ${source.target.id} AND "teamId" = ${job.teamId} FOR UPDATE`;
+        if (rows.length !== 1) throw new PaperSourceError("SOURCE_CHANGED");
+      }
       const locked = source.target.kind === "paper"
         ? await tx.paper.updateMany({ where: { id: source.target.id, teamId: job.teamId, pdfUrl: source.objectKey!,
           sourceText: source.source?.text ?? null, sourceDigest: source.source?.digest ?? null }, data: { id: source.target.id } })

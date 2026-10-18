@@ -326,7 +326,7 @@ legacy session hint는 서버 검증 후 한 번 공유하고, 배경 heartbeat/
 
 공통 준비기가 Inngest의 검사 → 페이지별 OCR → 완성 캐시 확정 checkpoint를 직접 조율한다. 준비기 자체를 `step.run`으로 감싸지 않고 PDF 바이트도 checkpoint에 저장하지 않는다. 페이지 단계는 전체 50초 예산에서 서명·다운로드·권한 확인에 쓴 시간을 빼 OCR에 최대 40초를 배정한다. 각 단계에서 현재 팀·자료·작업·45초 실행 허가와 PDF digest를 다시 확인하며 worker가 허가를 갱신하지 않는다. 소유 child handle의 종료를 확인하고, 부분 OCR 결과를 완성 캐시에 쓰지 않는다.
 
-원문 캐시는 PDF 경로·기존 본문·digest CAS로 갱신한다. 채팅의 확정은 정렬된 자료 부모 key 잠금 → 선택 PDF asset 잠금 → 현재 자료 재조회 → 작업 version/grant CAS를 동일 트랜잭션에서 처리한다. 논문 분석 적재는 원래 `Job.createdAt`의 10분 준비 상한과 세션 만료를 최종 적재·잠금 대기 후·커밋 전에 재검사한다. 최신 분석 실행 CAS, 기존 두 관점·Figure·작성자 노트 보존 규칙은 유지한다.
+원문 캐시는 PDF 경로·기존 본문·digest CAS로 갱신한다. 채팅의 확정은 정렬된 자료 부모 잠금 → 선택 PDF asset 잠금 → 현재 자료 재조회 → 작업 version/grant CAS를 동일 트랜잭션에서 처리한다. PostgreSQL의 부모 잠금은 최초 CAS 이전에 팀·ID가 바인딩된 `SELECT … FOR UPDATE`로 확보한다. 같은 ID를 쓰는 UPDATE는 FK 삽입을 막는 강한 키 잠금을 보장하지 않는다. SQLite는 기존 CAS 쓰기 잠금을 유지하며, 검증용 생성 클라이언트의 명시 설정이 일반 `DATABASE_URL`보다 우선한다. 논문 분석 적재는 원래 `Job.createdAt`의 10분 준비 상한과 세션 만료를 최종 적재·잠금 대기 후·커밋 전에 재검사한다. 최신 분석 실행 CAS, 기존 두 관점·Figure·작성자 노트 보존 규칙은 유지한다.
 
 유효 grant 중 서버가 이미 접수한 `completed` 결과의 로그아웃 후 검증·저장은 ADR-026대로 허용한다. 새 OCR 준비·신규 추론 적재와 이미 접수한 결과의 후처리는 구분하며 최종 저장의 현재 멤버십 검증은 유지한다.
 

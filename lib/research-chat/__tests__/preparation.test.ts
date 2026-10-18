@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ job: vi.fn(), knownJob: vi.fn(), update: vi.fn(), member: vi.fn(), papers: vi.fn(), presentations: vi.fn(), verify: vi.fn(), transaction: vi.fn(), lockPaper: vi.fn(), lockPresentation: vi.fn(), lockAsset: vi.fn() }));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const m = vi.hoisted(() => ({ job: vi.fn(), knownJob: vi.fn(), update: vi.fn(), member: vi.fn(), papers: vi.fn(), presentations: vi.fn(), verify: vi.fn(), transaction: vi.fn(), lockPaper: vi.fn(), lockPresentation: vi.fn(), lockAsset: vi.fn(), raw: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { localAgentJob: { findFirst: m.job, findUnique: m.knownJob, updateMany: m.update }, membership: { findUnique: m.member }, paper: { findMany: m.papers }, presentation: { findMany: m.presentations }, $transaction: m.transaction } }));
 vi.mock("@/worker/prepare-pdf-source", () => ({ verifyPreparedPdfSource: m.verify }));
 import { assertChatPreparation, beginChatPreparation, finishChatPreparation } from "../preparation";
@@ -9,6 +9,9 @@ import { PaperSourceError } from "@/lib/local-ai/source";
 const context = JSON.stringify({ version: 1, kind: "research_chat", truncated: false, preparing: true, papers: [], presentations: [{ id: "seminar", title: "주간 세미나" }], history: [{ turn: 1, question: "앞선 질문", answer: "앞선 답변" }] });
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("LOCAL_AGENT_TEST_CLIENT_MODULE", ""); vi.stubEnv("LOCAL_AGENT_PG_TEST_CLIENT_MODULE", "");
+  vi.stubEnv("HAPARK_ISOLATED_TESTS", ""); vi.stubEnv("HAPARK_PG_ISOLATED_TESTS", "");
+  vi.stubEnv("DATABASE_URL", "postgresql://blocked:blocked@127.0.0.1:1/unit_no_database");
   m.job.mockResolvedValue({ id: "job", teamId: "team", memberId: "member", version: 0, context });
   m.knownJob.mockResolvedValue({ id: "job" });
   m.member.mockResolvedValue({ memberId: "member" });
@@ -17,8 +20,11 @@ beforeEach(() => {
   m.verify.mockResolvedValue(undefined);
   m.update.mockResolvedValue({ count: 1 });
   m.lockPaper.mockResolvedValue({ count: 1 }); m.lockPresentation.mockResolvedValue({ count: 1 }); m.lockAsset.mockResolvedValue({ count: 1 });
-  m.transaction.mockImplementation(async action => action({ localAgentJob: { updateMany: m.update }, paper: { findMany: m.papers, updateMany: m.lockPaper }, presentation: { findMany: m.presentations, updateMany: m.lockPresentation }, presentationAsset: { updateMany: m.lockAsset } }));
+  m.raw.mockImplementation(async (_query, id) => [{ id }]);
+  m.transaction.mockImplementation(async action => action({ $queryRaw: m.raw, localAgentJob: { updateMany: m.update }, paper: { findMany: m.papers, updateMany: m.lockPaper }, presentation: { findMany: m.presentations, updateMany: m.lockPresentation }, presentationAsset: { updateMany: m.lockAsset } }));
 });
+afterEach(() => { vi.unstubAllEnvs(); });
+const seminarSource = () => ({ target: { kind: "presentation" as const, id: "seminar", teamId: "team" }, objectKey: "presentations/private.pdf", assetId: "pdf", source: { text: JSON.stringify([{ page: 1, text: "Verified seminar body" }]), digest: "a".repeat(64), pageCount: 1 } });
 
 describe("durable chat material preparation", () => {
   it("reads the team's seminar PDF off the request path and queues only extracted text and captured history", async () => {
@@ -91,5 +97,46 @@ describe("durable chat material preparation", () => {
     expect(m.lockPresentation.mock.invocationCallOrder[0]).toBeLessThan(m.lockAsset.mock.invocationCallOrder[0]);
     expect(m.lockAsset.mock.invocationCallOrder[0]).toBeLessThan(m.presentations.mock.invocationCallOrder[0]);
     expect(m.presentations.mock.invocationCallOrder[0]).toBeLessThan(m.update.mock.invocationCallOrder[0]);
+  });
+  it("takes explicit parameterized PostgreSQL FOR UPDATE before the first parent UPDATE instead of relying on an unchanged id", async () => {
+    const plan = await beginChatPreparation("job");
+    await finishChatPreparation(plan!, [seminarSource()]);
+    expect(m.raw).toHaveBeenCalledOnce();
+    expect(m.raw.mock.calls[0][0].join("")).toContain('FROM "Presentation"');
+    expect(m.raw.mock.calls[0][0].join("")).toContain('"teamId" = ');
+    expect(m.raw.mock.calls[0][0].join("")).toContain("FOR UPDATE");
+    expect(m.raw.mock.calls[0].slice(1)).toEqual(["seminar", "team"]);
+    expect(m.raw.mock.invocationCallOrder[0]).toBeLessThan(m.lockPresentation.mock.invocationCallOrder[0]);
+  });
+  it("uses the isolated SQLite datasource despite Vitest's blocked PostgreSQL DATABASE_URL", async () => {
+    vi.stubEnv("LOCAL_AGENT_TEST_CLIENT_MODULE", "C:/synthetic/client/index.js");
+    vi.stubEnv("LOCAL_AGENT_TEST_DATABASE_URL", "file:C:/synthetic/agent.db");
+    vi.stubEnv("HAPARK_ISOLATED_TESTS", "1");
+    const plan = await beginChatPreparation("job");
+    await finishChatPreparation(plan!, [seminarSource()]);
+    expect(m.raw).not.toHaveBeenCalled();
+    expect(m.lockPresentation).toHaveBeenCalledOnce();
+    expect(m.update).toHaveBeenCalledOnce();
+  });
+  it("uses the explicit guarded PostgreSQL datasource rather than an unrelated DATABASE_URL", async () => {
+    vi.stubEnv("LOCAL_AGENT_PG_TEST_CLIENT_MODULE", "C:/synthetic/pg-client/index.js");
+    vi.stubEnv("LOCAL_AGENT_PG_TEST_URL", "postgresql://synthetic:synthetic@127.0.0.1:5439/hapark_local_agent_test");
+    vi.stubEnv("HAPARK_PG_ISOLATED_TESTS", "1");
+    vi.stubEnv("DATABASE_URL", "file:C:/synthetic/unrelated.db");
+    const plan = await beginChatPreparation("job");
+    await finishChatPreparation(plan!, [seminarSource()]);
+    expect(m.raw).toHaveBeenCalledOnce();
+  });
+  it.each(["mixed-clients", "unguarded-client", "unsupported-url"])("fails closed for %s instead of silently skipping a required lock", async mode => {
+    if (mode === "mixed-clients") {
+      vi.stubEnv("LOCAL_AGENT_TEST_CLIENT_MODULE", "C:/synthetic/sqlite-client/index.js");
+      vi.stubEnv("LOCAL_AGENT_PG_TEST_CLIENT_MODULE", "C:/synthetic/pg-client/index.js");
+    } else if (mode === "unguarded-client") {
+      vi.stubEnv("LOCAL_AGENT_PG_TEST_CLIENT_MODULE", "C:/synthetic/pg-client/index.js");
+    } else vi.stubEnv("DATABASE_URL", "mysql://synthetic.invalid/db");
+    const plan = await beginChatPreparation("job");
+    await expect(finishChatPreparation(plan!, [seminarSource()])).rejects.toThrow("PDF source database configuration is invalid");
+    expect(m.lockPresentation).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
   });
 });

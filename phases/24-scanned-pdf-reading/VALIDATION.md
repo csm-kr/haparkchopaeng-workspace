@@ -8,7 +8,7 @@
 - PDF 20MB, 논문 30쪽, 발표 자료 150쪽, 자료당 본문 120,000자다. 페이지 번호·PDF SHA256과 선택적 `method: "ocr"`를 보존한다. 정상 native 본문과 기존 캐시는 계속 읽는다.
 - 검사 → 페이지별 OCR → 캐시 확정을 서로 다른 durable step으로 실행한다. 준비기 자체의 중첩 `step.run`과 PDF Buffer checkpoint 저장은 금지한다. 서명·다운로드는 같은 abort signal을 사용한다. 페이지 총 예산 50초에서 경과 시간을 빼 OCR에 최대 40초를 전달하며 child 종료 확인 시간을 별도로 확보한다.
 - 각 페이지와 최종 적재에서 팀·멤버십·작업 상태·원본 경로/digest·기존 45초 grant를 확인한다. worker는 grant를 갱신하지 않는다. 분석 준비는 원래 생성 시각부터 10분이며 마지막 대기열 적재와 트랜잭션 잠금 대기 후에도 같은 상한을 적용한다.
-- 캐시 CAS는 기존 본문·digest·PDF 경로를 포함한다. 채팅은 정렬된 자료 부모의 `id=id` key 잠금, 선택 asset 잠금, 최종 자료 조회, 작업 version/grant CAS를 동일 트랜잭션에서 묶는다. 새 Device/Membership 잠금이나 DDL을 추가하지 않는다.
+- 캐시 CAS는 기존 본문·digest·PDF 경로를 포함한다. 채팅은 정렬된 자료 부모의 명시적 PostgreSQL `SELECT … FOR UPDATE`, 선택 asset 잠금, 최종 자료 조회, 작업 version/grant CAS를 동일 트랜잭션에서 묶는다. PostgreSQL 잠금은 최초 CAS 전에 팀·ID를 매개변수로 바인딩한다. SQLite는 기존 CAS 쓰기 잠금을 유지한다. 새 Device/Membership 잠금이나 DDL을 추가하지 않는다.
 - strict 인용·캡션 검증은 인식된 본문과 대조한다. 파싱 가능한 OCR 페이지가 있는 논문만 `sourceHasOcr=true`이며 과거 캐시 파싱 실패는 상태 조회 오류로 전파하지 않는다. Figure native 모듈의 동적 import·렌더 실패는 검증된 본문과 캡션 저장에서 격리한다.
 
 ## RED → GREEN 관측
@@ -28,6 +28,8 @@
 - 실제 MuPDF·동봉 Tesseract를 사용하는 합성 영·한 이미지 PDF, 혼합·빈 페이지, 제한/종료 검증은 [source OCR](../../lib/local-ai/__tests__/source-ocr.test.ts), [실제 OCR](../../lib/local-ai/__tests__/pdf-ocr-real.test.ts), [배포 dependency closure](../../lib/local-ai/__tests__/pdf-ocr-bundle.test.ts)에서 별도로 다룬다. 외부 모델 추론·실제 사용자 PDF의 검증은 수행하지 않았다.
 
 ## 최종 하네스·배포 대기
+
+소스 `5a00c7d`의 첫 원격 PostgreSQL 실행은 기존 15개 통과, 신규 첫 PDF 삽입 경합 1개 실패였다. 같은 ID를 쓰는 UPDATE는 실제 키 값이 바뀌지 않아 `NO KEY UPDATE`가 되며 FK의 `KEY SHARE`와 호환되므로, `id=id`만으로 삽입을 막는다는 이전 가정이 잘못됐다. 테스트의 실패 조건은 유지하고 PostgreSQL에만 명시적 `FOR UPDATE`를 최초 CAS 전에 추가했다. 생성된 테스트 클라이언트 선택을 `DATABASE_URL`보다 먼저 확인해 SQLite 검증과 운영 PG를 구분하고, 혼합되거나 지원하지 않는 설정은 실패시킨다. 이 수정의 실제 PostgreSQL 통과는 다음 정확 소스 CI에서 확인한다.
 
 부모 최종 하네스 재실행에서 source/OCR 6 suites·31 PASS, 격리 SQLite 포함 전체 144 suites·1,167 PASS를 확인했다. PostgreSQL 전용 16개는 전용 CI에서만 실행한다. Chromium은 12 PASS, 실제 HTTP 서버·데스크톱 런타임의 연결·질문 결과·취소·로그아웃·쿠키 소멸 검증도 PASS다. 신규 SQLite fixture의 파일 크기 타입을 String으로 수정한 뒤 다시 실행한 결과이며, 제품 코드의 기존 검증을 생략하지 않았다. 소유 테스트 DB와 Prisma 클라이언트는 검증기가 정상 복구했다.
 
