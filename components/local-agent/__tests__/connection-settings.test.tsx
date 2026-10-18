@@ -9,7 +9,7 @@ import type { ResearchChatApi } from "@/components/research-chat/client";
 import type { LocalAgentDeviceView, LocalAgentProviderStatus } from "@/types/local-agent";
 import { LocalAgentModelPicker } from "../model-picker";
 
-beforeEach(() => { window.sessionStorage.clear(); window.history.replaceState(null, "", "/ai-chat"); });
+beforeEach(() => { window.sessionStorage.clear(); window.localStorage.clear(); window.history.replaceState(null, "", "/ai-chat"); });
 afterEach(cleanup);
 
 function fixture() {
@@ -29,8 +29,8 @@ it("연결 설정을 열었을 때만 모델과 effort가 보이고 선택값이
   const model = await screen.findByRole("combobox", { name: "모델" });
   await waitFor(() => expect(model).toBeEnabled());
   fireEvent.change(model, { target: { value: "codex:second" } });
-  expect(screen.queryByRole("radio", { name: "매우 높음" })).toBeNull();
-  fireEvent.click(screen.getByRole("radio", { name: "높음" }));
+  expect(screen.queryByRole("radio", { name: "xhigh" })).toBeNull();
+  fireEvent.click(screen.getByRole("radio", { name: "high" }));
   fireEvent.keyDown(screen.getByRole("dialog", { name: "AI 연결" }), { key: "Escape" });
   expect(entry).toHaveFocus();
   expect(screen.queryByRole("combobox", { name: "모델" })).toBeNull();

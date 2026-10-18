@@ -38,6 +38,30 @@ const Context = React.createContext<ConnectionValue | null>(null);
 
 function storageGet(key: string) { try { return window.sessionStorage.getItem(key); } catch { return null; } }
 function storagePut(key: string, value: string | null) { try { if (value) window.sessionStorage.setItem(key, value); else window.sessionStorage.removeItem(key); } catch { /* Hint only; authorization stays on server. */ } }
+// Share only the non-secret device hint. Every tab must still validate its grant on the server.
+function sharedDeviceHint(key: string) { try { return window.localStorage.getItem(key); } catch { return null; } }
+function deviceIdFromHint(value: string | null): string | null {
+  if (!value || value.length > 1024) return null;
+  if (!value.startsWith("{")) return value;
+  try {
+    const hint = JSON.parse(value);
+    return typeof hint?.deviceId === "string" && typeof hint?.revision === "string" ? hint.deviceId : null;
+  } catch { return null; }
+}
+function deviceHintGet(key: string) { return deviceIdFromHint(sharedDeviceHint(key)) ?? storageGet(key); }
+function deviceHintPut(key: string, value: string | null, previous: string | null = null) {
+  storagePut(key, value);
+  try {
+    if (value) {
+      // A new approval of the same PC must also notify existing tabs and supersede old replies.
+      const hint = JSON.stringify({ deviceId: value, revision: crypto.randomUUID() });
+      window.localStorage.setItem(key, hint);
+      return hint;
+    }
+    else if (window.localStorage.getItem(key) === previous) window.localStorage.removeItem(key);
+  } catch { /* Session storage still restores this tab when shared storage is unavailable. */ }
+  return sharedDeviceHint(key);
+}
 function authorizedFailure(error: unknown) { return error instanceof LocalAgentApiError && (error.status === 401 || error.status === 403); }
 
 export function LocalAgentProvider({ teamId, children, api = localAgentApi, launchConnector = browserLaunch }: {
@@ -74,6 +98,7 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
   const deviceRef = React.useRef(device);
   deviceRef.current = device;
   const chatTargetRef = React.useRef<ChatTarget | null>(null);
+  const deviceHintRef = React.useRef<string | null>(null);
   const deviceKey = `hapark.local-agent.device:${teamId}`;
   const attemptKey = `hapark.local-agent.attempt:${teamId}`;
   const effortKey = `hapark.local-agent.effort:${teamId}`;
@@ -88,16 +113,18 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     updateChatTarget(null);
     setDevice(null); setAttempt(null); setDeepLink(null); setSelectedModel(null); setJob(null); setJobBusy(false);
     submitting.current = false; requestIntent.current = null;
-    storagePut(deviceKey, null); storagePut(attemptKey, null);
+    deviceHintPut(deviceKey, null, deviceHintRef.current); deviceHintRef.current = null;
+    storagePut(attemptKey, null);
   }, [deviceKey, attemptKey, updateChatTarget]);
   const handleFailure = React.useCallback((error: unknown) => {
     setMessage(errorMessage(error));
     if (authorizedFailure(error)) { epoch.current += 1; forget(); setPhase("login_required"); }
     else setPhase("error");
   }, [forget]);
-  const acceptDevice = React.useCallback((next: LocalAgentDeviceView) => {
+  const acceptDevice = React.useCallback((next: LocalAgentDeviceView, publishHint = false) => {
     const sameDevice = deviceRef.current?.id === next.id;
     updateChatTarget(rememberChatTarget(next, chatTargetRef.current));
+    if (publishHint) deviceHintRef.current = deviceHintPut(deviceKey, next.id);
     setDevice(next); storagePut(deviceKey, next.id); setPhase(next.online ? "connected" : "offline"); setMessage(null);
     setSelectedModel((selection) => sameDevice && selection && next.providers.some((provider) => provider.provider === selection.provider && provider.status === "ready" && provider.models.some((model) => model.id === selection.model)) ? selection : null);
   }, [deviceKey, updateChatTarget]);
@@ -106,7 +133,7 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     if (previous && (next.id !== previous.id || next.version < previous.version)) return;
     attemptRef.current = next; setAttempt(next);
     if (next.status === "connected" && next.device) {
-      storagePut(attemptKey, null); setDeepLink(null); setFallback(false); acceptDevice(next.device);
+      storagePut(attemptKey, null); setDeepLink(null); setFallback(false); acceptDevice(next.device, true);
     } else if (next.status === "awaiting_code") { setPhase("awaiting_code"); setFallback(false); }
     else if (next.status === "expired" || next.status === "cancelled") {
       setPhase(next.status); setAttempt(null); attemptRef.current = null; setDeepLink(null); storagePut(attemptKey, null);
@@ -120,52 +147,95 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     chatTargetRef.current = restoreChatTarget(storageGet(chatTargetKey));
     const revision = epoch.current;
     if (teamId) {
-      void api.status(storageGet(deviceKey)).then(async (status) => {
-        if (!current(revision)) return;
-        if (status.device) { acceptDevice(status.device); return; }
+      const savedHint = sharedDeviceHint(deviceKey);
+      const savedDevice = deviceHintGet(deviceKey);
+      deviceHintRef.current = savedHint;
+      void api.status(savedDevice).then(async (status) => {
+        if (!current(revision) || sharedDeviceHint(deviceKey) !== savedHint) return;
+        if (status.device) {
+          // Migrate an authenticated legacy tab hint once, without replacing a peer's approval.
+          if (savedHint === null && savedDevice === status.device.id) deviceHintRef.current = deviceHintPut(deviceKey, status.device.id);
+          acceptDevice(status.device); return;
+        }
         const pending = storageGet(attemptKey);
         if (pending) {
           try {
             const restored = await api.getAttempt(pending);
-            if (current(revision)) acceptAttempt(restored);
+            if (current(revision) && sharedDeviceHint(deviceKey) === savedHint) acceptAttempt(restored);
             return;
-          } catch (error) { if (authorizedFailure(error)) throw error; storagePut(attemptKey, null); }
+          } catch (error) {
+            if (!current(revision) || sharedDeviceHint(deviceKey) !== savedHint) return;
+            if (authorizedFailure(error)) throw error;
+            storagePut(attemptKey, null);
+          }
         }
-        if (current(revision)) setPhase("idle");
-      }).catch((error) => { if (current(revision)) handleFailure(error); });
+        if (current(revision)) {
+          deviceHintPut(deviceKey, null, savedHint); deviceHintRef.current = null;
+          setPhase("idle");
+        }
+      }).catch((error) => { if (current(revision) && sharedDeviceHint(deviceKey) === savedHint) handleFailure(error); });
     }
     return () => { alive.current = false; epoch.current += 1; };
   // api and team are fixed for this keyed session; callbacks only use that scope.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  React.useEffect(() => {
+    if (!teamId) return;
+    const sharedDeviceChanged = (event: StorageEvent) => {
+      if (event.key !== deviceKey) return;
+      try { if (event.storageArea !== window.localStorage) return; } catch { return; }
+      if (event.newValue !== sharedDeviceHint(deviceKey) || event.newValue === deviceHintRef.current) return;
+      // Invalidate replies from a previous device before checking the newly approved hint.
+      const revision = ++epoch.current;
+      starting.current = false;
+      forget(); setMessage(null);
+      deviceHintRef.current = event.newValue;
+      const nextDeviceId = deviceIdFromHint(event.newValue);
+      storagePut(deviceKey, nextDeviceId);
+      if (!nextDeviceId) { setPhase("idle"); return; }
+      setPhase("loading");
+      void api.status(nextDeviceId).then(status => {
+        if (!current(revision) || sharedDeviceHint(deviceKey) !== event.newValue) return;
+        if (status.device) acceptDevice(status.device);
+        else { forget(); setPhase("idle"); }
+      }).catch(error => { if (current(revision) && sharedDeviceHint(deviceKey) === event.newValue) handleFailure(error); });
+    };
+    window.addEventListener("storage", sharedDeviceChanged);
+    return () => window.removeEventListener("storage", sharedDeviceChanged);
+  }, [teamId, deviceKey, api, forget, acceptDevice, handleFailure]);
+
   async function refresh() {
     const revision = epoch.current;
+    const hint = deviceHintRef.current;
+    if (sharedDeviceHint(deviceKey) !== hint) return;
     try {
-      const status = await api.status(deviceRef.current?.id ?? storageGet(deviceKey));
-      if (!current(revision)) return;
+      const status = await api.status(deviceRef.current?.id ?? deviceHintGet(deviceKey));
+      if (!current(revision) || sharedDeviceHint(deviceKey) !== hint) return;
       if (status.device) acceptDevice(status.device);
       else { forget(); setPhase("idle"); setMessage(null); }
-    } catch (error) { if (current(revision)) handleFailure(error); }
+    } catch (error) { if (current(revision) && sharedDeviceHint(deviceKey) === hint) handleFailure(error); }
   }
 
+  const connectionRevision = epoch.current;
   React.useEffect(() => {
     if (!device?.id || !teamId) return;
     let stopped = false;
     let syncing = false;
     const revision = epoch.current;
+    const hint = deviceHintRef.current;
     const sync = async () => {
-      if (stopped || syncing) return;
+      if (stopped || syncing || sharedDeviceHint(deviceKey) !== hint) return;
       syncing = true;
       try {
         await api.heartbeat(device.id);
-        if (stopped || !current(revision)) return;
+        if (stopped || !current(revision) || sharedDeviceHint(deviceKey) !== hint) return;
         const status = await api.status(device.id);
-        if (stopped || !current(revision)) return;
+        if (stopped || !current(revision) || sharedDeviceHint(deviceKey) !== hint) return;
         if (status.device) acceptDevice(status.device);
         else { forget(); setPhase("idle"); }
       } catch (error) {
-        if (stopped || !current(revision)) return;
+        if (stopped || !current(revision) || sharedDeviceHint(deviceKey) !== hint) return;
         if (authorizedFailure(error)) handleFailure(error);
         else { setPhase("offline"); setMessage("통신이 잠시 끊겼어요. 연결을 다시 확인하고 있어요."); }
       } finally { syncing = false; }
@@ -175,27 +245,29 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     const resume = () => { if (document.visibilityState !== "hidden") void sync(); };
     window.addEventListener("focus", resume); document.addEventListener("visibilitychange", resume);
     return () => { stopped = true; clearInterval(interval); window.removeEventListener("focus", resume); document.removeEventListener("visibilitychange", resume); };
-  }, [api, device?.id, teamId, acceptDevice, forget, handleFailure]);
+  }, [api, device?.id, teamId, deviceKey, connectionRevision, acceptDevice, forget, handleFailure]);
 
   React.useEffect(() => {
     if (!attempt?.id || (phase !== "opening" && phase !== "awaiting_code")) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const revision = epoch.current;
+    const hint = deviceHintRef.current;
     const poll = async () => {
+      if (stopped || !current(revision) || sharedDeviceHint(deviceKey) !== hint) return;
       try {
         const next = await api.getAttempt(attempt.id);
-        if (!stopped && current(revision)) { acceptAttempt(next); setMessage(null); }
+        if (!stopped && current(revision) && sharedDeviceHint(deviceKey) === hint) { acceptAttempt(next); setMessage(null); }
       } catch (error) {
-        if (!stopped && current(revision)) {
+        if (!stopped && current(revision) && sharedDeviceHint(deviceKey) === hint) {
           if (authorizedFailure(error)) handleFailure(error);
           else setMessage("연결 확인을 다시 시도하고 있어요. 잠시만 기다려 주세요.");
         }
-      } finally { if (!stopped && current(revision)) timer = setTimeout(() => void poll(), 1000); }
+      } finally { if (!stopped && current(revision) && sharedDeviceHint(deviceKey) === hint) timer = setTimeout(() => void poll(), 1000); }
     };
     timer = setTimeout(() => void poll(), 1000);
     return () => { stopped = true; clearTimeout(timer); };
-  }, [api, attempt?.id, phase, acceptAttempt, handleFailure]);
+  }, [api, attempt?.id, phase, deviceKey, acceptAttempt, handleFailure]);
 
   React.useEffect(() => {
     if (phase !== "opening") return;
@@ -235,16 +307,18 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     if (!teamId || starting.current || (!force && (phase === "opening" || phase === "awaiting_code"))) return;
     starting.current = true;
     const revision = ++epoch.current;
+    const hint = sharedDeviceHint(deviceKey);
+    deviceHintRef.current = hint;
     updateChatTarget(null);
     setMessage(null); setFallback(false); setPhase("creating"); setDevice(null); setAttempt(null); attemptRef.current = null; setDeepLink(null); setSelectedModel(null);
     try {
       const next = await api.createAttempt();
-      if (!current(revision)) { void api.cancelAttempt(next.id).catch(() => {}); return; }
+      if (!current(revision) || sharedDeviceHint(deviceKey) !== hint) { void api.cancelAttempt(next.id).catch(() => {}); return; }
       attemptRef.current = next; setAttempt(next); storagePut(attemptKey, next.id);
       setDeepLink(next.deepLink); setPhase(next.status === "awaiting_code" ? "awaiting_code" : "opening");
       if (next.status === "connected" && next.device) acceptAttempt(next);
       else if (!launch(next.deepLink)) setFallback(true);
-    } catch (error) { if (current(revision)) handleFailure(error); }
+    } catch (error) { if (current(revision) && sharedDeviceHint(deviceKey) === hint) handleFailure(error); }
     finally { if (current(revision)) starting.current = false; }
   }
   async function cancel() {

@@ -1,7 +1,7 @@
 import type { LocalAgentDeviceView, LocalAgentEffort, LocalAgentModel } from "@/types/local-agent";
 import type { ModelSelection } from "./provider";
 
-export const EFFORT_LABELS: Record<LocalAgentEffort, string> = { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최대" };
+export const EFFORT_LABELS: Record<LocalAgentEffort, string> = { low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" };
 
 export interface ChatTarget extends ModelSelection { deviceId: string }
 

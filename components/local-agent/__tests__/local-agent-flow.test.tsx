@@ -35,7 +35,7 @@ function View({ api, teamId = "team-a", launch = vi.fn(() => true) }: { api: Loc
     <LocalAgentSettingsCard papers={[{ id: "paper-a", title: "우리 논문" }]} />
   </LocalAgentProvider>;
 }
-beforeEach(() => { window.sessionStorage.clear(); window.history.replaceState(null, "", "/profile"); });
+beforeEach(() => { window.sessionStorage.clear(); window.localStorage.clear(); window.history.replaceState(null, "", "/profile"); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("로컬 AI 연결 흐름", () => {
