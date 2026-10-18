@@ -7,6 +7,47 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('explicit effort reaches each CLI as a validated argument', () => {
+  assert.ok(codexArguments('actual-model', 'high').includes('model_reasoning_effort="high"'));
+  const claude = claudeArguments('sonnet', 'medium');
+  assert.equal(claude[claude.indexOf('--effort') + 1], 'medium');
+  assert.throws(() => codexArguments('actual-model', 'high; run-command'));
+  assert.throws(() => claudeArguments('sonnet', 'unknown'));
+});
+
+test('actual Codex model efforts are preserved while legacy catalogues stay compatible', () => {
+  assert.deepEqual(normalizeModels('codex', [{ id: 'actual-model', displayName: 'Actual', supportedReasoningEfforts: [
+    { reasoningEffort: 'high' }, { reasoningEffort: 'medium' }, { reasoningEffort: 'high' }, { reasoningEffort: 'run-shell' },
+  ] }]), [{ id: 'actual-model', name: 'Actual', reasoningEfforts: ['high', 'medium'] }]);
+  assert.deepEqual(normalizeModels('codex', [{ id: 'legacy-model', displayName: 'Legacy' }]), [{ id: 'legacy-model', name: 'Legacy' }]);
+});
+
+test('server chat context effort is applied to the launched CLI', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hapark-effort-'));
+  const launched = [];
+  const processFactory = (_spec, args, options) => {
+    launched.push(args);
+    const listeners = new Set([options.onMessage ?? (() => {})]);
+    let finish;
+    const done = new Promise(resolve => { finish = resolve; });
+    const emit = message => { for (const listener of listeners) listener(message); };
+    return { done, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, send(message) {
+      if (message.type === 'control_request') queueMicrotask(() => emit({ type: 'control_response', response: { request_id: message.request_id, subtype: 'success', response: { models: [{ value: 'sonnet', displayName: 'Sonnet' }] } } }));
+      if (message.type === 'user') queueMicrotask(() => { emit({ type: 'result', subtype: 'success', is_error: false, result: '완료' }); finish({ code: 0, signal: null }); });
+    }, end() {}, close() { finish({ code: 0, signal: null }); } };
+  };
+  const adapter = createProviderAdapter('claude', { workspaceRoot: root, resolve: () => ({ command: 'fake-claude', prefix: [] }), execute: async (_command, args) => ({ stdout: args.includes('--version') ? '2.1.301' : '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty"}' }), processFactory });
+  try {
+    await adapter.detect();
+    await adapter.run({ model: 'sonnet', prompt: '이야기를 이어가자', context: JSON.stringify({ version: 1, kind: 'research_chat', papers: [], history: [], execution: { effort: 'high' } }), onText() {} });
+    const args = launched.at(-1);
+    assert.equal(args[args.indexOf('--effort') + 1], 'high');
+    const count = launched.length;
+    await assert.rejects(adapter.run({ model: 'sonnet', prompt: '질문', context: JSON.stringify({ version: 1, kind: 'research_chat', execution: { effort: 'invalid' } }), onText() {} }));
+    assert.equal(launched.length, count);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('Claude disables built-in/MCP tools, customizations, persistence and prompt expansion', () => {
   const args = claudeArguments('sonnet');
   assert.equal(args[args.indexOf('--tools') + 1], '');

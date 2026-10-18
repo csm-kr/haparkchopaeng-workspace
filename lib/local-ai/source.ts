@@ -6,6 +6,7 @@ const SOURCE_FAILURES = {
   INVALID_PDF: "PDF 파일을 확인해주세요. 최대 20MB까지 읽을 수 있어요.",
   UNREADABLE_PDF: "PDF 본문을 읽지 못했어요. 텍스트를 선택할 수 있는 PDF로 다시 올려주세요.",
   PAGE_LIMIT: "PDF는 1~30쪽까지 분석할 수 있어요.",
+  SEMINAR_PAGE_LIMIT: "세미나 PDF는 1~150쪽까지 읽을 수 있어요.",
   TEXT_LIMIT: "PDF 본문이 너무 길어요. 12만 자 이하의 논문을 사용해주세요.",
   NO_TEXT: "읽을 수 있는 본문 텍스트가 없어요. 스캔 PDF는 텍스트를 포함한 PDF로 바꿔주세요.",
   INVALID_CACHE: "논문 본문을 다시 준비해주세요.",
@@ -45,7 +46,7 @@ export function parsePaperSource(text: string): { page: number; text: string }[]
 }
 
 /** External durable job only. Original page numbers survive extraction; no silent truncation. */
-export async function extractPdfSource(pdf: Buffer): Promise<PaperSource> {
+export async function extractPdfSource(pdf: Buffer, { maxPages = 30 }: { maxPages?: number } = {}): Promise<PaperSource> {
   if (pdf.length > 20 * 1024 * 1024 || pdf.subarray(0, 5).toString() !== "%PDF-") throw new PaperSourceError("INVALID_PDF");
   const mupdf = await import("mupdf");
   let document: InstanceType<typeof mupdf.Document>;
@@ -53,7 +54,7 @@ export async function extractPdfSource(pdf: Buffer): Promise<PaperSource> {
   catch { throw new PaperSourceError("UNREADABLE_PDF"); }
   try {
     const pageCount = document.countPages();
-    if (pageCount < 1 || pageCount > 30) throw new PaperSourceError("PAGE_LIMIT");
+    if (pageCount < 1 || pageCount > maxPages) throw new PaperSourceError(maxPages === 30 ? "PAGE_LIMIT" : "SEMINAR_PAGE_LIMIT");
     const pages: { page: number; text: string }[] = [];
     let size = 0;
     for (let index = 0; index < pageCount; index++) {

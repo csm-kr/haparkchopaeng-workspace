@@ -17,7 +17,7 @@ export function ConversationList({ conversations, selectedId, onSelect, onNew }:
         <span className="line-clamp-2 break-words text-[13px] font-medium">{conversation.title}</span>
         <time dateTime={conversation.updatedAt} className="text-[11px] text-fg-muted">{new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(new Date(conversation.updatedAt))}</time>
       </button>)}
-      {shown.length === 0 && <p className="px-2 py-5 text-[12px] leading-relaxed text-fg-muted">{conversations.length ? "맞는 대화가 없어요." : "아직 대화가 없어요. 논문을 골라 첫 질문을 남겨 보세요."}</p>}
+      {shown.length === 0 && <p className="px-2 py-5 text-[12px] leading-relaxed text-fg-muted">{conversations.length ? "맞는 대화가 없어요." : "새로운 이야기를 시작해 보세요."}</p>}
     </nav>
   </div>;
 }

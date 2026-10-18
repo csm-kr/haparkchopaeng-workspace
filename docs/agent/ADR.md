@@ -284,8 +284,18 @@
 
 **제품과 한계:** 두 관점 페이지와 공통 Figure 하단은 유지하며 논문 상세에 AI 탭·사이드패널을 추가하지 않는다. 현 CLI 계약은 텍스트 전용으로 파일·브라우저·셸 도구를 차단한다. Figure는 실제 PDF 페이지를 표시하되 해석은 본문·캡션 기반 추론으로 표시한다. 외부 저장소는 방문·검증하지 않으며 `repo.found=false`, `source=paper`로 제한한다.
 
-**개인 연구 대화:** 별도 작업 공간 메뉴 `/ai-chat`에서 같은 팀 논문 1~3개를 선택한다. `ResearchConversation`에 소유자·근거를 저장하고 `LocalAgentJob(purpose=chat)`의 질문·누적 답변을 대화 턴으로 사용한다. 근거 변경은 새 대화로 진행한다. 현재 명시적으로 선택한 모델을 사용하고 부분 답변·중지·끊김·세션 오류를 구분한다. 소유자+활성 팀으로 개인 이력을 지속 조회하되 실행은 현재 세션의 grant를 요구한다. 같은 대화의 동시 턴은 하나이며 재전송은 같은 요청으로 처리한다. 목록 100개·상세 최근 50턴, 모델 문맥은 완료된 최근 8턴과 원문 최대 20만 자이고 생략 여부를 알린다. 대화가 공유 분석·노트를 자동 변경하지 않는다.
+**개인 대화(2026-10-18 개정):** 별도 작업 공간 메뉴 `/ai-chat`에서 자료 없이 자유롭게 대화한다. 질문마다 `@`로 같은 팀 논문·발표 자료를 합계 10개까지 선택한다. `ResearchConversation.paperIds`의 기존 배열은 계속 읽고 새 선택은 version 2 JSON으로 저장한다. `LocalAgentJob(purpose=chat)`의 서버 context에 해당 턴의 자료 스냅샷과 완료된 이전 대화를 보존한다. 자료 본문 준비는 `preparing` 상태의 잡과 `research-chat/prepare` Inngest 이벤트로 처리하며 준비 뒤 실행 권한을 다시 검사한다. 자료 없는 질문은 곧바로 큐에 넣는다. 모델 설정은 현재 연결의 실제 카탈로그를 사용하고 지원이 확인된 추론 강도만 전달한다. 부분 답변·중지·끊김·세션 오류를 구분한다. 소유자+활성 팀으로 개인 이력을 지속 조회하되 실행은 현재 세션의 grant를 요구한다. 같은 대화의 동시 턴은 하나이며 재전송은 같은 요청으로 처리한다. 목록 100개·상세 최근 50턴, 모델 문맥은 완료된 최근 8턴과 원문 최대 20만 자이고 생략 여부를 알린다. 대화가 공유 분석·노트를 자동 변경하지 않는다.
 
 **완료 경계:** 유효한 45초 grant 중 서버가 이미 `completed`로 접수한 결과는 로그아웃 후에도 검증·렌더·영속을 마칠 수 있다. 이후 새 추론·계속 실행·미접수 결과는 거절하며 Inngest는 grant를 갱신하지 않는다. 멤버 제거·팀 삭제는 별도로 다루어 분석 최종 저장 시 현재 멤버십과 논문/팀 범위를 재검증한다.
 
 **운영:** 기존 로컬 연결 5개 테이블에 더해 `ResearchConversation`, `Paper`의 `sourceText/sourceDigest/analysisRequestId/analysisError`, `LocalAgentJob`의 `purpose/conversationId/conversationTurn`가 필요하다. 기존 연결 SQL 이후 `20261017-local-ai-research-chat.sql`을 검토·수동 적용한다. 운영 DB 적용은 아직 하지 않았다. 소스 `3f16685`의 [CI](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·실제 PostgreSQL 13개·Chromium 8개·HTTP 계약·3 OS native/패키징을 통과했다. [DB 적용 순서](../dev/DB.md#local-ai-schema), [API](../dev/API.md), [하네스](../../phases/13-local-ai-research-chat/index.json)를 따른다.
+
+## ADR-027 — 자료 선택이 자유로운 개인 AI 대화
+
+**결정(2026-10-18):** 기존 연구 채팅의 자료 선택 의무와 대화별 고정 근거를 해제한다. 자료 없이 질문·후속 질문을 전송하고 `@`로 논문·발표 자료를 턴마다 합계 10개까지 선택한다. 질문별 자료와 완료된 이전 대화는 서버가 문맥에 넣으며 사용자 입력으로 원문·이력을 대신 받지 않는다. 삭제되거나 접근할 수 없는 현재 첨부 자료는 이력 조회를 막지 않는다. 새 실행은 자료 권한을 엄격히 확인한다.
+
+연결 설정은 사이드바 계정 위에 둔다. 연결된 실제 카탈로그의 첫 사용 가능 모델을 현재 선택으로 표시하고 유효한 수동 선택을 유지한다. 카탈로그가 명시한 추론 강도만 UI에 표시하고 생성·claim에서 재검사한다. 구 앱 0.1.2는 강도를 생략해 자유 대화를 계속 실행할 수 있다. 새 CLI adapter는 기존 REST v1의 context 안에 있는 `execution.effort`만 검증해 CLI 인수로 전달한다.
+
+자료 준비는 Inngest `research-chat/prepare`에서 수행한다. `preparing`도 동시 작업 상한·취소·세션 회수에 포함하고, 기기는 `queued`만 claim한다. 준비 후 현재 grant·팀 멤버십·version을 다시 검사한다. DB DDL은 추가하지 않으며 기존 배열 선택을 읽고 새 version 2 선택을 Json 필드에 저장한다. 배포 순서는 호환 웹 → 새 연결기다. 구 웹은 새 모델 메타데이터·version 2 선택을 읽지 못하므로 데이터 기록 후 웹 롤백에는 호환 reader를 유지해야 한다.
+
+범위·화면은 [설계](../design/LOCAL_AI_RESEARCH_CHAT.md), 배포 검증은 [phase 19](../../phases/19-free-ai-chat-release/index.json)로 추적한다. 논문 상세의 두 관점·공통 Figure·명시적 논문 분석과 45초 실행 허가는 ADR-026을 유지한다.

@@ -29,10 +29,24 @@ beforeEach(() => {
   fixture.db.researchConversation.findFirst.mockResolvedValue({ id: "conversation" });
   fixture.db.localAgentJob.findUnique.mockResolvedValue(null);
   fixture.db.localAgentJob.count.mockResolvedValue(0);
-  fixture.db.localAgentJob.create.mockImplementation(async ({ data }) => ({ ...data, id: "job", version: 0, status: "queued", response: "", error: null, createdAt: new Date(), updatedAt: new Date() }));
+  fixture.db.localAgentJob.create.mockImplementation(async ({ data }) => ({ ...data, id: "job", version: 0, status: data.status ?? "queued", response: "", error: null, createdAt: new Date(), updatedAt: new Date() }));
 });
 
 describe("server-prepared local execution", () => {
+  it("queues a private free-chat turn without requiring a paper", async () => {
+    const job = await createPreparedJob(scope(), { ...input(), paperId: "" }, '{"kind":"research_chat","papers":[],"history":[]}', { purpose: "chat", conversationId: "conversation", conversationTurn: 1 });
+    expect(job.id).toBe("job");
+    expect(fixture.db.paper.findFirst).not.toHaveBeenCalled();
+    expect(fixture.db.localAgentJob.create).toHaveBeenCalledWith({ data: expect.objectContaining({ paperId: "", purpose: "chat", status: "queued" }) });
+    await expect(createPreparedJob(scope(), { ...input(), paperId: "" }, "source", { purpose: "paper_analysis" })).rejects.toMatchObject({ status: 400 });
+  });
+  it("keeps material preparation out of the claimable queue and counts it against admission limits", async () => {
+    const options = { purpose: "chat" as const, conversationId: "conversation", conversationTurn: 1, initialStatus: "preparing" as const };
+    expect((await createPreparedJob(scope(), input(), "captured material context", options)).status).toBe("preparing");
+    fixture.db.localAgentJob.count.mockImplementation(async ({ where }) => ["preparing", "preparing", "preparing", "preparing", "preparing"].filter(status => where.status.in.includes(status)).length);
+    await expect(createPreparedJob(scope(), input(), "captured material context", options)).rejects.toMatchObject({ code: "QUEUE_FULL" });
+    expect(fixture.db.localAgentJob.create).toHaveBeenCalledTimes(1);
+  });
   it("names the AI Bridge app when rejecting invalid device credentials", async () => {
     await expect(acknowledgeDesktop({ attemptId: "attempt", launchToken: "launch", deviceToken: "invalid", deviceName: "PC", platform: "windows" }))
       .rejects.toMatchObject({ status: 400, code: "BAD_REQUEST", message: "AI 브릿지 정보를 확인해주세요." });
@@ -52,6 +66,17 @@ describe("server-prepared local execution", () => {
     expect(fixture.db.localAgentJob.create).not.toHaveBeenCalled();
     fixture.db.localAgentDevice.findFirst.mockResolvedValue(null);
     await expect(assertJobTarget(scope(), input())).rejects.toMatchObject({ status: 403 });
+  });
+  it("rejects effort levels absent from the actual model catalog before queuing", async () => {
+    fixture.db.localAgentSnapshot.findUnique.mockResolvedValue({ observedAt: new Date(), payload: { provider: "codex", status: "ready", models: [{ id: "actual", name: "Actual", reasoningEfforts: ["low", "medium"] }], quota: null, observedAt: new Date().toISOString() } });
+    await expect(createPreparedJob(scope(), input(), "context", { purpose: "chat", conversationId: "conversation", conversationTurn: 1, effort: "high" })).rejects.toMatchObject({ code: "EFFORT_UNAVAILABLE" });
+    expect(fixture.db.localAgentJob.create).not.toHaveBeenCalled();
+  });
+  it("keeps legacy free chat available while rejecting an unverified explicit effort", async () => {
+    const options = { purpose: "chat" as const, conversationId: "conversation", conversationTurn: 1 };
+    await expect(createPreparedJob(scope(), { ...input(), paperId: "" }, "legacy context", { ...options, effort: "high" })).rejects.toMatchObject({ code: "EFFORT_UNAVAILABLE" });
+    expect(fixture.db.localAgentJob.create).not.toHaveBeenCalled();
+    expect((await createPreparedJob(scope(), { ...input(), paperId: "" }, "legacy context", options)).status).toBe("queued");
   });
   it("refuses stale catalogs, expired grants, overlong context and foreign conversations", async () => {
     fixture.db.localAgentSnapshot.findUnique.mockResolvedValue(null);

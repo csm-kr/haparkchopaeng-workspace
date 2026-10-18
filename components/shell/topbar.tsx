@@ -2,7 +2,6 @@ import * as React from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LocalAgentEntry } from "@/components/local-agent/entry";
 
 // 상단바 — 좌측 브레드크럼 + 우측 맥락 액션 슬롯. 모든 화면이 <Topbar crumbs actions />.
 // 상호작용 상태가 없으므로 RSC로 둔다(actions로 받는 섬만 클라이언트).
@@ -59,7 +58,6 @@ export function Topbar({ crumbs, actions }: TopbarProps) {
       </nav>
       <div className="flex shrink-0 items-center gap-2">
         {actions}
-        <LocalAgentEntry />
       </div>
     </header>
   );

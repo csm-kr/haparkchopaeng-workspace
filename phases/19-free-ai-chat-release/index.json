@@ -1,0 +1,62 @@
+{
+  "project": "hapark",
+  "phase": "19-free-ai-chat-release",
+  "execution": "Selective import into isolated worktree; collaborative TDD; production deployment authorized by user.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "free-chat-production-release",
+      "status": "completed",
+      "paths": [
+        "lib/research-chat",
+        "lib/local-agent",
+        "components/research-chat",
+        "components/local-agent",
+        "worker/research-chat.ts",
+        "connector/core/adapters.mjs"
+      ],
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ],
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "lint"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "build"
+        ],
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "e2e"
+        ],
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "wire"
+        ]
+      ],
+      "started_at": "2026-10-18T14:21:53+0900",
+      "completed_at": "2026-10-18T14:28:52+0900",
+      "summary": "자료0·후속대화·턴별 @자료·durable preparing·catalog effort를 접합했습니다. 격리 웹 1009 passed/15 skipped, connector 206, Chromium 10, HTTP wire 1 및 lint/production build 통과. PG16·운영 배포·실제 계정 추론은 별도 확인 전입니다."
+    }
+  ],
+  "productionDeployed": false,
+  "connectorReleased": false,
+  "realConversationVerified": false,
+  "baselineCommit": "ad492c3a19a375ea8ecaf05337d3bdd8f0eb754d",
+  "created_at": "2026-10-18T14:21:53+0900",
+  "completed_at": "2026-10-18T14:28:52+0900",
+  "completionScope": "Local quality gates passed; production deployment, release and account inference are recorded separately after publication."
+}

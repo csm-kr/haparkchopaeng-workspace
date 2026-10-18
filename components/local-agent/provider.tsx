@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import type { LocalAgentAttemptView, LocalAgentDeviceView, LocalAgentJobCreateInput, LocalAgentJobView, LocalAgentProvider as ProviderName } from "@/types/local-agent";
+import type { LocalAgentAttemptView, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobView, LocalAgentProvider as ProviderName } from "@/types/local-agent";
 import { errorMessage, launchConnector as browserLaunch, localAgentApi, LocalAgentApiError, type LocalAgentApi } from "./client";
 import { ConnectionModal } from "./connection-modal";
+import { rememberChatTarget, restoreChatTarget, type ChatTarget } from "./chat-selection";
 
 export type ConnectionPhase = "loading" | "idle" | "creating" | "opening" | "awaiting_code" | "connected" | "offline" | "cancelled" | "expired" | "error" | "login_required";
 export interface ModelSelection { provider: ProviderName; model: string }
@@ -15,6 +16,9 @@ interface ConnectionValue {
   deepLink: string | null;
   message: string | null;
   selectedModel: ModelSelection | null;
+  chatTarget: ChatTarget | null;
+  effort: LocalAgentEffort;
+  setEffort: (effort: LocalAgentEffort) => void;
   job: LocalAgentJobView | null;
   jobBusy: boolean;
   fallback: boolean;
@@ -53,6 +57,8 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
   const [deepLink, setDeepLink] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [selectedModel, setSelectedModel] = React.useState<ModelSelection | null>(null);
+  const [chatTarget, setChatTarget] = React.useState<ChatTarget | null>(null);
+  const [effort, setEffort] = React.useState<LocalAgentEffort>("medium");
   const [job, setJob] = React.useState<LocalAgentJobView | null>(null);
   const [jobBusy, setJobBusy] = React.useState(false);
   const [modalOpen, setModalOpen] = React.useState(false);
@@ -67,24 +73,34 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
   attemptRef.current = attempt;
   const deviceRef = React.useRef(device);
   deviceRef.current = device;
+  const chatTargetRef = React.useRef<ChatTarget | null>(null);
   const deviceKey = `hapark.local-agent.device:${teamId}`;
   const attemptKey = `hapark.local-agent.attempt:${teamId}`;
+  const effortKey = `hapark.local-agent.effort:${teamId}`;
+  const chatTargetKey = `hapark.local-agent.chat-target:${teamId}`;
   const current = (version: number) => alive.current && epoch.current === version;
+  const updateChatTarget = React.useCallback((next: ChatTarget | null) => {
+    chatTargetRef.current = next; setChatTarget(next);
+    storagePut(chatTargetKey, next ? JSON.stringify(next) : null);
+  }, [chatTargetKey]);
 
   const forget = React.useCallback(() => {
+    updateChatTarget(null);
     setDevice(null); setAttempt(null); setDeepLink(null); setSelectedModel(null); setJob(null); setJobBusy(false);
     submitting.current = false; requestIntent.current = null;
     storagePut(deviceKey, null); storagePut(attemptKey, null);
-  }, [deviceKey, attemptKey]);
+  }, [deviceKey, attemptKey, updateChatTarget]);
   const handleFailure = React.useCallback((error: unknown) => {
     setMessage(errorMessage(error));
     if (authorizedFailure(error)) { epoch.current += 1; forget(); setPhase("login_required"); }
     else setPhase("error");
   }, [forget]);
   const acceptDevice = React.useCallback((next: LocalAgentDeviceView) => {
+    const sameDevice = deviceRef.current?.id === next.id;
+    updateChatTarget(rememberChatTarget(next, chatTargetRef.current));
     setDevice(next); storagePut(deviceKey, next.id); setPhase(next.online ? "connected" : "offline"); setMessage(null);
-    setSelectedModel((selection) => selection && next.providers.some((provider) => provider.provider === selection.provider && provider.status === "ready" && provider.models.some((model) => model.id === selection.model)) ? selection : null);
-  }, [deviceKey]);
+    setSelectedModel((selection) => sameDevice && selection && next.providers.some((provider) => provider.provider === selection.provider && provider.status === "ready" && provider.models.some((model) => model.id === selection.model)) ? selection : null);
+  }, [deviceKey, updateChatTarget]);
   const acceptAttempt = React.useCallback((next: LocalAgentAttemptView) => {
     const previous = attemptRef.current;
     if (previous && (next.id !== previous.id || next.version < previous.version)) return;
@@ -99,6 +115,9 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
 
   React.useEffect(() => {
     alive.current = true;
+    const savedEffort = storageGet(effortKey);
+    if (savedEffort === "low" || savedEffort === "medium" || savedEffort === "high" || savedEffort === "xhigh" || savedEffort === "max") setEffort(savedEffort);
+    chatTargetRef.current = restoreChatTarget(storageGet(chatTargetKey));
     const revision = epoch.current;
     if (teamId) {
       void api.status(storageGet(deviceKey)).then(async (status) => {
@@ -216,6 +235,7 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     if (!teamId || starting.current || (!force && (phase === "opening" || phase === "awaiting_code"))) return;
     starting.current = true;
     const revision = ++epoch.current;
+    updateChatTarget(null);
     setMessage(null); setFallback(false); setPhase("creating"); setDevice(null); setAttempt(null); attemptRef.current = null; setDeepLink(null); setSelectedModel(null);
     try {
       const next = await api.createAttempt();
@@ -247,6 +267,7 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
   function selectModel(selection: ModelSelection) {
     if (phase !== "connected" || !device?.providers.some((provider) => provider.provider === selection.provider && provider.status === "ready" && provider.models.some((model) => model.id === selection.model))) return;
     setSelectedModel(selection);
+    updateChatTarget({ deviceId: device.id, ...selection });
   }
   async function submitJob(paperId: string, prompt: string) {
     if (!selectedModel || phase !== "connected" || !device || submitting.current || jobBusy || !paperId || !prompt.trim()) return;
@@ -291,7 +312,8 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
 
   const pairingSecondsLeft = phase === "awaiting_code" && attempt
     ? Math.max(0, Math.min(300, Math.ceil((Date.parse(attempt.expiresAt) - pairingNow) / 1000))) : null;
-  const value: ConnectionValue = { api, phase, device, attempt, deepLink, message, selectedModel, job, jobBusy, fallback, pairingSecondsLeft,
+  const value: ConnectionValue = { api, phase, device, attempt, deepLink, message, selectedModel, chatTarget, effort,
+    setEffort: (next) => { setEffort(next); storagePut(effortKey, next); }, job, jobBusy, fallback, pairingSecondsLeft,
     open: () => { setModalOpen(true); if (!["connected", "opening", "awaiting_code", "creating", "login_required"].includes(phase)) void start(); },
     resumeFromInstall: () => { setModalOpen(true); if (phase !== "connected" && phase !== "login_required") void start(true); },
     start: () => start(), cancel, refresh, disconnect, showFallback: () => setFallback(true), selectModel, submitJob, cancelJob };

@@ -1,4 +1,4 @@
-import type { LocalAgentJobView, LocalAgentProvider } from "./local-agent";
+import type { LocalAgentEffort, LocalAgentJobView, LocalAgentProvider } from "./local-agent";
 
 /** Sources and history are resolved by the server, never accepted as caller text. */
 export interface ResearchPaperOption {
@@ -8,10 +8,21 @@ export interface ResearchPaperOption {
   /** An owned source-preparation message; provider exceptions are never returned. */
   sourceError?: string | null;
 }
+export interface ResearchPresentationOption {
+  id: string;
+  title: string;
+  date: string;
+}
+export interface ResearchMaterialReference {
+  id: string;
+  title: string;
+  kind: "paper" | "presentation";
+}
 export interface ResearchConversationView {
   id: string;
   title: string;
   paperIds: string[];
+  presentationIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -21,17 +32,22 @@ export interface ResearchChatTurn extends LocalAgentJobView {
   canCancel: boolean;
   /** Some source text or older conversation was omitted from the model context. */
   contextTruncated: boolean;
+  /** Snapshot of the material selection for this question. */
+  materials?: ResearchMaterialReference[];
+  effort?: LocalAgentEffort;
 }
 export interface ResearchConversationDetail {
   conversation: ResearchConversationView;
   papers: ResearchPaperOption[];
+  presentations?: ResearchPresentationOption[];
   /** Latest 50 turns, in chronological order. */
   turns: ResearchChatTurn[];
   hasEarlierTurns: boolean;
 }
 export interface ResearchConversationCreateInput {
   requestId: string;
-  paperIds: string[];
+  paperIds?: string[];
+  presentationIds?: string[];
   title?: string;
 }
 export interface ResearchChatTurnInput {
@@ -40,4 +56,8 @@ export interface ResearchChatTurnInput {
   provider: LocalAgentProvider;
   model: string;
   prompt: string;
+  /** Omitted references retain the conversation selection; [] explicitly clears it. */
+  paperIds?: string[];
+  presentationIds?: string[];
+  effort?: LocalAgentEffort;
 }

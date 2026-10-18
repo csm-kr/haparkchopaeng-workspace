@@ -8,6 +8,7 @@ import { useLive, useTheme } from "@/components/providers";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav";
 import { TeamSwitcher } from "./team-switcher";
+import { ConnectionSettings } from "@/components/local-agent/connection-settings";
 import type { ShellMember, ShellTeam } from "./types";
 
 // 영속 사이드바 — 인터랙티브 섬(현재 경로·collapsed·live·theme)이다(ADR-015).
@@ -157,6 +158,7 @@ export function Sidebar({
         </div>
       )}
 
+      <div className="border-t border-border-token px-2 py-1"><ConnectionSettings collapsed={collapsed} /></div>
       {/* 푸터: 현재 사용자(설정) + 테마 토글 —
           헤더와 같은 이유로, 접히면 64px 폭에 아바타+토글이 안 들어가 겹치므로 세로로 쌓는다 */}
       <div

@@ -4,10 +4,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ChatPage from "../page";
 import ConversationPage from "../[id]/page";
 
-const mock = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), papers: vi.fn(), list: vi.fn(), get: vi.fn(), redirect: vi.fn() }));
+const mock = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), papers: vi.fn(), presentations: vi.fn(), list: vi.fn(), get: vi.fn(), redirect: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getConnectionSession: mock.session }));
 vi.mock("@/lib/active-team", () => ({ getActiveTeam: mock.team }));
-vi.mock("@/lib/research-chat/service", () => ({ listResearchPapers: mock.papers, listConversations: mock.list, getConversation: mock.get }));
+vi.mock("@/lib/research-chat/service", () => ({ listResearchPapers: mock.papers, listResearchPresentations: mock.presentations, listConversations: mock.list, getConversation: mock.get }));
 vi.mock("next/navigation", () => ({ redirect: mock.redirect }));
 vi.mock("@/components/shell", () => ({ Topbar: () => <div>상단바</div> }));
 beforeEach(() => {
@@ -15,7 +15,7 @@ beforeEach(() => {
   mock.redirect.mockImplementation((path: string) => { throw new Error(`redirect:${path}`); });
   mock.session.mockResolvedValue({ memberId: "me", sessionKey: "private-session", expiresAt: new Date("2026-12-01") });
   mock.team.mockResolvedValue({ id: "active-team" });
-  mock.papers.mockResolvedValue([]); mock.list.mockResolvedValue([]);
+  mock.papers.mockResolvedValue([]); mock.presentations.mockResolvedValue([]); mock.list.mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -38,5 +38,5 @@ it("저장한 대화는 서버가 확인한 활성 팀과 작성자로 읽고 �
 it.each([{ input: "p1", count: 1 }, { input: "other-team-paper", count: 0 }])("논문 상세 진입의 $input은 검증된 팀 논문일 때만 선택한다", async ({ input, count }) => {
   mock.papers.mockResolvedValue([{ id: "p1", title: "검증한 팀 논문", sourceReady: true }]);
   render(await ChatPage({ searchParams: Promise.resolve({ paperId: input }) }));
-  expect(screen.getByRole("button", { name: `팀 논문 선택 (${count}/3)` })).toBeInTheDocument();
+  expect(screen.queryAllByRole("button", { name: "검증한 팀 논문 선택 해제" })).toHaveLength(count);
 });
