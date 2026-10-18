@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><rect width="256" height="256" rx="64" fill="#302b50"/><g fill="none" stroke="#baa7f3" stroke-width="17" stroke-linecap="round"><path d="M101 60h54M76 92h104"/><ellipse cx="128" cy="155" rx="39" ry="33"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none"><title>AI 브릿지</title><rect width="128" height="128" rx="28" fill="#0E0F0C"/><g transform="translate(4 12) scale(2.5)"><g stroke="#C6FF3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 12V7"/>
+    <circle cx="24" cy="5.5" r="1.8" fill="#C6FF3D" stroke="none"/>
+    <rect x="11" y="12" width="26" height="24" rx="9"/>
+    <path d="M11 21H7V27H11 M7 22.5H4 M7 25.5H4 M37 21H41V27H37 M41 22.5H44 M41 25.5H44"/>
+    <circle cx="19" cy="24" r="2.2" fill="#C6FF3D" stroke="none"/>
+    <circle cx="29" cy="24" r="2.2" fill="#C6FF3D" stroke="none"/>
+    <path d="M21 30.5H27"/>
+  </g></g></svg>

@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createConnectorTray, shouldHideWindowToTray, shutdownWithTray } from './tray.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pendingUrls = [];
@@ -23,10 +24,11 @@ const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiCli
 const development = !app.isPackaged && process.argv.includes('--connector-dev');
 const suppressAutoOpen = !app.isPackaged && process.argv.includes('--no-auto-open');
 const quietQa = !app.isPackaged && process.argv.includes('--connector-qa');
+const qaTray = !app.isPackaged && process.argv.includes('--connector-qa-tray');
 let applications = [], mainWindow, petWindow, selectedApp, store, attempt = null, identity = null, runtime = null, adapters = {}, revision = 0, requestController = null, monitoringController = null, monitorTimer = null, refreshPromise = null;
 let preferences = { autoStart: false, pet: false, firstBrowserOpened: false };
-let quitting = false, qaWindowHidden = false;
-let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], appName: productName, siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform };
+let quitting = false, qaWindowHidden = false, tray;
+let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], appName: productName, siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform, trayAvailable: false, closeToTray: false };
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, argv) => { const urls = argv.filter(value => /^[a-z][a-z0-9+.-]*:\/\//i.test(value)); launchRequested ||= urls.length > 0; pendingUrls.push(...urls); showWindow(); if (store) void consumeLaunches(); });
@@ -37,6 +39,10 @@ else {
   void app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark';
   try {
+    const { Tray, Menu, nativeImage } = await import('electron');
+    tray = createConnectorTray({ Tray, Menu, nativeImage, platform: process.platform, productName,
+      iconPath: join(directory, 'assets', process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png'),
+      disabled: quietQa && !qaTray, onOpen: showWindow, onQuit: () => { void shutdown(); } });
     let config;
     if (development) config = { applications: [{ id: 'hapark', name: '하박조팽', scheme: 'hapark-connect', origin: 'http://localhost:3000', allowedOrigins: ['http://localhost:3000', 'http://127.0.0.1:3000'] }] };
     else { try { config = JSON.parse(await readFile(join(directory, 'apps.generated.json'), 'utf8')); } catch { throw new Error('등록된 웹앱 설정이 없어요. 배포 주소를 설정한 앱을 사용해 주세요.'); } }
@@ -71,23 +77,47 @@ else {
 }
 
 function showWindow() {
+  if (quitting) return;
   qaWindowHidden = false;
   if (!mainWindow || mainWindow.isDestroyed()) {
     const height = Math.min(724, screen.getPrimaryDisplay().workArea.height - 48);
-    mainWindow = new BrowserWindow({ width: 452, height, minWidth: 390, minHeight: Math.min(height, 590), show: false, backgroundColor: '#16151a', icon: join(directory,'assets','icon.png'), title: productName, autoHideMenuBar: true, webPreferences: { preload: join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: quietQa, backgroundThrottling: !quietQa, devTools: !app.isPackaged } });
+    mainWindow = new BrowserWindow({ width: 452, height, minWidth: 390, minHeight: Math.min(height, 590), show: false, backgroundColor: '#0E0F0C', icon: join(directory,'assets','icon.png'), title: productName, autoHideMenuBar: true, webPreferences: { preload: join(directory, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, offscreen: quietQa, backgroundThrottling: !quietQa, devTools: !app.isPackaged } });
     mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     mainWindow.webContents.on('will-navigate', event => event.preventDefault());
     mainWindow.loadFile(join(directory, 'renderer', 'index.html'));
     mainWindow.once('ready-to-show', () => { if (!quietQa) mainWindow.show(); publish(); });
-    mainWindow.on('close', event => { if (runtime && ['connected', 'recovering'].includes(runtime.getState().status)) { event.preventDefault(); qaWindowHidden = true; mainWindow.hide(); } });
+    mainWindow.on('close', event => {
+      const authorized = !!runtime && ['connected', 'recovering'].includes(runtime.getState().status);
+      if (!quitting && authorized) {
+        event.preventDefault();
+        if (shouldHideWindowToTray({ platform: process.platform, authorized, trayAvailable: !!tray?.available, quitting })) {
+          qaWindowHidden = true; mainWindow.hide();
+        } else void shutdown(); // A missing desktop indicator must not leave an unreachable process.
+      }
+    });
   } else if (!quietQa) { mainWindow.show(); mainWindow.focus(); }
 }
 
-function publish() { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:state', { ...state }); }
+function publish() {
+  const runtimeStatus = runtime?.getState().status;
+  const previouslyAvailable = state.trayAvailable;
+  tray?.updateStage(runtimeStatus === 'recovering' ? 'recovering' : state.stage);
+  state.trayAvailable = !!tray?.available;
+  if (previouslyAvailable && !state.trayAvailable && !quietQa && !quitting
+    && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+    qaWindowHidden = false; mainWindow.showInactive();
+  }
+  state.closeToTray = shouldHideWindowToTray({ platform: process.platform,
+    authorized: !!runtime && ['connected', 'recovering'].includes(runtimeStatus), trayAvailable: state.trayAvailable, quitting });
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:state', { ...state });
+}
 async function shutdown() {
   if (quitting) return;
   quitting = true;
-  await stopBeforeExit({ runtime, stopMonitoring: () => { monitoringController?.abort(); requestController?.abort(); if (monitorTimer) clearInterval(monitorTimer); return refreshPromise; }, exit: () => app.exit(0) });
+  tray?.updateStage('quitting');
+  await shutdownWithTray({ tray, cleanup: () => stopBeforeExit({ runtime,
+    stopMonitoring: () => { monitoringController?.abort(); requestController?.abort(); if (monitorTimer) clearInterval(monitorTimer); return refreshPromise; },
+    exit() {} }), exit: () => app.exit(0) });
 }
 async function savePreferences() { await mkdir(app.getPath('userData'), { recursive: true }); await writeFile(join(app.getPath('userData'), 'preferences.json'), JSON.stringify(preferences)); }
 async function openWeb() {

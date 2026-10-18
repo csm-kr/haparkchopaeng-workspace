@@ -12,6 +12,7 @@ if (!resolve(qa.qaDir).startsWith(resolve(tmpdir())) || !basename(qa.qaDir).star
 const root = dirname(dirname(fileURLToPath(import.meta.url))), desktop = join(root, 'desktop'), artifacts = join(root, 'artifacts');
 await mkdir(artifacts, { recursive: true });
 const executable = join(desktop, 'node_modules', 'electron', 'dist', (await readFile(join(desktop,'node_modules/electron/path.txt'),'utf8')).trim());
+const { productName } = JSON.parse(await readFile(join(desktop, 'package.json'), 'utf8'));
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const execute = promisify(execFile);
 const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -22,7 +23,7 @@ async function waitForExit(pid) {
 }
 async function closeOwnedWindow() {
   if (process.platform !== 'win32') throw new Error('Native window-close QA currently requires Windows');
-  await execute('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',join(root,'test/fixtures/close-owned-window.ps1'),'-OwnedProcessId',String(qa.pid)],{windowsHide:true,shell:false,timeout:10000});
+  await execute('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',join(root,'test/fixtures/close-owned-window.ps1'),'-OwnedProcessId',String(qa.pid),'-ExpectedTitle',productName],{windowsHide:true,shell:false,timeout:10000});
 }
 const fixture = async (path, body) => (await (await fetch(`http://127.0.0.1:3000/_qa/${path}`, body ? { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body) } : undefined)).json()).data;
 let socket;
@@ -51,7 +52,7 @@ async function connect() {
 async function launch(attemptId) {
   const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;
   const out=await open(join(qa.qaDir,'recovery.out'),'a'),err=await open(join(qa.qaDir,'recovery.err'),'a');
-  const child=spawn(executable,[desktop,'--connector-dev','--no-auto-open','--connector-qa',`--connector-data-dir=${qa.data}`,`--user-data-dir=${qa.profile}`,'--remote-debugging-port=0',`hapark-connect://connect?attemptId=${attemptId}&launchToken=${'b'.repeat(43)}`],{windowsHide:true,shell:false,detached:true,env,stdio:['ignore',out.fd,err.fd]});
+  const child=spawn(executable,[desktop,'--connector-dev','--no-auto-open','--connector-qa','--connector-qa-tray',`--connector-data-dir=${qa.data}`,`--user-data-dir=${qa.profile}`,'--remote-debugging-port=0',`hapark-connect://connect?attemptId=${attemptId}&launchToken=${'b'.repeat(43)}`],{windowsHide:true,shell:false,detached:true,env,stdio:['ignore',out.fd,err.fd]});
   await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject)});child.unref();await out.close();await err.close();return child.pid;
 }
 let client=await connect();
