@@ -1,5 +1,13 @@
 # 로컬 AI 연결 운영 배포 런북
 
+## 2026-10-18 운영 반영 기록
+
+사용자의 운영 배포 요청에 따라 Supabase `ocprfnjuakugiraimeoo`의 `postgres/public`을 확인하고 두 20261017 SQL을 한 트랜잭션으로 반영했다. 반영 전 실제 Prisma schema diff는 예정한 6테이블·7컬럼 추가와 일치했고, 반영 후 `prisma migrate diff --exit-code`는 **0 / No difference detected**다. 새 PK 6개·FK 12개·PK 포함 인덱스 19개와 기존 논문 11개·분석 22개·Figure 63개·멤버 12명·팀 4개를 확인했다.
+
+운영의 기존 public 테이블에는 RLS가 켜져 있고 기본 ACL에 비신뢰 역할의 TRUNCATE 등이 남아 있었다. 새 6테이블에만 [접근 제한 SQL](sql/20261018-local-agent-table-access.sql)을 같은 트랜잭션에 추가했다. `PUBLIC/anon/authenticated/service_role`의 테이블 권한을 모두 회수하고 RLS를 켰다(정책 0개, FORCE 없음). 실제 역할 권한 검사 18개가 모두 거부되고 소유자 `postgres`의 서버 접근을 유지한다. 기존 테이블과 default privileges는 변경하지 않았다.
+
+반영 직전 24개 public 테이블의 데이터·스키마 메타데이터를 로컬 비공개 논리 백업으로 저장하고 압축 해제·행 수를 확인했다. SHA256은 `862839408626ef94c17f36241f03fc0162d22593544efd10aad8ac9bf6787f2b`다. Auth·Storage는 이번 변경 대상이 아니며 백업에서 제외했다. 복원 절차와 원본 schema를 함께 보관했으며 실제 복원 연습은 미실행이다. 웹 승격·Inngest 동기화와 설치 파일 게시 여부는 별도 최종 배포 영수증에 기록한다. 아래 과거 미적용 설명은 해당 시점의 이력이다.
+
 연결기 기준 `d54a1fd`의 [CI 39029600751](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751)에서 웹 852개·PostgreSQL 16 동시성 8개·3 OS native를 확인했다. 이후 로컬 논문 분석·AI 채팅을 추가한 `3f16685`의 [CI 39033348260](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·PostgreSQL 13개·Chromium 8개·HTTP 계약·3 OS native/패키징의 5 jobs가 성공했다. [새 기능 검증 HTML](../reports/local-ai-research-chat-2026-10-17.html)을 함께 확인한다. 운영 DB 반영·Production 승격·정식 설치 파일 게시 기록은 아직 없다. 실제 배포에는 최종 커밋, 해당 CI, 서명한 설치 파일의 SHA256을 한 묶음으로 기록한다.
 
 동작 계약은 [LOCAL_AGENT](LOCAL_AGENT.md)와 [연구 채팅 설계](../design/LOCAL_AI_RESEARCH_CHAT.md), 플랫폼별 검증 근거는 [connector/VALIDATION](../../connector/VALIDATION.md)를 따른다. 적용 SQL은 [연결기 5테이블](sql/20261017-local-agent-connection.sql) 다음 [논문 본문·분석 실행·대화 확장](sql/20261017-local-ai-research-chat.sql) 순서다.
@@ -153,6 +161,8 @@ npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schem
 ## 4. 검토한 SQL 수동 반영
 
 운영 담당이 [연결기 SQL](sql/20261017-local-agent-connection.sql)과 [연구 채팅 SQL](sql/20261017-local-ai-research-chat.sql) 전체를 순서대로 검토한 뒤 선택한 DB 도구에서 한 트랜잭션으로 실행한다. 트랜잭션 안에서 `SET LOCAL search_path TO public;`을 먼저 실행해 새 테이블과 FK가 `public`에 생성되게 한다. `BEGIN;`·스키마 지정·두 검토 SQL 전체·`COMMIT;` 순서이며, 실행할 전체 본문을 확인한 뒤 반영한다.
+
+Supabase 환경에서는 `COMMIT;` 전에 [신규 테이블 접근 제한](sql/20261018-local-agent-table-access.sql)도 적용한다. 새 6테이블의 Data API 역할 권한과 RLS만 다루며 기존 테이블·default privileges는 변경하지 않는다. RLS만으로 TRUNCATE 권한을 막을 수 없으므로 권한 회수도 함께 확인한다. 반영 후 구조 diff와 별개로 `postgres` 소유·RLS on/FORCE off·정책 0개·`anon/authenticated/service_role`의 모든 테이블 권한 거부를 검증한다.
 
 전체 `prisma db push`, reset, seed 또는 기존 테이블 DROP으로 대체하지 않는다. 오류나 연결 단절로 완료 여부가 불분명하면 다시 CREATE하지 않고 사전 조회와 스키마 차이 검사를 반복한다.
 
