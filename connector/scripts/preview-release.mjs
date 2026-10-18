@@ -26,6 +26,15 @@ async function verifyRemoteTag(repository, tag, source, github) {
   requireValue(object?.type === 'commit' && object.sha === source, 'REMOTE_TAG_MISMATCH');
 }
 
+async function findPreviewRelease(repository, tag, github) {
+  // GitHub's by-tag endpoint exposes published releases; drafts require the authenticated list.
+  const releases = await github(`repos/${repository}/releases?per_page=100`);
+  requireValue(Array.isArray(releases) && releases.length <= 100, 'DRAFT_PREVIEW_REQUIRED');
+  const matches = releases.filter(release => release?.tag_name === tag);
+  requireValue(matches.length === 1, 'DRAFT_PREVIEW_REQUIRED');
+  return matches[0];
+}
+
 export async function preflightPreview({ env, head, github }) {
   const repository = env.GITHUB_REPOSITORY;
   const tag = env.PREVIEW_RELEASE_TAG;
@@ -38,7 +47,7 @@ export async function preflightPreview({ env, head, github }) {
     && env.GITHUB_REF === `refs/tags/${tag}`, 'TAG_DISPATCH_REQUIRED');
   const prefix = `repos/${repository}`;
   await verifyRemoteTag(repository, tag, source, github);
-  const release = await github(`${prefix}/releases/tags/${encodeURIComponent(tag)}`);
+  const release = await findPreviewRelease(repository, tag, github);
   requireValue(Number.isSafeInteger(release?.id) && release.id > 0 && release.tag_name === tag
     && release.draft === true && release.prerelease === true && release.target_commitish === source,
   'DRAFT_PREVIEW_REQUIRED');
@@ -148,7 +157,7 @@ export async function uploadPreview({ env, head, root, runtime, github, upload }
   const metadataFile = join(staging, metadataName);
   await writeFile(metadataFile, JSON.stringify(metadata, null, 2) + '\n', { flag: 'wx' });
   await verifyRemoteTag(authorization.repository, authorization.tag, authorization.source, github);
-  const release = await github(`repos/${authorization.repository}/releases/tags/${encodeURIComponent(authorization.tag)}`);
+  const release = await findPreviewRelease(authorization.repository, authorization.tag, github);
   requireValue(release?.id === authorization.releaseId && release.tag_name === authorization.tag
     && release.draft === true && release.prerelease === true && release.target_commitish === authorization.source,
   'DRAFT_PREVIEW_REQUIRED');

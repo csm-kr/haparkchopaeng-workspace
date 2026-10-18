@@ -23,9 +23,9 @@ const names = ['web', 'postgres', 'connector (windows-latest, win, x64)',
 function githubFixture(overrides = {}) {
   const responses = {
     [`repos/${repository}/git/ref/tags/${tag}`]: { object: { type: 'commit', sha } },
-    [`repos/${repository}/releases/tags/${tag}`]: {
+    [`repos/${repository}/releases?per_page=100`]: [{
       id: 42, tag_name: tag, draft: true, prerelease: true, target_commitish: sha, assets: [],
-    },
+    }],
     [`repos/${repository}/actions/workflows/local-agent.yml/runs?head_sha=${sha}&status=success&per_page=100`]: {
       workflow_runs: [{ id: 100, event: 'workflow_dispatch', path: '.github/workflows/local-agent.yml', head_sha: sha,
         head_repository: { full_name: repository }, status: 'completed', conclusion: 'success' }],
@@ -44,6 +44,54 @@ function githubFixture(overrides = {}) {
 test('only the tagged exact source, existing draft preview, and six successful validation jobs authorize upload', async () => {
   const result = await preflightPreview({ env, head: sha, github: githubFixture() });
   assert.deepEqual(result, { repository, tag, source: sha, releaseId: 42, validationRunId: 100 });
+});
+
+test('draft-only previews remain verifiable when the published-by-tag endpoint returns 404', async t => {
+  const fixture = await packageFixture(t);
+  const api = githubFixture();
+  const github = async path => {
+    if (path === `repos/${repository}/releases/tags/${tag}`) {
+      throw Object.assign(new Error('Published-by-tag does not expose this draft.'), { status: 404 });
+    }
+    if (path === `repos/${repository}/releases?per_page=100`) return [
+      { id: 41, tag_name: 'another-preview', draft: true, prerelease: true, target_commitish: sha, assets: [] },
+      { id: 42, tag_name: tag, draft: true, prerelease: true, target_commitish: sha, assets: [] },
+    ];
+    return api(path);
+  };
+  assert.equal((await preflightPreview({ env, head: sha, github })).releaseId, 42);
+  let uploads = 0;
+  await uploadPreview({ ...fixture, head: sha, github, upload: async () => { uploads += 1; } });
+  assert.equal(uploads, 1);
+});
+
+test('a missing or ambiguous exact tag within the first 100 releases is rejected', async t => {
+  const matching = { id: 42, tag_name: tag, draft: true, prerelease: true, target_commitish: sha, assets: [] };
+  for (const [label, releases] of [
+    ['empty list', []],
+    ['duplicate tag', [matching, { ...matching, id: 43 }]],
+    ['absent in first 100', Array.from({ length: 100 }, (_, id) => ({ ...matching, id: id + 1, tag_name: `other-${id}` }))],
+  ]) await t.test(label, async () => {
+    const github = githubFixture({ [`repos/${repository}/releases?per_page=100`]: releases });
+    await assert.rejects(preflightPreview({ env, head: sha, github }), { code: 'DRAFT_PREVIEW_REQUIRED' });
+  });
+});
+
+test('the final upload refresh also rejects a newly ambiguous draft tag', async t => {
+  const fixture = await packageFixture(t);
+  const api = githubFixture();
+  let reads = 0;
+  let uploads = 0;
+  const github = async path => {
+    const result = await api(path);
+    if (path === `repos/${repository}/releases?per_page=100` && ++reads > 1) {
+      return [result[0], { ...result[0], id: 43 }];
+    }
+    return result;
+  };
+  await assert.rejects(uploadPreview({ ...fixture, head: sha, github,
+    upload: async () => { uploads += 1; } }), { code: 'DRAFT_PREVIEW_REQUIRED' });
+  assert.equal(uploads, 0);
 });
 
 test('an apparently successful run with a skipped native architecture cannot authorize release uploads', async () => {
@@ -90,13 +138,13 @@ test('branch dispatches and mismatched event, checkout, or requested source neve
 });
 
 test('remote tag movement, published releases, and branch-based release targets are rejected', async t => {
-  const releasePath = `repos/${repository}/releases/tags/${tag}`;
+  const releasePath = `repos/${repository}/releases?per_page=100`;
   for (const change of [{ draft: false }, { prerelease: false }, { target_commitish: 'main' },
     { target_commitish: 'b'.repeat(40) }, { tag_name: 'different-tag' }]) {
     await t.test(Object.keys(change).join('+'), async () => {
-      const github = githubFixture({ [releasePath]: {
+      const github = githubFixture({ [releasePath]: [{
         id: 42, tag_name: tag, draft: true, prerelease: true, target_commitish: sha, assets: [], ...change,
-      } });
+      }] });
       await assert.rejects(preflightPreview({ env, head: sha, github }), { code: 'DRAFT_PREVIEW_REQUIRED' });
     });
   }
@@ -261,7 +309,7 @@ test('existing asset names fail rather than being replaced, and public releases 
     let uploads = 0;
     const github = async path => {
       const result = await api(path);
-      if (path.includes('/releases/tags/') && ++releaseReads > 1) return { ...result, ...change };
+      if (path === `repos/${repository}/releases?per_page=100` && ++releaseReads > 1) return result.map(release => ({ ...release, ...change }));
       return result;
     };
     await assert.rejects(uploadPreview({ ...fixture, head: sha, github, upload: async () => { uploads += 1; } }));
