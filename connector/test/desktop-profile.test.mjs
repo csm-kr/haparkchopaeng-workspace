@@ -17,7 +17,7 @@ const fixture = JSON.parse(process.env.CONNECTOR_PROFILE_FIXTURE);
 let directory = join(fixture.appData, 'AI 브릿지'), name = 'AI 브릿지';
 const events = [];
 globalThis.__connectorProfileApp = {
-  isPackaged: fixture.packaged, on() {},
+  isPackaged: fixture.packaged, on() {}, getVersion() { return '0.1.5'; },
   getPath(key) { return key === 'appData' ? fixture.appData : directory; },
   setName(value) { name = value; events.push('name'); },
   setPath(key, value) { if (key !== 'userData' || !existsSync(value)) throw new Error('Profile must exist before setPath'); directory = value; events.push('path'); },

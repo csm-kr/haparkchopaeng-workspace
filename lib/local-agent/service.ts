@@ -3,15 +3,19 @@ import { z } from "zod";
 import type { Prisma, LocalAgentAttempt, LocalAgentDevice, LocalAgentGrant, LocalAgentJob } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
-import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
+import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentBridgeMetadata, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
 import { ATTEMPT_MS, DESKTOP_HEARTBEAT_SECONDS, LEASE_MS, MAX_JOB_MS, MAX_PAIR_FAILURES, SNAPSHOT_FRESH_MS, WEB_HEARTBEAT_SECONDS, assertGrantUsable, hashCredential, pairingCode, sameCredential, validateDeviceToken } from "./security";
-import { EffortSchema, JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
+import { BridgeMetadataSchema, BridgeVersionSchema, EffortSchema, JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
 
 type Database = Prisma.TransactionClient;
 export interface LocalAgentScope { memberId: string; teamId: string; sessionKey: string; sessionExpiresAt: Date }
 export interface DesktopIdentity { deviceId: string; deviceToken: string }
 const pendingStatuses = ["awaiting_app", "awaiting_code"];
 const activeJobStatuses = ["preparing", "queued", "running"];
+// Reserved server-only snapshot row; it is never a CLI provider or model catalogue.
+const BRIDGE_SNAPSHOT_PROVIDER = "_bridge";
+const BRIDGE_ONLINE_MS = 20_000;
+const BridgeSnapshotSchema = z.object({ version: z.literal(1), bridgeVersion: BridgeVersionSchema.nullable(), bridgeArchitecture: z.enum(["arm64", "x64"]).nullable() }).strict();
 const ChatPreparedSchema = JobCreateSchema.extend({ paperId: z.string().max(150) });
 const ChatExecutionSchema = z.object({ version: z.literal(1), kind: z.literal("research_chat"), execution: z.object({ effort: EffortSchema }).strict().optional() });
 
@@ -26,8 +30,9 @@ async function assertMembership(db: Database, memberId: string, teamId: string):
   }
 }
 
-function snapshotRows(rows: { payload: Prisma.JsonValue }[], now: Date): LocalAgentProviderSnapshot[] {
-  return rows.flatMap(({ payload }) => {
+function snapshotRows(rows: { provider?: string; payload: Prisma.JsonValue }[], now: Date): LocalAgentProviderSnapshot[] {
+  return rows.flatMap(({ provider, payload }) => {
+    if (provider === BRIDGE_SNAPSHOT_PROVIDER) return [];
     const parsed = ProviderSnapshotSchema.safeParse(payload);
     if (!parsed.success || new Date(parsed.data.observedAt).getTime() > now.getTime() + 30_000) return [];
     return [sanitizeProviderSnapshot(parsed.data)];
@@ -37,11 +42,17 @@ function snapshotRows(rows: { payload: Prisma.JsonValue }[], now: Date): LocalAg
 async function deviceView(db: Database, device: LocalAgentDevice, grant: LocalAgentGrant | null, now = new Date()): Promise<LocalAgentDeviceView> {
   const authorized = Boolean(grant && !grant.revokedAt && grant.leaseExpiresAt > now && !device.revokedAt);
   const rows = authorized ? await db.localAgentSnapshot.findMany({ where: { deviceId: device.id } }) : [];
+  const online = authorized && Boolean(device.lastSeenAt && now.getTime() - device.lastSeenAt.getTime() < BRIDGE_ONLINE_MS);
+  const bridge = online ? rows.find((row) => row.provider === BRIDGE_SNAPSHOT_PROVIDER) : undefined;
+  const bridgeAge = bridge ? now.getTime() - bridge.observedAt.getTime() : Infinity;
+  const metadata = bridge && bridgeAge >= 0 && bridgeAge < BRIDGE_ONLINE_MS ? BridgeSnapshotSchema.safeParse(bridge.payload) : null;
   return {
     id: device.id, name: device.name, platform: device.platform as LocalAgentPlatform,
     lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
-    online: authorized && Boolean(device.lastSeenAt && now.getTime() - device.lastSeenAt.getTime() < 20_000),
+    online,
     leaseExpiresAt: grant && !grant.revokedAt ? grant.leaseExpiresAt.toISOString() : null,
+    bridgeVersion: metadata?.success ? metadata.data.bridgeVersion : null,
+    bridgeArchitecture: metadata?.success ? metadata.data.bridgeArchitecture : null,
     providers: snapshotRows(rows, now),
   };
 }
@@ -235,7 +246,7 @@ async function expireDeviceJobs(db: Database, deviceId: string, now: Date): Prom
   await db.localAgentJob.updateMany({ where: { deviceId, status: { in: activeJobStatuses }, OR: [{ expiresAt: { lte: now } }, { grant: { revokedAt: { not: null } } }, { grant: { leaseExpiresAt: { lte: now } } }] }, data: { status: "cancelled", response: "", error: "연결 권한 또는 작업 시간이 끝났어요.", version: { increment: 1 } } });
 }
 
-export async function desktopHeartbeat(identity: DesktopIdentity, providers: LocalAgentProviderSnapshot[]): Promise<LocalAgentDesktopHeartbeat> {
+export async function desktopHeartbeat(identity: DesktopIdentity, providers: LocalAgentProviderSnapshot[], metadata: LocalAgentBridgeMetadata = {}): Promise<LocalAgentDesktopHeartbeat> {
   return prisma.$transaction(async (tx) => {
     const now = new Date();
     // Acquire the device row before reading snapshots. PostgreSQL READ COMMITTED
@@ -246,6 +257,8 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
     const device = await authenticateDesktop(tx, identity);
     const grant = await tx.localAgentGrant.findFirst({ where: { deviceId: device.id, revokedAt: null, leaseExpiresAt: { gt: now } }, orderBy: { leaseExpiresAt: "desc" } });
     if (!grant) throw new HttpError(403, "WEB_PERMISSION_EXPIRED", "웹에서 AI 연결을 다시 눌러주세요.");
+    const parsedMetadata = BridgeMetadataSchema.safeParse(metadata);
+    if (!parsedMetadata.success) throw new HttpError(400, "BAD_REQUEST", "요청 내용을 확인해주세요.");
     for (const candidate of providers) {
       const observedAt = new Date(candidate.observedAt);
       if (observedAt.getTime() > now.getTime() + 30_000) throw new HttpError(400, "BAD_SNAPSHOT", "AI 브릿지의 시간을 확인해주세요.");
@@ -254,8 +267,10 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
       if (previous && previous.observedAt > observedAt) continue;
       await tx.localAgentSnapshot.upsert({ where: { deviceId_provider: { deviceId: device.id, provider: payload.provider } }, create: { deviceId: device.id, teamId: device.teamId, memberId: device.memberId, provider: payload.provider, payload: payload as unknown as Prisma.InputJsonValue, observedAt }, update: { payload: payload as unknown as Prisma.InputJsonValue, observedAt } });
     }
-    // A provider omitted by the current detector is no longer advertised as usable.
-    await tx.localAgentSnapshot.deleteMany({ where: { deviceId: device.id, provider: { notIn: providers.map((row) => row.provider) } } });
+    const bridgePayload = { version: 1, bridgeVersion: parsedMetadata.data.bridgeVersion ?? null, bridgeArchitecture: parsedMetadata.data.bridgeArchitecture ?? null };
+    await tx.localAgentSnapshot.upsert({ where: { deviceId_provider: { deviceId: device.id, provider: BRIDGE_SNAPSHOT_PROVIDER } }, create: { deviceId: device.id, teamId: device.teamId, memberId: device.memberId, provider: BRIDGE_SNAPSHOT_PROVIDER, payload: bridgePayload, observedAt: now }, update: { payload: bridgePayload, observedAt: now } });
+    // Omitted CLI providers are no longer usable. Keep app metadata even for [].
+    await tx.localAgentSnapshot.deleteMany({ where: { deviceId: device.id, provider: { notIn: [BRIDGE_SNAPSHOT_PROVIDER, ...providers.map((row) => row.provider)] } } });
     // Logout/uninstall/limit must also stop that provider's queued/running work;
     // otherwise an unusable first job would block the other provider's queue.
     const stored = snapshotRows(await tx.localAgentSnapshot.findMany({ where: { deviceId: device.id } }), now);

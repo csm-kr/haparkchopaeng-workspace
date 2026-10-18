@@ -9,6 +9,7 @@ function render(value) {
   const previousStage = state?.stage, newAttempt = state?.attemptId !== value.attemptId;
   if (!state || newAttempt || value.stage !== 'pairing') { $('code').value = ''; $('code').removeAttribute('aria-invalid'); $('code-error').textContent = ''; }
   state = value;
+  $('bridge-version').textContent = state.bridgeVersion ? `버전 ${state.bridgeVersion}` : '버전 정보 없음';
   $('companion').hidden = ['pairing', 'connected'].includes(state.stage);
   if (state.appName) { document.title = state.appName; $('app-name').textContent = state.appName; }
   $('site-name').textContent = state.siteName;

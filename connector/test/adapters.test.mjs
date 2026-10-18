@@ -7,6 +7,22 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+test('Claude advertises only model-specific effort levels confirmed by its own initialize catalog', () => {
+  assert.deepEqual(normalizeModels('claude', [
+    { value: 'opus', displayName: 'Opus', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'high', 'invented'] },
+    { value: 'claude-opus-4-6', displayName: 'Opus 4.6', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'max'] },
+    { value: 'haiku-legacy', displayName: 'Legacy Haiku' },
+    { value: 'unsupported', displayName: 'Unsupported', supportsEffort: false, supportedEffortLevels: ['high'] },
+    { value: 'no-confirmation', displayName: 'Unknown', supportedEffortLevels: ['high'], supportedReasoningEfforts: [{ reasoningEffort: 'high' }] },
+    { value: 'bad-shape', displayName: 'Invalid', supportsEffort: true, supportedEffortLevels: 'high' },
+  ]), [
+    { id: 'opus', name: 'Opus', reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+    { id: 'claude-opus-4-6', name: 'Opus 4.6', reasoningEfforts: ['low', 'medium', 'high', 'max'] },
+    { id: 'haiku-legacy', name: 'Legacy Haiku' }, { id: 'unsupported', name: 'Unsupported' },
+    { id: 'no-confirmation', name: 'Unknown' }, { id: 'bad-shape', name: 'Invalid' },
+  ]);
+});
+
 test('explicit effort reaches each CLI as a validated argument', () => {
   assert.ok(codexArguments('actual-model', 'high').includes('model_reasoning_effort="high"'));
   const claude = claudeArguments('sonnet', 'medium');

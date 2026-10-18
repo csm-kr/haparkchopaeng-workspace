@@ -12,6 +12,7 @@ let readyForLaunches = false, launchRequested = false;
 app.on('open-url', (event, url) => { event.preventDefault(); launchRequested = true; pendingUrls.push(url); if (readyForLaunches) void consumeLaunches(); });
 const configuredDataDirectory = !app.isPackaged ? process.argv.find(value => value.startsWith('--connector-data-dir='))?.slice('--connector-data-dir='.length) : null;
 const { productName, stableProfileName } = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
+const bridgeMetadata = { bridgeVersion: app.getVersion(), ...(['arm64', 'x64'].includes(process.arch) ? { bridgeArchitecture: process.arch } : {}) };
 if (typeof stableProfileName !== 'string' || !stableProfileName || basename(stableProfileName) !== stableProfileName
   || /[\\/\u0000-\u001f]/.test(stableProfileName) || ['.', '..'].includes(stableProfileName)) throw new Error('기존 연결 정보의 저장 경로를 확인해 주세요.');
 // Preserve the prior safeStorage service identity and vault location across display-name changes.
@@ -28,7 +29,7 @@ const qaTray = !app.isPackaged && process.argv.includes('--connector-qa-tray');
 let applications = [], mainWindow, petWindow, selectedApp, store, attempt = null, identity = null, runtime = null, adapters = {}, revision = 0, requestController = null, monitoringController = null, monitorTimer = null, refreshPromise = null;
 let preferences = { autoStart: false, pet: false, firstBrowserOpened: false };
 let quitting = false, qaWindowHidden = false, tray;
-let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], appName: productName, siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform, trayAvailable: false, closeToTray: false };
+let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], appName: productName, siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform, trayAvailable: false, closeToTray: false, ...bridgeMetadata };
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, argv) => { const urls = argv.filter(value => /^[a-z][a-z0-9+.-]*:\/\//i.test(value)); launchRequested ||= urls.length > 0; pendingUrls.push(...urls); showWindow(); if (store) void consumeLaunches(); });
@@ -166,7 +167,7 @@ async function connected(response, currentRevision) {
   state = { ...state, stage: 'connected', title: '이 PC가 연결됐어요', description: '웹에서 사용할 AI와 모델을 직접 선택해 주세요.', message: '', expiresAt: null }; publish();
   const workspaceRoot = join(app.getPath('userData'), 'workspaces');
   adapters = Object.fromEntries(['codex', 'claude'].map(provider => [provider, createProviderAdapter(provider, { workspaceRoot })]));
-  runtime = new ConnectorSession({ api: api(), identity, adapters });
+  runtime = new ConnectorSession({ api: api(), identity, adapters, ...bridgeMetadata });
   runtime.on('state', update => {
     if (currentRevision !== revision) return;
     state.providers = update.providers;

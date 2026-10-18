@@ -1,0 +1,74 @@
+{
+  "project": "hapark",
+  "phase": "20-ai-connection-controls",
+  "baselineCommit": "af0726a5b02b2af1b9e5d834695fd02ee5791412",
+  "execution": "Isolated worktree; collaborative TDD; preserve original user work.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "actual-app-and-cli-capabilities",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-18T15:23:28+0900",
+      "completed_at": "2026-10-18T15:23:35+0900",
+      "summary": "actual-app-and-cli-capabilities: 1 AC commands passed"
+    },
+    {
+      "step": 1,
+      "name": "sidebar-provider-effort-update-controls",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ]
+      ],
+      "started_at": "2026-10-18T15:23:47+0900",
+      "completed_at": "2026-10-18T15:27:12+0900",
+      "summary": "sidebar-provider-effort-update-controls: 1 AC commands passed"
+    },
+    {
+      "step": 2,
+      "name": "connection-controls-release-verification",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "lint"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "build"
+        ],
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "e2e"
+        ],
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "wire"
+        ]
+      ],
+      "started_at": "2026-10-18T15:27:50+0900",
+      "completed_at": "2026-10-18T15:35:32+0900",
+      "summary": "connection-controls-release-verification: 4 AC commands passed"
+    }
+  ],
+  "productionDeployed": false,
+  "connectorReleased": false,
+  "installedUpgradeVerified": false,
+  "created_at": "2026-10-18T15:23:28+0900",
+  "completed_at": "2026-10-18T15:35:32+0900",
+  "releaseStatus": "Local gates passed; exact-source CI and production release pending."
+}

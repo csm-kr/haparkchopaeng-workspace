@@ -16,6 +16,19 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
+function exactKeys(body, keys) {
+  return body && !Array.isArray(body) && typeof body === 'object'
+    && Object.keys(body).length === keys.length && keys.every(key => Object.hasOwn(body, key));
+}
+function validHeartbeatInput(body) {
+  if (!body || typeof body !== 'object' || !Array.isArray(body.providers)
+    || !Object.keys(body).every(key => ['providers', 'bridgeVersion', 'bridgeArchitecture'].includes(key))) return false;
+  if (Object.hasOwn(body, 'bridgeVersion') && (typeof body.bridgeVersion !== 'string' || body.bridgeVersion.length > 64
+    || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/.test(body.bridgeVersion))) return false;
+  if (Object.hasOwn(body, 'bridgeArchitecture') && !['arm64', 'x64'].includes(body.bridgeArchitecture)) return false;
+  return true;
+}
+
 // Keep runtime preparation testable without spawning Electron or touching a
 // credential store. The production caller provides the official installer.
 async function prepareElectronRuntime({ packageDirectory, readPath, verifyExecutable, install }) {
@@ -51,6 +64,29 @@ function nativeProcessDiagnostic(record, stderr) {
 
 async function runtimePreparationTests() {
   const { test } = await import('node:test');
+  await test('the native fixture accepts real legacy and versioned runtime heartbeats without queuing work', async () => {
+    const { ConnectorSession } = await import('../core/runtime.mjs');
+    for (const metadata of [{}, { bridgeVersion: '0.1.5', bridgeArchitecture: 'x64' }, { bridgeVersion: '0.1.5-preview.1+build.2', bridgeArchitecture: 'arm64' }]) {
+      let heartbeatCount = 0, claimCount = 0;
+      const api = { post: async (route, body) => {
+        if (route === 'heartbeat') {
+          assert.equal(validHeartbeatInput(body), true, 'The fixture must accept the actual optional metadata contract.');
+          heartbeatCount += 1; return { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [] };
+        }
+        assert.equal(route, 'claim'); assert.deepEqual(body, {}); claimCount += 1; return null;
+      } };
+      const session = new ConnectorSession({ api, identity: {}, adapters: {}, now: () => 1000, setIntervalFn: () => 1, clearIntervalFn() {}, ...metadata });
+      session.start(new Date(46000).toISOString());
+      try { await session.tick(); assert.equal(heartbeatCount, 1); assert.equal(claimCount, 1); }
+      finally { session.stop(); }
+    }
+  });
+  await test('native heartbeat fixture rejects unknown fields and malformed explicit bridge metadata', () => {
+    for (const body of [null, [], {}, { providers: {} }, { providers: [], privateField: 'never-forward' },
+      { providers: [], bridgeVersion: null }, { providers: [], bridgeVersion: 'latest' }, { providers: [], bridgeVersion: '01.1.5' },
+      { providers: [], bridgeVersion: '0.1.5-01' }, { providers: [], bridgeVersion: '0.1.5\n' }, { providers: [], bridgeVersion: '0.1.5-' + 'a'.repeat(64) },
+      { providers: [], bridgeArchitecture: null }, { providers: [], bridgeArchitecture: 'ia32' }]) assert.equal(validHeartbeatInput(body), false);
+  });
   const missing = () => Object.assign(new Error('Missing native runtime'), { code: 'ENOENT' });
   const packageDirectory = join(tmpdir(), 'runtime-preparation-unit');
   await test('ready native runtime skips installer', async () => {
@@ -170,10 +206,6 @@ function respond(response, status, data, code = 'INVALID_REQUEST') {
   response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   response.end(JSON.stringify(status < 400 ? { data } : { error: { code, message: 'CI fixture response' } }));
 }
-function exactKeys(body, keys) {
-  return body && !Array.isArray(body) && typeof body === 'object'
-    && Object.keys(body).length === keys.length && keys.every(key => Object.hasOwn(body, key));
-}
 const server = createServer(async (request, response) => {
   try {
     if (request.method !== 'POST') { stats.unexpected += 1; respond(response, 404); return; }
@@ -212,7 +244,7 @@ const server = createServer(async (request, response) => {
       stats.strictRejected += 1; respond(response, 401); return;
     }
     if (request.url === '/api/local-agent/desktop/heartbeat') {
-      if (!exactKeys(body, ['providers']) || !Array.isArray(body.providers)) {
+      if (!validHeartbeatInput(body)) {
         stats.strictRejected += 1; respond(response, 400); return;
       }
       stats.heartbeat += 1;

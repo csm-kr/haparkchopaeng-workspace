@@ -28,9 +28,13 @@ Windows가 전용 링크의 authority 뒤에 루트 `/`를 추가할 수 있으�
 | --- | --- | --- |
 | POST `/desktop/ack` | `LocalAgentDesktopAckInput` | `LocalAgentDesktopAttempt` |
 | POST `/desktop/pair` | `LocalAgentDesktopPairInput` | `LocalAgentDesktopAttempt` |
-| POST `/desktop/heartbeat` | `{providers: LocalAgentProviderSnapshot[]}` | `LocalAgentDesktopHeartbeat` |
+| POST `/desktop/heartbeat` | `LocalAgentDesktopHeartbeatInput` | `LocalAgentDesktopHeartbeat` |
 | POST `/desktop/claim` | `{}` | `LocalAgentClaim` or `null` |
 | POST `/desktop/result` | `LocalAgentJobResultInput` | `{accepted:true,version:number}` |
+
+heartbeat는 기존 `providers` 외에 선택 필드 `bridgeVersion?: string`, `bridgeArchitecture?: "arm64" | "x64"`를 받는다. 새 앱은 실행 중인 `app.getVersion()`과 지원되는 `process.arch`만 보고한다. 버전은 최대 64자의 SemVer이며 prerelease/build를 허용하고 공백·`v` 접두사·명시적 `null`은 거절한다. 두 필드를 생략하는 기존 앱의 요청은 그대로 허용한다.
+
+앱 정보는 기존 `LocalAgentSnapshot`의 서버 예약 provider `_bridge` JSON 행에 저장한다. 이 행은 CLI 목록·모델·한도에 포함하지 않으며 `providers: []`도 앱 정보를 지우지 않는다. 매 heartbeat에서 생략한 필드는 이전 보고를 이어 쓰지 않고 `null`로 기록한다. provider의 `observedAt` 역전 방지는 그대로 유지하며 앱 정보는 별도의 서버 수신 시각을 따른다. `LocalAgentDeviceView.bridgeVersion/bridgeArchitecture`는 현재 세션·팀의 유효한 grant와 20초 미만인 앱 heartbeat·메타데이터 관측이 모두 있을 때만 값을 반환하고, 미보고·오래된 값·권한 만료는 `null`이다. 설치파일의 무결성이나 최신 버전을 증명하는 값이 아닌 인증된 앱의 자기보고다. 기존 설치 파일과 호환되며 DDL 변경은 없다.
 
 heartbeat/claim/result는 `Authorization: Bearer <deviceToken>` 및 `X-Local-Agent-Device: <deviceId>` 헤더가 필요하다. deviceToken은 32 random bytes의 base64url(43자)이며 로컬 OS 암호화 저장소에 보관하고 서버는 SHA256 지문만 저장한다. 기존 키·같은 웹 세션·같은 팀·회수되지 않은 grant가 있으면 ack에서 자동 재연결한다. 이 조건이 없으면 앱에서 웹의 6자리 번호를 직접 입력해야 한다.
 

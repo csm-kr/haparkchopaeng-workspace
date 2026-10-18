@@ -299,3 +299,13 @@
 자료 준비는 Inngest `research-chat/prepare`에서 수행한다. `preparing`도 동시 작업 상한·취소·세션 회수에 포함하고, 기기는 `queued`만 claim한다. 준비 후 현재 grant·팀 멤버십·version을 다시 검사한다. DB DDL은 추가하지 않으며 기존 배열 선택을 읽고 새 version 2 선택을 Json 필드에 저장한다. 배포 순서는 호환 웹 → 새 연결기다. 구 웹은 새 모델 메타데이터·version 2 선택을 읽지 못하므로 데이터 기록 후 웹 롤백에는 호환 reader를 유지해야 한다.
 
 범위·화면은 [설계](../design/LOCAL_AI_RESEARCH_CHAT.md), 배포 검증은 [phase 19](../../phases/19-free-ai-chat-release/index.json)로 추적한다. 논문 상세의 두 관점·공통 Figure·명시적 논문 분석과 45초 실행 허가는 ADR-026을 유지한다.
+
+## ADR-028 — 현재 앱 버전과 제공자별 AI 연결 설정
+
+**결정(2026-10-18):** 계정 위 진입점은 `AI 연결`과 8px 상태 점으로 표시한다. 연결됨은 online 토큰, 나머지는 중립 회색이며 텍스트 상태를 접근성 이름에 제공한다. Codex·Claude Code 탭은 해당 도구의 실제 모델과 지원 effort를 보여 준다. 도구 탭 조회로 실행 제공자를 바꾸지 않고 사용자의 명시적 모델 선택만 반영한다. ADR-027의 sticky 선택·자동 대체 금지는 유지한다.
+
+연결 앱 0.1.5는 실제 `app.getVersion()`과 `process.arch`를 선택적 `bridgeVersion`·`bridgeArchitecture`로 heartbeat에 전달한다. 서버는 기기 잠금과 유효 실행 허가 아래 기존 snapshot의 예약 `_bridge` JSON row에 저장하고 CLI 모델·사용량에서는 제외한다. 미보고 구 앱, 20초 이상 오래된 heartbeat, 허가 만료는 버전 미확인으로 표시한다. DDL은 추가하지 않는다. Claude의 `supportsEffort`와 `supportedEffortLevels`가 함께 제공된 모델에만 추론 강도를 광고한다.
+
+웹은 게시된 OS·칩별 최신 파일과 실제 설치 버전을 semantic version으로 비교한다. 최신·더 높은 설치 버전에는 다운그레이드 링크를 제공하지 않는다. 칩 미확인은 선택을 요구하며, 최신 조회는 표시 중 60초와 포커스 복귀·사용자 요청 시 갱신한다. 업데이트는 게시 파일 다운로드 → 사용자가 설치 파일 열기 → 동일 앱 ID·프로필·프로토콜의 새 앱 실행 → 새 heartbeat 확인이다. 웹 배포나 다운로드를 앱 업데이트 완료로 간주하지 않는다. 구 서버는 추가 필드를 거부하므로 호환 웹을 먼저 배포한 뒤 앱을 게시한다.
+
+구현·릴리스 인수는 [phase 20](../../phases/20-ai-connection-controls/index.json)로 추적한다.

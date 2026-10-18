@@ -1,11 +1,26 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { DesktopAckSchema, JobCreateSchema, ProviderSnapshotSchema, ResultSchema, sanitizeProviderSnapshot } from "../validation";
+import { DesktopAckSchema, HeartbeatSchema, JobCreateSchema, ProviderSnapshotSchema, ResultSchema, sanitizeProviderSnapshot } from "../validation";
 
 describe("untrusted connector input", () => {
   const ready = { provider: "codex", status: "ready", models: [{ id: "actual-model", name: "Actual model" }], quota: null, observedAt: "2026-10-17T12:00:00.000Z" };
   it("accepts missing quota without inventing zero remaining tokens", () => {
     expect(ProviderSnapshotSchema.parse(ready).quota).toBeNull();
+  });
+  it("accepts optional actual bridge metadata while retaining the legacy heartbeat contract", () => {
+    expect(HeartbeatSchema.parse({ providers: [] })).toEqual({ providers: [] });
+    for (const bridgeVersion of ["0.1.5", "0.1.5-preview.1+build.2"]) {
+      expect(HeartbeatSchema.parse({ providers: [], bridgeVersion, bridgeArchitecture: "arm64" })).toEqual({ providers: [], bridgeVersion, bridgeArchitecture: "arm64" });
+    }
+    expect(HeartbeatSchema.safeParse({ providers: [ready], bridgeArchitecture: "x64" }).success).toBe(true);
+    for (const bridgeVersion of [null, "", "latest", "v0.1.5", " 0.1.5", "01.1.5", "0.1.5-01", "0.1.5+" + "b".repeat(60), "0.1.5\n", 15]) {
+      expect(HeartbeatSchema.safeParse({ providers: [], bridgeVersion }).success).toBe(false);
+    }
+    for (const bridgeArchitecture of [null, "arm", "ia32", "ARM64", 64]) {
+      expect(HeartbeatSchema.safeParse({ providers: [], bridgeArchitecture }).success).toBe(false);
+    }
+    expect(HeartbeatSchema.safeParse({ providers: [], bridgeVersion: "0.1.5", executable: "PRIVATE_PATH" }).success).toBe(false);
+    expect(ProviderSnapshotSchema.safeParse({ ...ready, bridgeVersion: "0.1.5" }).success).toBe(false);
   });
   it("accepts legacy models and bounded actual effort metadata without relaxing strict input", () => {
     const model = { ...ready.models[0], reasoningEfforts: ["low", "high"] };

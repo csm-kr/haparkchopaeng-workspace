@@ -2,9 +2,13 @@ import { EventEmitter } from 'node:events';
 import { ID_PATTERN } from './security.mjs';
 
 const MAX_RESPONSE = 80000;
+const BRIDGE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/;
 export class ConnectorSession extends EventEmitter {
-  constructor({ api, identity, adapters, now = Date.now, setIntervalFn = setInterval, clearIntervalFn = clearInterval, maxJobMs = 600000 }) {
+  constructor({ api, identity, adapters, bridgeVersion, bridgeArchitecture, now = Date.now, setIntervalFn = setInterval, clearIntervalFn = clearInterval, maxJobMs = 600000 }) {
     super(); this.api = api; this.identity = identity; this.adapters = adapters; this.now = now;
+    if (bridgeVersion !== undefined && (typeof bridgeVersion !== 'string' || bridgeVersion.length > 64 || !BRIDGE_VERSION_PATTERN.test(bridgeVersion))) throw new Error('Invalid bridge version.');
+    if (bridgeArchitecture !== undefined && !['arm64', 'x64'].includes(bridgeArchitecture)) throw new Error('Invalid bridge architecture.');
+    this.bridgeMetadata = { ...(bridgeVersion !== undefined ? { bridgeVersion } : {}), ...(bridgeArchitecture !== undefined ? { bridgeArchitecture } : {}) };
     this.setIntervalFn = setIntervalFn; this.clearIntervalFn = clearIntervalFn; this.maxJobMs = maxJobMs;
     this.state = { status: 'disconnected', providers: [], currentJobId: null, message: '' };
     this.leaseExpiresAt = 0; this.timer = null; this.busy = false; this.lastHeartbeat = -Infinity; this.lastClaim = -Infinity;
@@ -39,7 +43,7 @@ export class ConnectorSession extends EventEmitter {
     try {
       if (this.now() - this.lastHeartbeat >= 5000) {
         this.lastHeartbeat = this.now();
-        const heartbeat = await this.api.post('heartbeat', { providers: this.state.providers }, this.identity, this.controller.signal);
+        const heartbeat = await this.api.post('heartbeat', { providers: this.state.providers, ...this.bridgeMetadata }, this.identity, this.controller.signal);
         if (!this.checkLease()) return;
         if (!this.setLease(heartbeat?.leaseExpiresAt)) { this.expire(); return; }
         if (this.activeJob && Array.isArray(heartbeat?.cancelJobIds) && heartbeat.cancelJobIds.includes(this.activeJob.id)) this.activeJob.controller.abort();
