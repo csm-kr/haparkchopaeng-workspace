@@ -74,6 +74,12 @@ model Team {
   createdAt   DateTime     @default(now())
   memberships Membership[]
   invites     Invite[]
+  localAgentDevices LocalAgentDevice[]
+  localAgentAttempts LocalAgentAttempt[]
+  localAgentGrants LocalAgentGrant[]
+  localAgentSnapshots LocalAgentSnapshot[]
+  localAgentJobs LocalAgentJob[]
+  researchConversations ResearchConversation[]
   // 전역 팀 상한 MAX_TEAMS(기본 2)는 앱레벨에서 강제(ADR-018).
 }
 
@@ -117,6 +123,10 @@ model Paper {
   // 분석 진행률 바용 — pending 진입 시각과 완료 소요(ms)를 쌓아 팀 평균으로 "예상 시간"을 낸다(R26).
   analysisStartedAt  DateTime? // pending 진입 시각(업로드·재분석). 경과 계산 기준.
   analysisDurationMs Int? // ready 전이 시 (완료−시작) ms — 팀 평균의 표본.
+  sourceText        String? // 페이지 참조가 포함된 원문 텍스트. 외부 잡에서만 준비.
+  sourceDigest      String? // 원문 PDF SHA256. 분석 초안과 원문 버전 연결.
+  analysisRequestId String? // 최신 로컬 분석 실행만 결과를 저장한다.
+  analysisError     String? // 정규화한 사용자 안내. 원시 CLI/서버 오류 저장 금지.
   analyses       Analysis[]
   figures        Figure[]
   notes          SectionNote[]
@@ -340,4 +350,138 @@ model Job {
   // 분석 등 분 단위 작업은 요청 경로가 아니라 이 잡으로 처리(ADR-013).
 
   @@index([status, runAfter])
+}
+
+// Local CLI connector. All writes are server-authenticated and scoped to member/team/session.
+// No raw web/CLI/device credentials or pairing codes are stored. Team deletion cascades.
+model LocalAgentDevice {
+  id         String @id @default(cuid())
+  teamId     String
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId   String
+  secretHash String
+  name       String
+  platform   String
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  attempts   LocalAgentAttempt[]
+  grants     LocalAgentGrant[]
+  snapshots  LocalAgentSnapshot[]
+  jobs       LocalAgentJob[]
+
+  @@unique([teamId, memberId, secretHash])
+  @@index([memberId, teamId])
+}
+
+model LocalAgentAttempt {
+  id                String @id @default(cuid())
+  teamId            String
+  team              Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId          String
+  sessionKey        String
+  sessionExpiresAt  DateTime
+  launchTokenHash   String
+  codeHash          String
+  status            String @default("awaiting_app")
+  failedAttempts    Int @default(0)
+  pendingSecretHash String?
+  pendingName       String?
+  pendingPlatform   String?
+  deviceId          String?
+  device            LocalAgentDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  cancelledAt       DateTime?
+  version           Int @default(0)
+  createdAt         DateTime @default(now())
+
+  @@index([memberId, teamId, sessionKey])
+  @@index([expiresAt])
+}
+
+model LocalAgentGrant {
+  id             String @id @default(cuid())
+  teamId         String
+  team           Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId       String
+  sessionKey     String
+  deviceId       String
+  device         LocalAgentDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  leaseExpiresAt DateTime
+  revokedAt      DateTime?
+  version        Int @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  jobs           LocalAgentJob[]
+
+  @@unique([sessionKey, teamId, deviceId])
+  @@index([deviceId, revokedAt, leaseExpiresAt])
+}
+
+model LocalAgentSnapshot {
+  id         String @id @default(cuid())
+  teamId     String
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId   String
+  deviceId   String
+  device     LocalAgentDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  provider   String
+  payload    Json
+  observedAt DateTime
+
+  @@unique([deviceId, provider])
+  @@index([teamId, memberId])
+}
+
+model LocalAgentJob {
+  id             String @id @default(cuid())
+  teamId         String
+  team           Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId       String
+  sessionKey     String
+  deviceId       String
+  device         LocalAgentDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  grantId        String
+  grant          LocalAgentGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  requestId      String
+  paperId        String
+  provider       String
+  model          String
+  prompt         String
+  context        String
+  purpose        String @default("question") // question | paper_analysis | chat
+  conversationId String?
+  conversation   ResearchConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  conversationTurn Int?
+  status         String @default("queued")
+  response       String @default("")
+  error          String?
+  version        Int @default(0)
+  eventSequence  Int @default(0)
+  claimTokenHash String?
+  claimedAt      DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([teamId, memberId, sessionKey, requestId])
+  @@index([deviceId, status, createdAt])
+  @@index([grantId, status])
+  @@unique([conversationId, conversationTurn])
+}
+
+// 개인 연구 대화. 읽기는 활성 팀+소유자, 실행은 현재 웹 세션의 짧은 grant로 제한.
+model ResearchConversation {
+  id        String @id @default(cuid())
+  teamId    String
+  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  memberId  String
+  title     String
+  paperIds  Json // 검증된 같은 팀의 논문 1~3개. 클라이언트 context는 저장하지 않는다.
+  jobs      LocalAgentJob[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId, teamId, updatedAt])
 }

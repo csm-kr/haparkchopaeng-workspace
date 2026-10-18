@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/auth";
+import { getConnectionSession, requireAuth } from "@/lib/auth";
 import { fail, ok, toErrorResponse } from "@/lib/http";
-import { setActiveTeam } from "@/lib/active-team";
+import { getActiveTeam, setActiveTeam } from "@/lib/active-team";
+import { revokeSession } from "@/lib/local-agent/service";
 
 // POST /api/teams/active — 활성 팀 전환(ADR-020/R37).
 // CRITICAL: 활성 팀 전환은 검증된 멤버십만 — slug가 내 멤버십이 아니면 setActiveTeam이 403으로 거부한다(R19).
@@ -18,7 +19,12 @@ export async function POST(req: Request): Promise<Response> {
     const parsed = Schema.safeParse(body);
     if (!parsed.success) return fail(400, "BAD_REQUEST", "팀을 확인해주세요.");
 
+    const previous = await getActiveTeam(session.memberId);
     await setActiveTeam(session.memberId, parsed.data.slug);
+    if (previous?.slug !== parsed.data.slug) {
+      const connection = await getConnectionSession();
+      if (connection) await revokeSession(connection.sessionKey);
+    }
     revalidatePath("/", "layout"); // 활성 팀이 바뀌면 셸(모든 화면)을 다시 그린다
     return ok({ slug: parsed.data.slug });
   } catch (e) {

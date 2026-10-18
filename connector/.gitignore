@@ -1,0 +1,7 @@
+node_modules/
+desktop/apps.generated.json
+dist/
+artifacts/
+*.log
+devices.enc.json
+devices.enc.json.*

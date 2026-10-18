@@ -4,6 +4,7 @@ import * as React from "react";
 import { ThemeProvider } from "./theme-provider";
 import { LiveProvider } from "./live-provider";
 import { PaperNotifyProvider } from "./paper-notify-provider";
+import { LocalAgentProvider } from "@/components/local-agent/provider";
 
 // 앱 레벨 클라이언트 컨텍스트 묶음. RSC 레이아웃 안에서 이 한 섬이
 // 테마·live·논문 알림 상태를 보유한다(ADR-015: 상호작용만 클라이언트).
@@ -24,7 +25,9 @@ export function AppProviders({
     <ThemeProvider>
       <LiveProvider key={activeTeamId} teamId={activeTeamId} initialLive={initialLive} initialSessionId={initialSessionId}>
         <PaperNotifyProvider teamId={activeTeamId}>
-          {children}
+          <LocalAgentProvider teamId={activeTeamId}>
+            {children}
+          </LocalAgentProvider>
         </PaperNotifyProvider>
       </LiveProvider>
     </ThemeProvider>

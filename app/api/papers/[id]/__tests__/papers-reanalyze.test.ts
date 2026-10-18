@@ -1,68 +1,54 @@
+// @vitest-environment node
+// Existing team-boundary tests now require an explicit local selection (ADR-026).
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// POST /api/papers/:id/reanalyze 팀 스코핑(ADR-020/R37) — 활성 팀의 논문만 재분석.
-// 검증: 활성 팀 논문이면 pending + 이벤트 · 다른 팀 논문이면 404(교차 팀 격리) · 없으면 404.
-
-const { requireAuthMock } = vi.hoisted(() => ({ requireAuthMock: vi.fn() }));
-vi.mock("@/lib/auth", () => ({ requireAuth: requireAuthMock }));
-
-const { getActiveTeamMock } = vi.hoisted(() => ({ getActiveTeamMock: vi.fn() }));
-vi.mock("@/lib/active-team", () => ({ getActiveTeam: getActiveTeamMock }));
-
-const { prismaMock } = vi.hoisted(() => ({
-  prismaMock: { paper: { findFirst: vi.fn(), update: vi.fn() } },
-}));
-vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-
-const { inngestSendMock } = vi.hoisted(() => ({ inngestSendMock: vi.fn() }));
-vi.mock("@/lib/inngest", () => ({ inngest: { send: inngestSendMock } }));
-
-const { POST } = await import("@/app/api/papers/[id]/reanalyze/route");
-
-const req = () =>
-  new Request("http://localhost/api/papers/p1/reanalyze", { method: "POST" });
-const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
-
+import { z } from "zod";
+import { HttpError } from "@/lib/http";
+const m = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), request: vi.fn(), read: vi.fn(), cancel: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ getConnectionSession: m.session }));
+vi.mock("@/lib/active-team", () => ({ getActiveTeam: m.team }));
+vi.mock("@/lib/local-ai/service", () => ({ LocalAnalysisRequestSchema: z.object({ deviceId: z.string(), provider: z.enum(["codex", "claude"]), model: z.string().min(1), requestId: z.uuid() }).strict(), requestLocalAnalysis: m.request, getLocalAnalysisState: m.read, cancelLocalAnalysis: m.cancel }));
+const { POST, GET, DELETE } = await import("../reanalyze/route");
+const input = { deviceId: "pc", provider: "codex", model: "actual-model", requestId: "5764df42-253c-4279-88a8-dce34b107342" };
+const req = (body: unknown = input, origin = "https://research.test") => new Request("https://research.test/api/papers/p1/reanalyze", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body) });
+const ctx = { params: Promise.resolve({ id: "p1" }) };
 beforeEach(() => {
   vi.clearAllMocks();
-  requireAuthMock.mockResolvedValue({ memberId: "jo", role: "멤버" });
-  getActiveTeamMock.mockResolvedValue({ id: "tA", slug: "alpha", role: "member" });
-  inngestSendMock.mockResolvedValue(undefined);
-  prismaMock.paper.update.mockResolvedValue({});
+  m.session.mockResolvedValue({ memberId: "ha", sessionKey: "session-fingerprint", expiresAt: new Date(Date.now() + 3600000) });
+  m.team.mockResolvedValue({ id: "tA" });
+  m.request.mockResolvedValue({ id: "p1", runId: "run", analysisStatus: "pending" });
+  m.read.mockResolvedValue({ id: "p1", analysisStatus: "awaiting_ai" });
+  m.cancel.mockResolvedValue({ id: "p1", analysisStatus: "awaiting_ai" });
 });
-
 describe("POST /api/papers/:id/reanalyze", () => {
-  it("활성 팀의 논문이면 pending으로 되돌리고 이벤트를 보낸다", async () => {
-    prismaMock.paper.findFirst.mockImplementation(
-      async ({ where }: { where: { id: string; teamId: string } }) =>
-        where.id === "p1" && where.teamId === "tA" ? { id: "p1" } : null,
-    );
-
-    const res = await POST(req(), ctx("p1"));
-    expect(res.status).toBe(200);
-    expect(prismaMock.paper.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          analysisStatus: "pending",
-          analysisStartedAt: expect.any(Date),
-        }),
-      }),
-    );
-    expect(inngestSendMock).toHaveBeenCalled();
+  it("accepts an explicit selection and injects the verified team and session", async () => {
+    expect((await POST(req(), ctx)).status).toBe(202);
+    expect(m.request).toHaveBeenCalledWith(expect.objectContaining({ teamId: "tA", memberId: "ha", sessionKey: "session-fingerprint" }), "p1", input);
   });
-
-  it("다른 팀의 논문이면 404 (교차 팀 격리, R37) — 재분석 안 함", async () => {
-    prismaMock.paper.findFirst.mockResolvedValue(null);
-    const res = await POST(req(), ctx("p1"));
-    expect(res.status).toBe(404);
-    expect(prismaMock.paper.update).not.toHaveBeenCalled();
-    expect(inngestSendMock).not.toHaveBeenCalled();
+  it("keeps another team's paper hidden", async () => {
+    m.request.mockRejectedValue(new HttpError(404, "NOT_FOUND", "논문을 찾을 수 없어요."));
+    expect((await POST(req(), ctx)).status).toBe(404);
   });
-
-  it("활성 팀이 없으면 404", async () => {
-    getActiveTeamMock.mockResolvedValue(null);
-    const res = await POST(req(), ctx("p1"));
-    expect(res.status).toBe(404);
-    expect(prismaMock.paper.update).not.toHaveBeenCalled();
+  it("rejects a missing active team before starting a job", async () => {
+    m.team.mockResolvedValue(null);
+    expect((await POST(req(), ctx)).status).toBe(403);
+    expect(m.request).not.toHaveBeenCalled();
+  });
+  it("requires a selection and rejects owner/context injection", async () => {
+    expect((await POST(req({}), ctx)).status).toBe(400);
+    expect((await POST(req({ ...input, context: "fake", teamId: "other" }), ctx)).status).toBe(400);
+    expect(m.request).not.toHaveBeenCalled();
+  });
+  it("rejects cross-origin and signed-out execution", async () => {
+    expect((await POST(req(input, "https://evil.test"), ctx)).status).toBe(403);
+    m.session.mockResolvedValue(null);
+    expect((await POST(req(), ctx)).status).toBe(401);
+    expect(m.request).not.toHaveBeenCalled();
+  });
+  it("serves private status and authenticated cancellation", async () => {
+    const result = await GET(new Request("https://research.test/api/papers/p1/reanalyze"), ctx);
+    expect(result.status).toBe(200);
+    expect(result.headers.get("cache-control")).toContain("no-store");
+    expect((await DELETE(new Request("https://research.test/api/papers/p1/reanalyze", { method: "DELETE", headers: { origin: "https://research.test" } }), ctx)).status).toBe(200);
+    expect(m.cancel).toHaveBeenCalledWith(expect.objectContaining({ teamId: "tA" }), "p1");
   });
 });

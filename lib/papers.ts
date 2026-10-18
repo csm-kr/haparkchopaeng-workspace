@@ -24,7 +24,7 @@ function firstTag(tags: unknown): string | null {
 
 /** DB의 analysisStatus(String)를 유니온으로 좁힌다. 미지정 값은 pending으로 본다. */
 function toAnalysisStatus(value: string): AnalysisStatus {
-  return value === "ready" || value === "failed" ? value : "pending";
+  return value === "ready" || value === "failed" || value === "awaiting_ai" ? value : "pending";
 }
 
 export async function getPapers(teamId: string): Promise<PaperListItem[]> {

@@ -63,6 +63,8 @@
 **이유**: PRD §3은 "AI 요약을 핵심으로 내세우기"를 폐기했다(ADR-004). 그러나 비교/ablation 표·figure 해석엔 "AI 추출"이 유효하다. 제품의 본질은 사람 중심 분석이고 LLM은 초안 생성기다. Gemini는 PDF document 입력·구조화 출력(responseSchema)·비전(figure)을 지원하고, 이미 Google OAuth를 쓰는 스택과 결이 맞는다.
 **트레이드오프**: 외부 API 의존·비용. 키는 `.env`(서버 전용)에 두고 클라이언트 노출 금지([`../dev/ENV.md`](../dev/ENV.md), [`../security/SECURITY.md`](../security/SECURITY.md)). 제공자 교체 시 추출 프롬프트·스키마 재튜닝 필요.
 
+**🔁 개정됨 → ADR-026:** 사람의 검수·보강 원칙은 유지한다. 현재 논문 분석의 기본 실행 제공자는 사용자가 명시적으로 고른 로컬 Codex·Claude Code이며 업로드 시 Gemini를 자동 호출하지 않는다. Gemini를 장애·한도 발생 시 자동 대체 경로로도 쓰지 않는다.
+
 ### ADR-012: 배포는 상시 구동 Node 서버 (서버리스 아님)
 **결정**: 프로덕션은 서버리스 함수가 아니라 **상시 구동 Node 서버 단일 인스턴스**로 배포한다.
 **이유**: ① 분 단위 분석/녹화 후처리를 인-프로세스 워커로 돌려야 하고 ② SQLite 파일은 영속 디스크가 필요하다. 서버리스는 둘 다 깨진다. 4인 단일 그룹엔 단일 인스턴스로 충분.
@@ -262,3 +264,28 @@
 - `maxTeams()`가 **동기 → 비동기**가 되고 소유가 `lib/teams.ts` → `lib/settings.ts`로 옮겨간다(호출부에 `await` 추가).
 - **`AppSetting` 테이블이 없으면 `maxTeams()`가 던진다** — 팀 생성·`/teams`·`/admin`이 모두 막힌다. 따라서 **코드 배포보다 `prisma db push`가 반드시 먼저**다(ADR-022와 같은 수동 반영 원칙).
 - 관리자 판정이 이메일 1개에 묶여 있어 운영자를 늘리려면 env를 바꿔야 한다(현 1인 운영엔 충분 — 복수 관리자는 필요해지면 도입).
+
+## ADR-025 — 설치형 로컬 AI 연결기와 짧은 실행 허가
+
+**결정(2026-10-17):** Codex·Claude Code 로그인으로 논문 질문·연구 보조를 실행하는 선택 기능을 추가한다. 웹 origin은 `https://hapark.vercel.app`, 프로토콜은 `hapark-connect`다. 최초 설치 후 웹 버튼으로 다시 열고 첫 실행은 웹 복귀 URL로 연결 요청을 받는다. 웹의 6자리 번호를 앱의 빈 입력에 확인한다. 같은 로그인·팀·기기만 번호 없이 재연결한다.
+
+실행 허가는 45초이며 웹만 갱신한다. 로그아웃·팀 전환·멤버 제거는 회수하고 쿠키 유실은 만료로 중단한다. 작업은 DB 큐에 적재해 즉시 응답하고 로컬 연결기가 claim한다. 기존 Gemini/Inngest·두 관점 페이지는 유지한다. 모델은 실제 CLI 목록에서 직접 선택하고 한도는 실제 기간·비율·관측 시각만 표시한다. 인증 파일을 서버에 전송하지 않는다.
+
+**트레이드오프:** 앱 한 번 설치와 OS/브라우저 확인이 필요하다. CLI 버전·기능 제한, macOS 서명/공증, Ubuntu GUI/비밀 저장소 제약이 있다. 공유 DB 적용은 기존대로 사람의 SQL 검토·수동 실행 대상이다. [LOCAL_AGENT](../dev/LOCAL_AGENT.md)에 계약·검증을 기록하며 제품 완성 후 공통 repo와 UI/UX 맞춤 스킬로 분리한다.
+
+**🔁 개정됨 → ADR-026:** 설치·페어링·45초 허가·실제 모델 선택은 유지한다. 위의 "기존 Gemini 분석 유지" 범위는 명시적 로컬 모델 논문 분석과 별도 개인 연구 채팅으로 확장·대체한다. 유효 허가 중 서버가 접수한 완료 결과의 후처리와, 만료 후 새 추론은 구분한다.
+
+<a id="adr-026"></a>
+## ADR-026 — 로컬 모델 논문 분석과 개인 연구 채팅
+
+**결정(2026-10-17):** 사용자의 Codex·Claude Code 구독 로그인을 논문 분석과 연구 보조에 사용한다. ADR-011의 Gemini 기본 제공자와 ADR-025의 기존 분석 유지 범위를 개정한다. 업로드는 PDF 저장·원문 텍스트 준비까지만 수행하여 AI 호출이 없다. 사용자가 연결한 PC·제공자·실제 모델을 선택해 시작한 분석만 실행한다. Gemini·다른 CLI·원격 API로 자동 과금 대체하지 않는다.
+
+**실행과 저장:** `paper/analyze`의 본문 준비 경로는 페이지별 원문과 PDF SHA256을 캐시한다(1~30쪽·본문 12만 자, 스캔·초과는 정직한 준비 실패). 명시적 분석 요청은 `Job(type=prepare_local_analysis)`와 최신 `Paper.analysisRequestId`를 저장한다. Inngest는 서버가 준비한 문맥으로 `LocalAgentJob(purpose=paper_analysis)`를 적재하고 durable sleep·짧은 DB 조회로 완료를 회수한다. 장기 CLI는 PC에서 실행하며 서버리스 요청에서 기다리지 않는다. 결과의 strict JSON, 양 관점의 페이지·원문 인용과 Figure 캡션을 검증하고 최신 실행 CAS로 `Analysis(research/repro)`·`Figure`·상태를 원자적으로 저장한다. 사용자 섹션 노트는 유지한다.
+
+**제품과 한계:** 두 관점 페이지와 공통 Figure 하단은 유지하며 논문 상세에 AI 탭·사이드패널을 추가하지 않는다. 현 CLI 계약은 텍스트 전용으로 파일·브라우저·셸 도구를 차단한다. Figure는 실제 PDF 페이지를 표시하되 해석은 본문·캡션 기반 추론으로 표시한다. 외부 저장소는 방문·검증하지 않으며 `repo.found=false`, `source=paper`로 제한한다.
+
+**개인 연구 대화:** 별도 작업 공간 메뉴 `/ai-chat`에서 같은 팀 논문 1~3개를 선택한다. `ResearchConversation`에 소유자·근거를 저장하고 `LocalAgentJob(purpose=chat)`의 질문·누적 답변을 대화 턴으로 사용한다. 근거 변경은 새 대화로 진행한다. 현재 명시적으로 선택한 모델을 사용하고 부분 답변·중지·끊김·세션 오류를 구분한다. 소유자+활성 팀으로 개인 이력을 지속 조회하되 실행은 현재 세션의 grant를 요구한다. 같은 대화의 동시 턴은 하나이며 재전송은 같은 요청으로 처리한다. 목록 100개·상세 최근 50턴, 모델 문맥은 완료된 최근 8턴과 원문 최대 20만 자이고 생략 여부를 알린다. 대화가 공유 분석·노트를 자동 변경하지 않는다.
+
+**완료 경계:** 유효한 45초 grant 중 서버가 이미 `completed`로 접수한 결과는 로그아웃 후에도 검증·렌더·영속을 마칠 수 있다. 이후 새 추론·계속 실행·미접수 결과는 거절하며 Inngest는 grant를 갱신하지 않는다. 멤버 제거·팀 삭제는 별도로 다루어 분석 최종 저장 시 현재 멤버십과 논문/팀 범위를 재검증한다.
+
+**운영:** 기존 로컬 연결 5개 테이블에 더해 `ResearchConversation`, `Paper`의 `sourceText/sourceDigest/analysisRequestId/analysisError`, `LocalAgentJob`의 `purpose/conversationId/conversationTurn`가 필요하다. 기존 연결 SQL 이후 `20261017-local-ai-research-chat.sql`을 검토·수동 적용한다. 운영 DB 적용은 아직 하지 않았다. 소스 `3f16685`의 [CI](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·실제 PostgreSQL 13개·Chromium 8개·HTTP 계약·3 OS native/패키징을 통과했다. [DB 적용 순서](../dev/DB.md#local-ai-schema), [API](../dev/API.md), [하네스](../../phases/13-local-ai-research-chat/index.json)를 따른다.

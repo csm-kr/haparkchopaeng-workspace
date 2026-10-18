@@ -43,6 +43,7 @@ describe("Sidebar 내비", () => {
     expect(labels).toEqual([
       "홈",
       "논문",
+      "AI 채팅",
       "NEWS",
       "발표 자료",
       "스케쥴",

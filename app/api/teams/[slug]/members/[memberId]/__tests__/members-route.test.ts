@@ -12,9 +12,12 @@ const { prismaMock } = vi.hoisted(() => ({
   prismaMock: {
     team: { findUnique: vi.fn() },
     membership: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
+const { revokeMembershipMock } = vi.hoisted(() => ({ revokeMembershipMock: vi.fn() }));
+vi.mock("@/lib/local-agent/service", () => ({ revokeMembershipConnections: revokeMembershipMock }));
 
 const { PATCH, DELETE } = await import("@/app/api/teams/[slug]/members/[memberId]/route");
 
@@ -57,6 +60,8 @@ beforeEach(() => {
     }),
   );
   prismaMock.membership.delete.mockResolvedValue({});
+  revokeMembershipMock.mockResolvedValue(undefined);
+  prismaMock.$transaction.mockImplementation(async (run: (tx: typeof prismaMock) => Promise<unknown>) => run(prismaMock));
 });
 
 describe("PATCH /api/teams/:slug/members/:memberId", () => {
@@ -116,6 +121,8 @@ describe("DELETE /api/teams/:slug/members/:memberId", () => {
     const res = await DELETE(delReq(), ctx("crew", "bak"));
     expect(res.status).toBe(200);
     expect(prismaMock.membership.delete).toHaveBeenCalled();
+    expect(revokeMembershipMock).toHaveBeenCalledWith(prismaMock, { teamId: "t1", memberId: "bak" });
+    expect(revokeMembershipMock.mock.invocationCallOrder[0]).toBeLessThan(prismaMock.membership.delete.mock.invocationCallOrder[0]);
   });
 
   it("owner가 비-owner를 내보낼 수 있다", async () => {

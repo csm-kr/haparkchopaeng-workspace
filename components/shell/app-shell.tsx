@@ -24,6 +24,16 @@ export function AppShell({
 }: AppShellProps) {
   const [collapsed, setCollapsed] = React.useState(false);
 
+  React.useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const smallScreen = window.matchMedia("(max-width: 767px)");
+    // 첫 서버/클라이언트 렌더를 같게 유지하고, 마운트 후 기존 64px 레일을 사용한다.
+    setCollapsed(smallScreen.matches);
+    const change = (event: MediaQueryListEvent) => setCollapsed(event.matches);
+    smallScreen.addEventListener("change", change);
+    return () => smallScreen.removeEventListener("change", change);
+  }, []);
+
   return (
     <div className="flex h-screen w-full overflow-hidden">
       <Sidebar

@@ -56,6 +56,24 @@
       "dir": "11-fines",
       "status": "completed",
       "completed_at": "2026-06-26T13:38:58+0900"
+    },
+    {
+      "dir": "12-local-agent-connection",
+      "status": "completed",
+      "completed_at": "2026-10-17T21:17:54+0900"
+    },
+    {
+      "dir": "13-local-ai-research-chat",
+      "status": "completed",
+      "failed_at": "2026-10-17T21:40:07+0900",
+      "completed_at": "2026-10-17T21:44:05+0900"
+    },
+    {
+      "dir": "14-installed-connector-validation",
+      "status": "completed",
+      "failed_at": "2026-10-17T22:50:33+0900",
+      "previous_completed_at": "2026-10-18T00:03:03+0900",
+      "completed_at": "2026-10-18T00:25:05+0900"
     }
   ]
 }

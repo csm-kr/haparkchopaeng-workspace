@@ -87,7 +87,11 @@ model Paper {
   uploadedBy String                // Member.id
   uploadedAt DateTime @default(now())
   tags       Json                  // string[]
-  analysisStatus String @default("pending") // pending | ready | failed (업로드≠분석, UX 분리)
+  analysisStatus String @default("pending") // pending | awaiting_ai | ready | failed
+  sourceText        String? // JSON [{page,text}], 페이지 원문. 본문 합계 최대 120000자
+  sourceDigest      String? // 원문 PDF SHA256
+  analysisRequestId String? // 현재 Job 실행 ID. 이전 실행의 늦은 저장을 차단
+  analysisError     String? // 정규화한 사용자 안내(원시 오류·CLI stderr 금지)
   analyses   Analysis[]
   figures    Figure[]
   notes      SectionNote[]
@@ -270,7 +274,7 @@ model Participant {
 
 model Job {
   id          String @id @default(cuid())
-  type        String   // analyze_paper | fetch_arxiv | process_recording
+  type        String   // prepare_local_analysis | fetch_arxiv | process_recording (analyze_paper는 레거시)
   status      String @default("queued") // queued | running | done | failed
   payload     Json     // { paperId } 등
   attempts    Int @default(0)
@@ -323,3 +327,33 @@ model Publication {
 - **`ScheduleMonth`를 미리 만들지 마라.** 이유: row 부재가 "빈 달"의 진짜 표현이다. 미리 생성하면 유령 일정이 된다(ADR-006).
 - **`Paper`에 타입/형식 필드를 두지 마라.** 이유: PDF 전용이므로 분기가 없다(ADR-003).
 - **논문에 댓글 테이블을 붙이지 마라.** 이유: 회고 댓글은 발표 자료 귀속, 논문 상세엔 댓글 패널이 없다(ADR-004).
+
+## 로컬 AI 연결 (ADR-025)
+
+`LocalAgentDevice`·`LocalAgentAttempt`·`LocalAgentGrant`·`LocalAgentSnapshot`·`LocalAgentJob` 다섯 모델은 팀에 귀속되고 팀 삭제 시 cascade된다. 요청·허가·작업은 member/session에도 스코프한다. 기기 키·launch token·확인 번호는 해시로만 저장한다. `sessionExpiresAt`은 확인 번호가 실제 웹 쿠키보다 오래 유효하지 않게 한다. grant lease와 job version/eventSequence/CAS로 중복 실행·만료 후 결과를 막는다. 멤버 제거는 관련 권한 회수와 같은 트랜잭션으로 처리한다. 공유 운영 DB 적용은 사람의 검토·수동 실행 대상이며 자동 테스트는 일회용 DB만 사용한다. [계약·검증](./LOCAL_AGENT.md).
+
+<a id="local-ai-schema"></a>
+## 연구 분석·채팅 확장 (ADR-026)
+
+스키마 정본은 [prisma/schema.prisma](../../prisma/schema.prisma)다. 기존 모델·관점·섹션 노트·관리자 설정을 보존하고 다음 항목만 추가한다.
+
+| 대상 | 추가 항목·의미 |
+|---|---|
+| `Paper` | `sourceText` 페이지별 원문 JSON, `sourceDigest` PDF SHA256, `analysisRequestId` 최신 실행, `analysisError` 사용자 안내 |
+| `LocalAgentJob` | `purpose` 기본 `question`(`paper_analysis|chat` 추가), nullable `conversationId/conversationTurn` |
+| `ResearchConversation` | `id/teamId/memberId/title/paperIds/createdAt/updatedAt`, `jobs` 관계 |
+
+`ResearchConversation.teamId`는 `Team` 삭제 시 cascade되고 소유자는 서버 세션에서 주입한다. `paperIds`는 검증된 같은 팀 논문 1~3개의 JSON 배열이며 임의 context를 저장하지 않는다. 목록 조회 인덱스는 `(memberId,teamId,updatedAt)`이다. `LocalAgentJob.conversationId` 관계는 대화 삭제 시 `SetNull`, `(conversationId,conversationTurn)`은 고유 제약이다. 대화 행 잠금으로 서로 다른 PC·세션의 동시 질문도 하나만 접수한다. 기존 질문/분석 작업의 nullable 대화 필드는 이 고유 제약에 묶이지 않는다.
+
+명시적 논문 분석은 `Job(type=prepare_local_analysis)`에 서버가 고정한 논문·활성 팀·소유자·세션·실행 선택을 기록한다. Inngest 이벤트에는 실행 식별자를 전달하고 원문·기기 자격은 공개하지 않는다. 본문 준비는 추론 없이 `sourceText/sourceDigest`를 캐시하고 `awaiting_ai`로 전환한다. 분석 결과는 strict JSON·원문 페이지/인용 검사 후 최신 `analysisRequestId`에만 CAS 저장하며 두 관점·Figure·상태 전이를 한 트랜잭션으로 처리한다. 실패·취소·이전 실행은 기존 검증된 분석과 사용자 노트를 덮지 않는다.
+
+개인 대화는 작업의 `prompt/response/status`를 턴 이력으로 재사용한다. 조회는 활성 팀+소유자, 실행/취소는 현재 세션으로 제한한다. 최근 목록 100개·대화 50턴을 반환하며, 모델에는 완료된 최근 8턴과 원문 최대 20만 자를 넣고 잘림을 표시한다. 유효 grant 중 서버가 접수한 완료 결과는 로그아웃 후 영속할 수 있지만, 새 실행 권한은 부여하지 않는다. 분석 최종 저장 시 현재 팀 멤버십을 다시 확인한다.
+
+운영 DB에는 아직 적용하지 않았다. 추가 전체 품질 검증과 SQL 검토가 진행 중이다. 적용 순서는 다음과 같다.
+
+1. 대상 프로젝트·데이터베이스·스키마와 백업/복구 지점을 확인하고 읽기 전용으로 현재 스키마·인덱스·제약을 정본과 비교한다. 최신 `AppSetting` 등 기존 운영 모델을 보존한다.
+2. 미적용 상태라면 기존 연결 5개 테이블의 [20261017-local-agent-connection.sql](./sql/20261017-local-agent-connection.sql)을 먼저 검토·수동 적용한다. 이미 적용됐다면 실제 drift를 확인하고 중복 실행하지 않는다.
+3. 이어 [20261017-local-ai-research-chat.sql](./sql/20261017-local-ai-research-chat.sql)로 위 추가 테이블·컬럼·관계·고유 제약을 검토·수동 적용한다. 일회용 PostgreSQL의 SQL 적용·drift 검증 성공을 운영 적용과 구분한다.
+4. 반영 후 읽기 전용 drift 확인과 권한·소스 준비·선택 모델 분석·개인 채팅의 제한된 검증을 한다. 코드 롤백 시 추가 테이블·사용자 이력은 보존하며 자동 `DROP`/리셋을 수행하지 않는다.
+
+공유 운영 DB에서 `prisma db push`·`seed`로 이 단계를 대체하지 않는다. 구체적 대상 확인·서명·설치 파일·배포·롤백 절차는 [운영 런북](./LOCAL_AGENT_RELEASE.md)을 따른다.

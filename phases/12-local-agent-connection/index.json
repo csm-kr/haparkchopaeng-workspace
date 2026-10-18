@@ -1,0 +1,282 @@
+{
+  "project": "hapark",
+  "phase": "12-local-agent-connection",
+  "execution": "Collaborative implementation with explicit owned paths; execute.py --verify records objective gates without committing unrelated work.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "verification-tools",
+      "status": "completed",
+      "paths": [
+        "scripts/execute.py",
+        "scripts/test_execute.py",
+        "scripts/local-agent-verify.mjs",
+        "scripts/local-agent-verify.test.mjs",
+        "playwright.local-agent.config.ts"
+      ],
+      "checks": [
+        [
+          "python",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ],
+        [
+          "node",
+          "--test",
+          "scripts/local-agent-verify.test.mjs"
+        ]
+      ],
+      "summary": "협업 작업의 AC 검증 모드, 소유 경로 커밋, 콘솔 숨김, 임시 SQLite 전용 검증기를 TDD로 검증한다.",
+      "started_at": "2026-10-17T19:21:04+0900",
+      "completed_at": "2026-10-17T19:46:35+0900"
+    },
+    {
+      "step": 1,
+      "name": "session-authority",
+      "status": "completed",
+      "paths": [
+        "lib/local-agent",
+        "app/api/local-agent",
+        "types/local-agent.ts"
+      ],
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "unit"
+        ]
+      ],
+      "summary": "웹 세션·팀·기기별 45초 권한, 6자리 페어링, 실제 모델 검증 및 DB 큐·회수를 격리 DB에서 검증한다.",
+      "started_at": "2026-10-17T19:47:30+0900",
+      "completed_at": "2026-10-17T19:47:40+0900"
+    },
+    {
+      "step": 2,
+      "name": "desktop-connector",
+      "status": "completed",
+      "paths": [
+        "connector"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ]
+      ],
+      "summary": "CLI 제한 실행, 메타데이터·사용량, 전용 링크·암호화 보관·취소 및 데스크톱 계약을 검증한다.",
+      "started_at": "2026-10-17T19:47:49+0900",
+      "completed_at": "2026-10-17T19:47:50+0900"
+    },
+    {
+      "step": 3,
+      "name": "web-flow",
+      "status": "completed",
+      "paths": [
+        "components/local-agent",
+        "tests/e2e/local-agent.spec.ts"
+      ],
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "e2e"
+        ]
+      ],
+      "summary": "첫 연결·설치 후 복귀·작은 링·모델 무선택·390px 다크 모달의 Chromium 흐름 4개를 통과했다. 한도·로그인·상태 변경 취소 사유와 빈 오류 fallback은 비동기 UI 회귀 5개를 추가해 확인했다.",
+      "started_at": "2026-10-17T19:40:08+0900",
+      "completed_at": "2026-10-17T20:36:16+0900",
+      "verification": {
+        "commit": "d54a1fd3334bb14158eb662eb7ef5c81d4bbe6d0",
+        "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751",
+        "job": 117387228769
+      }
+    },
+    {
+      "step": 4,
+      "name": "integrated-quality",
+      "status": "completed",
+      "paths": [],
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "lint"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "build"
+        ]
+      ],
+      "summary": "main 기반 격리 작업트리에서 105 suites/852 tests, lint, production build, Chromium 흐름 4개, 실제 HTTP·45초 쿠키 회수 검증을 통과했다. 로그아웃 오류 시 IdP 종료 보장과 웹 오류 표시 회귀를 포함한다. PostgreSQL 16 실제 동시성 8개와 추가 SQL drift 검증도 별도 CI로 통과했다. 운영 DB는 변경하지 않았다.",
+      "completed_at": "2026-10-17T20:36:16+0900",
+      "verification": {
+        "commit": "d54a1fd3334bb14158eb662eb7ef5c81d4bbe6d0",
+        "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751",
+        "jobs": {
+          "web": 117387228769,
+          "postgres": 117387228620
+        },
+        "artifact": "web-evidence/phases/12-local-agent-connection/step4-output.json",
+        "exitCodes": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "step": 5,
+      "name": "release-verification",
+      "status": "completed",
+      "paths": [],
+      "checks": [
+        [
+          "node",
+          "connector/scripts/ci-desktop-smoke.mjs",
+          "--self-test"
+        ],
+        [
+          "gh",
+          "run",
+          "watch",
+          "39029600751",
+          "--repo",
+          "csm-kr/haparkchopaeng-workspace",
+          "--exit-status"
+        ]
+      ],
+      "summary": "개발 배포 후보 검증: Windows x64·macOS arm64·Ubuntu X11 x64의 실제 Electron/OS 암호화/재개/손상 복구, Windows NSIS 설치·URI 등록·제거, macOS 2종 DMG 빌드, Ubuntu deb의 실행·설치 스크립트 읽기 검사를 확인한다. macOS x64 실제 실행, 각 OS 사용자 설치 경로·서명·공증·운영 반영은 별도 수동 gate다.",
+      "verification": {
+        "commit": "d54a1fd3334bb14158eb662eb7ef5c81d4bbe6d0",
+        "run": "https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39029600751",
+        "nativeMode": "real-electron-real-os-encryption-mock-api",
+        "nativePlatforms": [
+          "windows-x64",
+          "macos-arm64",
+          "linux-x64-x11"
+        ],
+        "nativeChecksPerPlatform": 13,
+        "actualInferenceRequests": 0,
+        "appImageDistribution": "excluded",
+        "signing": "not_configured",
+        "productionDatabase": "not_applied",
+        "productionDeployment": "not_deployed"
+      },
+      "started_at": "2026-10-17T20:46:00+0900",
+      "completed_at": "2026-10-17T20:46:01+0900"
+    },
+    {
+      "step": 6,
+      "name": "portable-extraction",
+      "status": "completed",
+      "paths": [],
+      "checks": [
+        [
+          "gh",
+          "run",
+          "watch",
+          "39030734544",
+          "--repo",
+          "csm-kr/local-agent-connector",
+          "--exit-status"
+        ]
+      ],
+      "summary": "비공개 공통 repo 1fc2689·CI 39030734544의 3OS native 각 13개·Windows NSIS·Mac DMG·Ubuntu deb 읽기 검사, 앱별 설정/키 격리와 전역 통합 스킬 2파일·독립 읽기 소비자 설계를 검증한다. 운영 서명/공증/SQL/배포는 미완료이며 phase13 분석 대체·연구 채팅은 별도 진행 중이다. 전체 goal 완료가 아니다.",
+      "verification": {
+        "repository": "https://github.com/csm-kr/local-agent-connector",
+        "visibility": "private",
+        "commit": "1fc2689",
+        "run": "https://github.com/csm-kr/local-agent-connector/actions/runs/39030734544",
+        "jobs": {
+          "macos": 117390492806,
+          "windows": 117390492881,
+          "ubuntu": 117390492896
+        },
+        "jobsPassed": 3,
+        "tests": {
+          "windows": {
+            "total": 64,
+            "passed": 64,
+            "skipped": 0
+          },
+          "macos": {
+            "total": 64,
+            "passed": 62,
+            "skipped": 2
+          },
+          "ubuntu": {
+            "total": 64,
+            "passed": 62,
+            "skipped": 2
+          },
+          "nonWindowsSkips": "Windows installer protection tests",
+          "builderPerPlatform": 1,
+          "selfTestsPerPlatform": 7,
+          "nativeChecksPerPlatform": 13
+        },
+        "nativeMode": "real-electron-real-os-encryption-loopback-api-fixture",
+        "actualInferenceRequests": 0,
+        "originalCoreSha256MatchedFiles": 9,
+        "windowsNsis": "installed-registered-bundled-node-core10-verified-uninstalled-restored",
+        "macosDmg": "arm64-and-x64-built-intel-native-not-tested",
+        "ubuntuDeb": "built-and-archive-read-verified-not-installed",
+        "appImageDistribution": "excluded",
+        "artifactStorage": {
+          "default": "off",
+          "reason": "GitHub account quota",
+          "results": "job logs and summary",
+          "firstRun": "39030533949",
+          "firstRunFailure": "artifact upload after native success"
+        },
+        "globalSkill": {
+          "path": "C:/Users/csm81/.codex/skills/local-agent-integration",
+          "existingBefore": false,
+          "files": [
+            "SKILL.md",
+            "references/acceptance.md"
+          ],
+          "quickValidate": "Skill is valid!",
+          "sha256MatchesSource": true,
+          "hashes": {
+            "skill": "298DC13E033B9F12EC5B4B85487F0140D889D29C19E6CAF6311DB280CD369B0A8",
+            "acceptance": "F50F4DD5F75513FBECE352AC0671D11ADEF0504AD66EAD3486EB687B2240B2DC"
+          }
+        },
+        "consumer": {
+          "mode": "read-only design",
+          "kitCommit": "db770ef",
+          "hostCommit": "d54a1fd",
+          "asideVersion": "1.26.1015.732",
+          "dashboard": "login SSR only",
+          "statusApi": 404,
+          "downloadsApi": 404,
+          "renderedDashboardObserved": false,
+          "tabsAndFocusPreserved": true,
+          "sourceChanges": 0,
+          "inferenceRequests": 0,
+          "reportSha256": "8D76F0417316B0ADD706E7E50C25EF8D4C1418EC57021725DE31299E1F9E196D"
+        },
+        "signing": "not_configured",
+        "notarization": "not_configured",
+        "productionDatabase": "not_applied",
+        "productionDeployment": "not_deployed",
+        "publicDownloads": "not_published",
+        "phase13": "analysis replacement and research chat in progress separately",
+        "overallGoalComplete": false
+      },
+      "started_at": "2026-10-17T21:17:53+0900",
+      "completed_at": "2026-10-17T21:17:54+0900"
+    }
+  ],
+  "created_at": "2026-10-17T19:21:04+0900",
+  "completed_at": "2026-10-17T21:17:54+0900"
+}

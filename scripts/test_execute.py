@@ -51,7 +51,7 @@ def phase_dir(tmp_project):
         "steps": [
             {"step": 0, "name": "setup", "status": "completed", "summary": "프로젝트 초기화 완료"},
             {"step": 1, "name": "core", "status": "completed", "summary": "핵심 로직 구현"},
-            {"step": 2, "name": "ui", "status": "pending"},
+            {"step": 2, "name": "ui", "status": "pending", "paths": ["components/ui"]},
         ],
     }
     (d / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False))
@@ -383,6 +383,59 @@ class TestCheckoutBranch:
 # ---------------------------------------------------------------------------
 
 class TestCommitStep:
+    def test_scoped_commit_preserves_staged_user_work_in_real_git(self, executor, tmp_project):
+        def git(*args):
+            return subprocess.run(["git", *args], cwd=tmp_project, capture_output=True,
+                                  text=True, check=True, **ex.hidden_process_options())
+
+        git("init")
+        git("config", "user.name", "Harness test")
+        git("config", "user.email", "harness@example.invalid")
+        (tmp_project / "user.txt").write_text("original")
+        git("add", "--", "user.txt")
+        git("commit", "-m", "initial")
+        (tmp_project / "user.txt").write_text("user staged change")
+        git("add", "--", "user.txt")
+        (tmp_project / "owned.txt").write_text("agent change")
+
+        executor._commit_paths(["owned.txt"], "feat(test): owned files")
+
+        assert git("show", "--pretty=", "--name-only", "HEAD").stdout.strip() == "owned.txt"
+        assert git("diff", "--cached", "--name-only").stdout.strip() == "user.txt"
+        assert (tmp_project / "user.txt").read_text() == "user staged change"
+
+    def test_owned_paths_cannot_escape_repository_or_capture_secrets(self, executor):
+        for path in [".", "./", "docs/..", "../other", ".env", ".env.local", "**", "components/*", ":(top)**"]:
+            with pytest.raises(ValueError, match="Unsafe owned path"):
+                executor._commit_paths([path], "unsafe")
+
+    def test_never_stages_or_commits_unowned_changes(self, executor):
+        calls = []
+
+        def fake_git(*args):
+            calls.append(args)
+            return MagicMock(returncode=1 if args[:2] == ("diff", "--cached") else 0,
+                             stdout="", stderr="")
+
+        executor._run_git = fake_git
+        executor._commit_step(2, "ui")
+
+        assert not any("-A" in c for c in calls)
+        for command in [c for c in calls if c[0] == "commit"]:
+            assert "--only" in command
+            assert "--" in command
+        assert ("add", "--", "components/ui") in calls
+
+    def test_missing_ownership_skips_code_commit(self, executor):
+        index = executor._read_json(executor._index_file)
+        index["steps"][2].pop("paths")
+        executor._write_json(executor._index_file, index)
+        calls = []
+        executor._run_git = lambda *args: calls.append(args) or MagicMock(returncode=0)
+        executor._commit_step(2, "ui")
+        assert not any(c[0] == "add" and "components/ui" in c for c in calls)
+        assert not any("-A" in c for c in calls)
+
     def test_two_phase_commit(self, executor):
         calls = []
         def fake_git(*args):
@@ -424,6 +477,13 @@ class TestCommitStep:
 # ---------------------------------------------------------------------------
 
 class TestInvokeClaude:
+    def test_hides_windows_child_console(self, executor):
+        with patch("subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")) as run:
+            executor._invoke_claude({"step": 2, "name": "ui"}, "rules")
+        assert run.call_args.args[0][0] == "claude"
+        if os.name == "nt":
+            assert run.call_args.kwargs["creationflags"] & subprocess.CREATE_NO_WINDOW
+
     def test_invokes_claude_with_correct_args(self, executor):
         mock_result = MagicMock(returncode=0, stdout='{"result": "ok"}', stderr="")
         step = {"step": 2, "name": "ui"}
@@ -437,8 +497,9 @@ class TestInvokeClaude:
         assert "-p" in cmd
         assert "--dangerously-skip-permissions" in cmd
         assert "--output-format" in cmd
-        assert "PREAMBLE" in cmd[-1]
-        assert "UI를 구현하세요" in cmd[-1]
+        assert cmd[-1] == "json"
+        assert "PREAMBLE" in mock_run.call_args.kwargs["input"]
+        assert "UI를 구현하세요" in mock_run.call_args.kwargs["input"]
 
     def test_saves_output_json(self, executor):
         mock_result = MagicMock(returncode=0, stdout='{"ok": true}', stderr="")
@@ -493,6 +554,48 @@ class TestProgressIndicator:
 # ---------------------------------------------------------------------------
 
 class TestMainCli:
+    def test_verify_selected_step_without_git_or_nested_agent(self, executor):
+        index = executor._read_json(executor._index_file)
+        index["steps"][2]["checks"] = [[sys.executable, "-c", "print('verified')"]]
+        index["steps"][2]["summary"] = "UI gate"
+        executor._write_json(executor._index_file, index)
+        executor._run_git = MagicMock(side_effect=AssertionError("git must not run"))
+        executor._invoke_claude = MagicMock(side_effect=AssertionError("nested agent must not run"))
+
+        executor.verify(step_num=2)
+
+        updated = executor._read_json(executor._index_file)
+        assert updated["steps"][2]["status"] == "completed"
+        evidence = executor._read_json(executor._phase_dir / "step2-output.json")
+        assert evidence["mode"] == "verification"
+        assert evidence["checks"][0]["exitCode"] == 0
+        assert "verified" in evidence["checks"][0]["stdout"]
+
+    def test_failed_verification_remains_error_and_does_not_run_later_checks(self, executor):
+        index = executor._read_json(executor._index_file)
+        index["steps"][2]["checks"] = [
+            [sys.executable, "-c", "raise SystemExit(7)"],
+            [sys.executable, "-c", "raise AssertionError('must not run')"],
+        ]
+        executor._write_json(executor._index_file, index)
+        with pytest.raises(SystemExit) as failed:
+            executor.verify(step_num=2)
+        assert failed.value.code == 1
+        assert executor._read_json(executor._index_file)["steps"][2]["status"] == "error"
+        evidence = executor._read_json(executor._phase_dir / "step2-output.json")
+        assert len(evidence["checks"]) == 1
+
+    def test_verification_requires_explicit_commands(self, executor):
+        with pytest.raises(ValueError, match="checks"):
+            executor.verify(step_num=2)
+        assert executor._read_json(executor._index_file)["steps"][2]["status"] == "pending"
+
+    def test_finalize_cannot_mark_incomplete_phase_completed(self, executor):
+        executor._run_git = MagicMock()
+        with pytest.raises(ValueError, match="completed"):
+            executor._finalize()
+        executor._run_git.assert_not_called()
+
     def test_no_args_exits(self):
         with patch("sys.argv", ["execute.py"]):
             with pytest.raises(SystemExit) as exc_info:

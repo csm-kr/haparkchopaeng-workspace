@@ -25,6 +25,11 @@ const papers: PaperListItem[] = [
 ];
 
 describe("PaperList", () => {
+  it("모델 선택을 기다리는 논문은 분석 완료와 구분한다", () => {
+    render(<PaperList papers={[{ ...papers[0], analysisStatus: "awaiting_ai" }]} />);
+    expect(screen.getByText("AI 분석 대기")).toBeInTheDocument();
+    expect(screen.queryByText("분석 중")).not.toBeInTheDocument();
+  });
   it("논문 행을 제목·저자·업로더와 함께 렌더하고 상세로 링크한다", () => {
     render(<PaperList papers={papers} />);
 

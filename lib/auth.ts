@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { createHmac, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
 import { signPayload, verifyPayload } from "@/lib/sign";
@@ -18,6 +19,8 @@ export interface Session {
 interface SessionPayload {
   memberId: string;
   role: Role;
+  sessionId?: string;
+  exp?: number;
 }
 
 function authSecret(): string {
@@ -38,7 +41,7 @@ export async function createSession(memberId: string): Promise<void> {
 
   const token = signPayload(
     // role 허용값은 시드/검증으로 보장됨(DB는 String) — DTO Role로 좁힌다.
-    { memberId, role: member.role as Role } satisfies SessionPayload,
+    { memberId, role: member.role as Role, sessionId: randomUUID() } satisfies SessionPayload,
     authSecret(),
     { expiresInSec: SESSION_TTL_SEC },
   );
@@ -68,6 +71,20 @@ export async function getSession(): Promise<Session | null> {
   const payload = verifyPayload<SessionPayload>(token, authSecret());
   if (!payload) return null;
   return { memberId: payload.memberId, role: payload.role };
+}
+
+/** Connector scope only. Existing Session DTO stays unchanged; raw cookies never leave the server. */
+export async function getConnectionSession(): Promise<(Session & { sessionKey: string; expiresAt: Date }) | null> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new HttpError(503, "NOT_CONFIGURED", "AI 연결 설정을 준비하고 있어요. 잠시 후 다시 시도해주세요.");
+  const payload = verifyPayload<SessionPayload>(token, secret);
+  if (!payload || typeof payload.memberId !== "string" || !Number.isFinite(payload.exp) || payload.exp! * 1000 <= Date.now()) return null;
+  // A legacy cookie remains usable, but every newly issued session has a random sessionId.
+  const sessionKey = createHmac("sha256", secret).update(`local-agent:web-session:v1:${token}`).digest("hex");
+  return { memberId: payload.memberId, role: payload.role, sessionKey, expiresAt: new Date(payload.exp! * 1000) };
 }
 
 /** 인증 필수. 미인증이면 401(HttpError). */

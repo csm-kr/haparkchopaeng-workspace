@@ -11,9 +11,8 @@
 
 | 변수 | 용도 | 비고 |
 |---|---|---|
-| `GEMINI_API_KEY` | 논문 분석 LLM(Google Gemini) 호출 | **비밀.** 서버 전용 |
-| `GEMINI_MODEL` | 분석 모델 ID | 기본 `gemini-2.5-pro` |
-| `PAPER_WEEKLY_LIMIT` | 인당 주간(월요일 00:00 KST 리셋) 논문 업로드 한도 — Gemini 비용 가드 | 미설정 시 운영=20·그 외 무제한, 0 이하=무제한 |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | 레거시 Gemini 어댑터 설정 | ADR-026의 업로드·명시적 로컬 분석·연구 채팅에서는 사용하지 않음. 자동 대체 경로도 없음. 키는 비밀이며 서버 전용 |
+| `PAPER_WEEKLY_LIMIT` | 인당 주간(월요일 00:00 KST 리셋) 논문 업로드 한도 | 미설정 시 운영=20·그 외 무제한, 0 이하=무제한. CLI 구독 한도와 별개 |
 | `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` | 잡 러너(프로덕션) | 로컬은 Inngest Dev Server(키 불필요) |
 | `DATABASE_URL` | Prisma 연결(pooler) | Supabase Postgres(ADR-016) |
 | `DIRECT_URL` | Prisma `db push`/마이그레이션 직결 | Supabase |
@@ -34,52 +33,40 @@
 
 로그인은 **Supabase Auth의 Google OAuth**(ADR-017). **초대 전용 유지**(ADR-007) — Google 로그인 성공 이메일이 수락된 `Member`이거나 유효한 초대일 때만 합류/세션. Google OAuth 클라이언트(Client ID/Secret)는 앱이 아니라 **Supabase 대시보드 Auth > Providers > Google**에 입력한다. `SUPABASE_SERVICE_ROLE_KEY`는 서버에서만. 키가 없을 땐 step4의 dev 이메일 로그인이 로컬 폴백.
 
-## 논문 분석 파이프라인 (LLM)
+## 논문 분석 파이프라인 (ADR-026)
 
-PRD는 "AI 자동 요약을 핵심 기능으로 내세우는 것"을 폐기했다(→ [`../user/PRD.md`](../user/PRD.md) §3). 그러나 분석 데이터의 비교/ablation 표·figure 해석에는 **"AI 추출"** 표기가 있다 — LLM은 **헤드라인 기능이 아니라, 사람이 검수·보강하는 구조화 추출 보조**로 쓴다. 추출된 분석은 항상 섹션별 협업 노트로 사람이 덧쓴다(ADR-005).
+논문 분석과 개인 연구 채팅은 사용자가 선택한 로컬 Codex·Claude Code로 실행한다. 별도 CLI OAuth 키나 제공자 API 키를 서버에 넣지 않는다. 기존 구독 로그인은 해당 PC의 CLI가 유지하며 연결기는 기기 자격을 OS 암호화 저장소에 보관한다. 분석 초안은 사람이 섹션 노트로 검수·보강한다(ADR-005).
 
-### 동작 (S1 보강 → [`./SEQUENCE_DIAGRAM.md`](./SEQUENCE_DIAGRAM.md))
-
-```
-PDF 업로드/arXiv → 스토리지 저장(pdfUrl) → Paper 저장(analysisStatus=pending) + Job 적재 → 즉시 응답
-   ↓ (외부 durable 잡 러너)
-   잡 러너가 Gemini에 PDF inlineData + responseSchema(구조화 출력)로 호출
-   → Analysis(research)/Analysis(repro) payload + Figure[] 저장, analysisStatus=ready|failed
-   → 사람이 섹션 노트로 검수·보강
-```
-
-> **CRITICAL: 분석은 요청 경로(route handler)에서 인라인으로 돌리지 않는다.** Gemini 분석은 분 단위라 Vercel 함수 시간 제한·HTTP 타임아웃을 넘는다. 반드시 **Inngest 잡**에서 처리한다(→ [`./ARCHITECTURE.md`](./ARCHITECTURE.md) §백그라운드 작업, ADR-013→016). `POST /api/papers`는 잡만 트리거하고 즉시 응답한다.
-
-### 구현 지침 (시그니처 수준) — Google Gemini
-
-- **SDK:** `@google/genai` (Google 최신 통합 GenAI SDK; 구 `@google/generative-ai`는 deprecated). **Anthropic SDK·claude-api 가이드는 쓰지 않는다.**
-- **클라이언트:** `new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })` — 키는 서버 환경에서만, 하드코딩 금지.
-- **모델:** `process.env.GEMINI_MODEL ?? "gemini-2.5-pro"`.
-- **PDF 입력:** PDF를 `inlineData`(base64, mimeType `application/pdf`) 또는 Files API로 contents에 넣는다.
-- **구조화 출력:** `config.responseMimeType="application/json"` + `config.responseSchema`로 두 관점 스키마(problem/contributions/io/comparison/ablation | data/model/loss/metrics/training/gpu)를 강제 — 파싱 안정성 확보.
-- **figure 해석:** 추출된 figure 이미지를 비전 입력(inlineData image)으로 캡션·해석 생성. 이미지가 없으면 `imageUrl=null`로 두고 수동 업로드 허용(미결 → [`../agent/ISSUES.md`](../agent/ISSUES.md)).
-
-```ts
-// lib/analysis.ts (시그니처 예시 — 서버 전용, Inngest 잡에서 호출)
-import { GoogleGenAI } from "@google/genai";
-const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-export async function extractAnalysis(pdf: Buffer, lens: "research" | "repro"): Promise<AnalysisPayload> {
-  // generateContent({ model, contents: [inlineData(pdf) + 프롬프트],
-  //   config: { responseMimeType: "application/json", responseSchema } }) → JSON 파싱
-}
+```text
+PDF 저장 → paper/analyze{paperId} → Inngest에서 원문 본문 준비(AI 0회)
+  → sourceText/sourceDigest 저장 → awaiting_ai
+사용자가 PC·제공자·실제 모델 선택 → POST /api/papers/:id/reanalyze
+  → Job(prepare_local_analysis) → Inngest 준비 → LocalAgentJob(paper_analysis)
+  → 승인한 PC에서 CLI 추론 → 서버 completed 접수
+  → Inngest durable sleep/DB 조회 → strict JSON·원문 인용 검증·Figure 렌더
+  → 최신 analysisRequestId CAS → research/repro/공통 Figure 저장
 ```
 
-- **CRITICAL: 잡 러너에서 실행.** `extractAnalysis`는 Inngest 잡이 호출한다 — route handler 인라인 호출 금지(타임아웃, ADR-013→016). route handler는 잡만 트리거.
-- **CRITICAL: 비용·실패 처리.** 분석 실패가 업로드 자체를 막지 않게 한다 — Paper는 저장되고 `analysisStatus=failed`로 재시도 가능. Gemini 안전 차단(`blockReason`)·빈 응답을 처리한다.
-- **CRITICAL: 키는 서버에서만.** 클라이언트는 절대 Gemini를 직접 호출하지 않는다. 클라이언트는 `/api/papers`만 호출한다(→ [`./CODING_CONVENTION.md`](./CODING_CONVENTION.md)).
+- 업로드와 새 분석 요청은 장기 추론을 기다리지 않는다. Inngest는 짧은 준비·조회·후처리 단계와 durable sleep으로 구성하며, 서버리스 요청에서 CLI나 장기 대기 Promise를 실행하지 않는다.
+- 원문은 1~30쪽·본문 합계 12만 자까지 읽고 페이지 번호를 유지한다. PDF 준비 입력은 최대 20MB다. 스캔·초과·손상은 준비 실패로 안내하며 원본 PDF는 보존한다.
+- 원문·문맥과 고정 프롬프트는 서버에서 구성한다. 분석은 JSON 형식·페이지·원문 인용·Figure 캡션을 검사한 뒤에만 저장한다. 현재 CLI는 텍스트 전용이므로 Figure는 본문·캡션 기반 추론, 외부 저장소는 미검증으로 표시한다.
+- 모델 기본값은 없다. 현재 실제 CLI 목록에서 사용자가 선택하며, 연결·로그인·사용 한도 문제가 생겨도 Gemini나 다른 제공자·원격 유료 API로 자동 전환하지 않는다.
+- 유효한 45초 grant 중 서버가 이미 `completed`로 접수한 결과는 로그아웃 후 후처리·저장을 허용한다. 이후 새 추론·계속 실행·미접수 결과는 거절하며 최종 저장 시 현재 멤버십을 재확인한다.
+- `/ai-chat`은 같은 연결과 선택 모델을 사용한다. 개인 이력을 읽어도 과거 실행 권한을 갱신하지 않는다. 기존 논문은 `POST /api/research-chat/sources {paperIds}`로 모델 없이 본문만 준비할 수 있으며 기존 분석을 다시 추론·변경하지 않는다. 상세 제한·응답은 [API](./API.md), 모델·수동 SQL은 [DB](./DB.md#local-ai-schema)를 따른다.
 
 ## 로컬 셋업
 
 ```bash
-cp .env.example .env   # 값 채우기 (최소 GEMINI_API_KEY, Supabase 키, AUTH_SECRET)
+cp .env.example .env   # 서버 Supabase/Auth/Storage 설정. 로컬 AI에는 Gemini 키 불필요
 npm install
-npx prisma db push     # Supabase 스키마 동기화 + npx prisma db seed
 npx inngest-cli dev    # (jobs용) 로컬 Inngest Dev Server
 npm run dev
 ```
+
+로컬 DB 스키마를 준비할 때도 공유 운영 URL을 상속하지 않는다. 자동 검증은 아래 격리 런처를 사용하고, 운영 스키마를 `db push`·`seed`로 동기화하지 않는다.
+
+## 로컬 AI 연결
+
+기존 서버 `AUTH_SECRET`를 사용하며 별도 CLI OAuth 키를 서버에 넣지 않는다. `LOCAL_AGENT_RELEASES`는 실제 설치 파일의 `platform`, `url`, `version`과 선택 `architecture`·`filename`을 담는 JSON 배열이다. 미설정은 빈 배포 목록이다. 설치앱 빌드에는 `CONNECTOR_APP_ORIGIN=https://hapark.vercel.app`을 주입한다. 이 값들은 `NEXT_PUBLIC_*`로 노출하지 않는다. [설치·검증·미설정 동작](./LOCAL_AGENT.md).
+
+검증은 `npm run test:isolated` 또는 `test:local-agent*`를 사용한다. 공유 DB에 `db seed`를 실행해 테스트 실패를 고치지 않는다. 기존 연결 5개 테이블과 ADR-026 확장은 [DB 수동 적용 순서](./DB.md#local-ai-schema) 및 [운영 런북](./LOCAL_AGENT_RELEASE.md)을 따른다. 현재 운영 DB 적용은 하지 않았고 추가 전체 품질 검증은 진행 중이다(ADR-020/022/025/026).

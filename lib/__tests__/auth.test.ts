@@ -50,6 +50,12 @@ beforeEach(() => {
 });
 
 describe("session round-trip", () => {
+  it("issues a distinct session for an immediate re-login so connector approval cannot cross sessions", async () => {
+    await createSession("ha");
+    const first = store.get("hapark_session");
+    await createSession("ha");
+    expect(store.get("hapark_session")).not.toBe(first);
+  });
   it("createSession → getSession returns { memberId, role } from DB role", async () => {
     await createSession("ha");
     await expect(getSession()).resolves.toEqual({ memberId: "ha", role: "관리자" });

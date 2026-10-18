@@ -10,7 +10,13 @@
     "test": "vitest run",
     "test:db": "tsx scripts/test-db.mts db",
     "test:e2e": "tsx scripts/test-db.mts e2e",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:local-agent": "node scripts/local-agent-verify.mjs unit",
+    "test:local-agent:e2e": "node scripts/local-agent-verify.mjs e2e",
+    "test:local-agent:wire": "node scripts/local-agent-verify.mjs wire",
+    "test:isolated": "node scripts/local-agent-verify.mjs all",
+    "test:verification-tools": "node --test scripts/local-agent-verify.test.mjs",
+    "connector:test": "npm --prefix connector test"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

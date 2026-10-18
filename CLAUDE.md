@@ -11,7 +11,7 @@
 - **Tailwind CSS v4** + 자체 UI 컴포넌트(`lucide-react`·`clsx`·`tailwind-merge`)
 - **Prisma 6** + **Supabase Postgres**(과거 SQLite에서 전환 — schema에 enum 미사용 등 제약 흔적 유지). Auth(Google OAuth)·Storage·Realtime도 Supabase
 - **LiveKit (SFU)** — 라이브 다자간 화상·화면공유(ADR-019, Cloudflare Stream Live 대체)
-- **Google Gemini**(`@google/genai`) — 논문 분석. **Inngest** durable 잡에서만 호출
+- **로컬 Codex·Claude Code** — 사용자가 연결한 CLI 구독과 명시한 실제 모델로 논문 분석·연구 채팅을 실행한다. **Inngest**가 PDF 본문 준비·분석 결과 검증·저장을 조율한다(ADR-026). Gemini 함수는 레거시 보존이며 자동 실행·과금 폴백에 쓰지 않는다.
 - **PDF/figure**: `mupdf`·`pdf-lib`·`pdfjs-dist`·`sharp`
 - **검증** `zod` · **테스트** Vitest + Testing Library(단위) / Playwright(E2E)
 

@@ -1,0 +1,334 @@
+{
+  "project": "hapark",
+  "phase": "14-installed-connector-validation",
+  "execution": "Collaborative TDD; disposable OS runners only; no production SQL or real inference.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "preserve-cold-launch-errors",
+      "status": "completed",
+      "paths": [
+        "connector/core/lifetime.mjs",
+        "connector/test/lifetime.test.mjs",
+        "connector/desktop/main.mjs"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/lifetime.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-17T22:10:20+0900",
+      "completed_at": "2026-10-17T22:10:20+0900",
+      "summary": "처음 받은 URI의 성공·오류 화면이 최초 웹 자동 열기로 덮이지 않도록 early macOS open-url·argv·second-instance를 추적했다. 실패 테스트 뒤 lifetime 6개를 통과했고 공통 repo도 같은 정책으로 67개를 통과했다. 실제 설치 앱의 회귀는 step2에서 검증한다."
+    },
+    {
+      "step": 1,
+      "name": "installed-package-smoke",
+      "status": "completed",
+      "paths": [
+        "connector/scripts/ci-installed-smoke.mjs",
+        "connector/scripts/ci-installed-linux.mjs",
+        "connector/scripts/ci-installed-macos.mjs",
+        "connector/scripts/ci-installed-windows.mjs",
+        "connector/scripts/verify-windows-installer.ps1",
+        "connector/test/installed-smoke.test.mjs",
+        "connector/test/installed-windows.test.mjs",
+        "connector/test/installed-macos-identity.test.mjs",
+        "connector/test/linux-process-observation.test.mjs",
+        ".github/workflows/local-agent.yml",
+        "connector/scripts/installed-macos-diagnostics.mjs",
+        "connector/scripts/installed-windows-support.mjs",
+        "connector/test/installed-macos-diagnostics.test.mjs",
+        "connector/desktop/package.json",
+        "connector/test/desktop-packaging-identity.test.mjs",
+        "connector/core/security.mjs",
+        "connector/test/security.test.mjs",
+        "lib/local-agent/PROTOCOL.md",
+        "connector/desktop/mac-builder.cjs",
+        "connector/scripts/mac-builder.test.mjs",
+        "connector/scripts/installed-smoke-support.mjs"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ],
+        [
+          "node",
+          "connector/scripts/mac-builder.test.mjs"
+        ]
+      ],
+      "started_at": "2026-10-17T22:14:52+0900",
+      "summary": "실제 설치본 URI 검증기를 macOS·Ubuntu·Windows hosted CI에 접합했다. 제품 연결기 139개 AC 통과. Mac 시작 직후 종료의 서명·crash·직접 자식 진단과 Windows native 실패·프로세스·프로필 진단은 원문을 출력하지 않는다. 미확인 Mac 진단 자식과 원래 OS PID의 정리 경계를 실패 테스트로 고쳤으며 원래 OS 실패 판정은 보존한다. Windows OS가 추가한 루트 슬래시는 엄격한 인자·토큰 검증을 유지해 같은 연결로 처리하고, 원문/루트슬래시 관측을 구분한다. PowerShell 자식의 PSModulePath만 제거해 상속 모듈 자동 로드 실패를 회복하며 읽을 수 없는 ACL은 계속 거절한다. 새 프로필 owner는 현재 사용자 또는 검증된 현재 토큰의 default owner와 일치해야 하고 cold 증거는 수락 시 고정한다. Windows 종료 관측은 일시 unknown만 제한 시간 안에 재조회하며 실제 gone 확인만 수락한다. 계속 unknown이면 실패·정리 보존, 완전한 identity 불일치·native 오류는 즉시 실패한다. Mac 전용 빌드의 내부 이름·Helper를 ASCII로 분리하고 표시명·runtime 제품명·기존 프로필을 유지하는 후보를 실제 builder 합성 번들 5개 AC로 검증했다. 설치 검증기는 실제 plist·Helper·ASAR metadata와 원래 프로필을 따로 확인한다. native 시작 오류가 해결됐다는 주장은 실제 Mac CI까지 유보한다. 실제 OS 통과 판정은 step2 원격 CI에 남긴다.",
+      "completed_at": "2026-10-17T23:54:18+0900"
+    },
+    {
+      "step": 2,
+      "name": "native-evidence-and-common-repo",
+      "status": "completed",
+      "paths": [
+        "connector/VALIDATION.md",
+        "docs/dev/LOCAL_AGENT_RELEASE.md",
+        "connector/README.md",
+        "docs/reports/local-agent-implementation-2026-10-17.html"
+      ],
+      "checks": [
+        [
+          "python",
+          "-X",
+          "utf8",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ]
+      ],
+      "started_at": "2026-10-18T00:03:00+0900",
+      "completed_at": "2026-10-18T00:03:03+0900",
+      "summary": "제품 c808e926의 CI39042877981 전체 5개 작업과 공통 1e309c3f의 CI39042868288 전체 3개 작업이 성공했다. 실제 설치 앱의 OS URI·cold/warm 실행·정상 종료·제거를 Mac arm64 9개, Windows 사전 2개/전체 5개, Ubuntu X11 8개로 각각 검증했다. 웹 946개·Chromium 8개·PostgreSQL 16의 13개 및 schema drift 0을 확인했고, 하네스 AC 60개도 통과했다. 두 저장소의 설치 검증과 공통 Mac 이름/프로필 보존을 동기화했다. 운영 SQL 수동 검토·서명/공증·정식 다운로드·운영 파일럿은 미완료다."
+    },
+    {
+      "step": 3,
+      "name": "native-intel-mac-validation",
+      "status": "completed",
+      "paths": [
+        ".github/workflows/local-agent.yml",
+        "connector/README.md",
+        "connector/VALIDATION.md",
+        "docs/dev/LOCAL_AGENT_RELEASE.md",
+        "docs/reports/local-agent-implementation-2026-10-17.html"
+      ],
+      "checks": [
+        [
+          "python",
+          "-X",
+          "utf8",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ]
+      ],
+      "started_at": "2026-10-18T00:25:02+0900",
+      "completed_at": "2026-10-18T00:25:05+0900",
+      "summary": "제품 394d47e8/CI39044291095 전체 6 jobs와 공통 57ce1739/CI39044299350 전체 4 jobs가 성공했다. 각 저장소의 Mac arm64·Intel x64 실제 runner/Node 아키텍처를 대조하고 같은 DMG 설치·OS URI·cold/warm·정상 종료·재실행·전체 정리 9조건을 통과했다. YAML 2개와 실제 guard 정상/불일치/누락 등 12개 종료 코드를 검증했고, 하네스 AC 60개도 통과했다. 기존 기록을 보존하며 서명·공증·운영 SQL 수동 검토·운영 파일럿과 실제 Claude 응답의 미완료 상태는 유지한다."
+    }
+  ],
+  "overallGoalComplete": false,
+  "remainingExternalGates": [
+    "운영 SQL 사람 검토·수동 적용",
+    "게시자 서명과 macOS 공증",
+    "운영 사이트·최종 설치본 파일럿"
+  ],
+  "created_at": "2026-10-17T22:10:20+0900",
+  "previousCompletion": {
+    "stepCount": 3,
+    "completedAt": "2026-10-18T00:03:03+0900",
+    "scope": "Windows x64, macOS arm64 and Ubuntu X11; Intel Mac was build-only."
+  },
+  "nativeCiEvidence": {
+    "product": {
+      "head": "c808e926301a6937b78383ebf064bb97cf20d909",
+      "testedPrMerge": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+      "runId": 39042877981,
+      "allJobsPassed": true,
+      "web": {
+        "jobId": 117425731031,
+        "vitestTests": 946,
+        "chromiumTests": 8,
+        "realHttpCookieLossContractPassed": true
+      },
+      "postgres": {
+        "jobId": 117425731030,
+        "version": 16,
+        "tests": 13,
+        "schemaDrift": 0
+      },
+      "installedPackages": {
+        "macos": {
+          "jobId": 117425730893,
+          "passed": true,
+          "nativeCheckCount": 9,
+          "source": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "f6bc8c4cb0d939a6dc4615ce37d8689ae1db46faafb792dc8506befef6a46f8e"
+        },
+        "win32": {
+          "jobId": 117425731090,
+          "passed": true,
+          "nativeCheckCount": 5,
+          "source": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "6160687ccde8df8790bb2521f2e5c215b393ba5f3a91ea407417df44c1da370e",
+          "preflightCheckCount": 2,
+          "uninstalledAndProtocolAbsent": true,
+          "installerBytes": 111584109,
+          "packageSha256": "66089d657386c5cdf30ca07bd90c81e6a609686c0910208e8329a510945e908f"
+        },
+        "linux": {
+          "jobId": 117425731139,
+          "passed": true,
+          "nativeCheckCount": 8,
+          "source": "6c44bc8ab3c796d0165afaa723e83d9a2f476090",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "66cb6a25b42601766031d2f9b0b74befcb31f4c8a80ab403288bff49e485e35b",
+          "packageSha256": "856af88ed0f0a2ecfa8d9b1ce62b836fd8c3cc628d0b20fef53b0d8ce3148875"
+        }
+      }
+    },
+    "common": {
+      "head": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+      "runId": 39042868288,
+      "allJobsPassed": true,
+      "installedPackages": {
+        "macos": {
+          "jobId": 117425703623,
+          "passed": true,
+          "nativeCheckCount": 9,
+          "source": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "53674404aafff55b7e422763d6a5514ab90aad42f34be467c117e1cdeb407059"
+        },
+        "win32": {
+          "jobId": 117425703364,
+          "passed": true,
+          "nativeCheckCount": 5,
+          "source": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "9cbc4a07b0e8ac77f75c4ee07f1b1147b6210477ad6151e4ff649088bacbbac0",
+          "preflightCheckCount": 2,
+          "uninstalledAndProtocolAbsent": true,
+          "installerBytes": 110619701,
+          "packageSha256": "bc0f2ccecc8fc0b4e1b37d6e1dbd85ca5e62f027b99d57086286787b599f147d"
+        },
+        "linux": {
+          "jobId": 117425703586,
+          "passed": true,
+          "nativeCheckCount": 8,
+          "source": "1e309c3f3d2fe1a333029e23bffea3945a3c4fc7",
+          "allRecordedCleanupChecksPassed": true,
+          "cliInferenceRequested": false,
+          "receiptSha256": "2e0e9e309063aab253c01889e90ce5b22604e02dd8240162fcb0e82f2dd624e9",
+          "packageSha256": "ea133e8f7d98843749f06b882ffc0e637ff9c0d0f0c406d267bd618e564a7ff9"
+        }
+      }
+    },
+    "scope": "Unsigned disposable hosted-runner packages only. Windows preflight 2 is separate from full 5; Mac x64 is build-only; Ubuntu uses X11, D-Bus and keyring. No real pairing, inference, reboot, signed update, Gatekeeper approval or production deployment is proven by these smokes."
+  },
+  "completed_at": "2026-10-18T00:25:05+0900",
+  "intelMacCiEvidence": {
+    "product": {
+      "head": "394d47e8a24d2284b62bfefa2e2df173a3278012",
+      "testedSource": "d6440d02b00ab40ef206c5bc09f22f028b227010",
+      "runId": 39044291095,
+      "allJobsPassed": true,
+      "jobCount": 6,
+      "mac": {
+        "arm64": {
+          "jobId": 117429827856,
+          "architectureGuard": {
+            "architecture": "arm64",
+            "runnerArchitecture": "ARM64"
+          },
+          "installedCheckCount": 9,
+          "allRecordedCleanupChecksPassed": true,
+          "package": {
+            "filename": "hapark-connector-0.1.0-mac-arm64.dmg",
+            "sha256": "e0a0d5d9361cdb13f54eff6d5973e9914f6c4c0b53fe3c2c0485c8329cd880c8",
+            "bytes": 128089057
+          },
+          "bundledNode": {
+            "node": "24.22.0",
+            "arch": "arm64"
+          },
+          "receiptSha256": "1de694948047371da854dd8503eda6fbbe5dd995f386d3029bdda095e836dd79",
+          "cliInferenceRequested": false
+        },
+        "x64": {
+          "jobId": 117429827893,
+          "architectureGuard": {
+            "architecture": "x64",
+            "runnerArchitecture": "X64"
+          },
+          "installedCheckCount": 9,
+          "allRecordedCleanupChecksPassed": true,
+          "package": {
+            "filename": "hapark-connector-0.1.0-mac-x64.dmg",
+            "sha256": "206a492edaf78ed6cd1f386d1b35c0842f4427bc3cdd4ed035abf905a2994af4",
+            "bytes": 131861538
+          },
+          "bundledNode": {
+            "node": "24.22.0",
+            "arch": "x64"
+          },
+          "receiptSha256": "bf65594a96825e584246b3b358b0f3f3f3bdbaad2410f68582ae819005454ffe",
+          "cliInferenceRequested": false
+        }
+      }
+    },
+    "common": {
+      "head": "57ce17397a5a2c8b38028e3cbbfdb0e4bd2e9429",
+      "testedSource": "57ce17397a5a2c8b38028e3cbbfdb0e4bd2e9429",
+      "runId": 39044299350,
+      "allJobsPassed": true,
+      "jobCount": 4,
+      "mac": {
+        "arm64": {
+          "jobId": 117429851215,
+          "architectureGuard": {
+            "architecture": "arm64",
+            "runnerArchitecture": "ARM64"
+          },
+          "installedCheckCount": 9,
+          "allRecordedCleanupChecksPassed": true,
+          "package": {
+            "filename": "research-notebook-connector-0.1.0-mac-arm64.dmg",
+            "sha256": "e83063073b44b34265bbb86b5a5d4346fd332a47cc889b16dcf5476f8208fadb",
+            "bytes": 128087666
+          },
+          "bundledNode": {
+            "node": "24.22.0",
+            "arch": "arm64"
+          },
+          "receiptSha256": "5796ffa636b0f230a647ce6bacbcece8a16bc8961037eb45c007ea4d88145062",
+          "cliInferenceRequested": false
+        },
+        "x64": {
+          "jobId": 117429851217,
+          "architectureGuard": {
+            "architecture": "x64",
+            "runnerArchitecture": "X64"
+          },
+          "installedCheckCount": 9,
+          "allRecordedCleanupChecksPassed": true,
+          "package": {
+            "filename": "research-notebook-connector-0.1.0-mac-x64.dmg",
+            "sha256": "52a830b3281cf889a004c8f4beef35db20852491181f65f9b895b9e3e8120849",
+            "bytes": 131872368
+          },
+          "bundledNode": {
+            "node": "24.22.0",
+            "arch": "x64"
+          },
+          "receiptSha256": "cde4997046bb05b3c3f4609c07439c7f5db966c7ad24c5f869ea2594d8aec8ad",
+          "cliInferenceRequested": false
+        }
+      }
+    },
+    "localGuardVerification": {
+      "cases": 12,
+      "yamlFiles": 2,
+      "allPassed": true,
+      "receiptSha256": "511ea3035be1d120d8c7907ed01a736fe612b2157600604b91c5951c8a81be88"
+    },
+    "scope": "Unsigned disposable hosted Mac arm64 and Intel x64 packages. Installed invalid-URI smoke is separate from unpackaged OS-encrypted pairing with a mock API. No production pairing, actual AI response, signed internet download, Gatekeeper acceptance, reboot, update, existing credential migration or Wayland proof."
+  }
+}

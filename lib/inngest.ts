@@ -7,6 +7,8 @@ import { Inngest } from "inngest";
 /** paper/analyze 이벤트 페이로드 — 분석할 논문 id만 싣는다. */
 export interface PaperAnalyzeData {
   paperId: string;
+  /** Server-created durable run. Omission prepares PDF text without invoking an AI. */
+  runId?: string;
 }
 
 export const inngest = new Inngest({ id: "hapark" });

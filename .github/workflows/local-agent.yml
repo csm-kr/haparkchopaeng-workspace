@@ -1,0 +1,338 @@
+name: Local agent validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: Store captures and unsigned installers when Actions storage is available
+        type: boolean
+        default: false
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-agent-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      AUTH_SECRET: isolated-local-agent-ci-only-not-a-deployment-secret
+      PRISMA_GENERATE_SKIP_AUTOINSTALL: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: python -m pip install pytest
+      - name: Harness and isolation guards
+        run: |
+          python -m pytest scripts/test_execute.py -q
+          node --test scripts/local-agent-verify.test.mjs scripts/local-agent-pg-guard.test.mjs
+      - name: Harness gate — isolated regression, lint and production build
+        run: python scripts/execute.py 13-local-ai-research-chat --verify --step 0
+      - name: Summarize captured quality evidence
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os, re, uuid
+          from pathlib import Path
+          def clean_output(value):
+              value = re.sub(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))', '', value)
+              value = value.replace('\r\n', '\n').replace('\r', '\n')
+              return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', value)
+          path = Path('phases/13-local-ai-research-chat/step0-output.json')
+          lines = ['## Local research quality checks']
+          if path.is_file():
+              for index, check in enumerate(json.loads(path.read_text(encoding='utf-8'))['checks'], 1):
+                  lines.append(f"- `{' '.join(check['argv'])}`: exit {check['exitCode']}")
+                  clean = clean_output(check['stdout'])
+                  lines.extend(f'  - {line.strip()}' for line in clean.splitlines() if re.match(r'^\s*(Test Files|Tests\s+\d|Duration\s+\d)', line))
+                  if check['exitCode'] != 0:
+                      for stream in ('stdout', 'stderr'):
+                          diagnostic = clean_output(check.get(stream) or '')[-16_000:].strip()
+                          if diagnostic:
+                              fence = '`' * max(3, 1 + max((len(match[0]) for match in re.finditer(r'`+', diagnostic)), default=0))
+                              lines.extend(['', f'### Failed check {index}: {stream} (last 16,000 characters)', fence + 'text', diagnostic, fence, ''])
+          else:
+              lines.append('- Harness output was not produced; inspect the preceding failed step.')
+          summary = '\n'.join(lines) + '\n'
+          command_guard = uuid.uuid4().hex
+          print(f'::stop-commands::{command_guard}')
+          print(summary)
+          print(f'::{command_guard}::')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as target:
+              target.write(summary)
+          PY
+      - run: npx playwright install --with-deps chromium
+      - name: Web flow in Chromium
+        run: npm run test:local-agent:e2e
+      - name: Real HTTP connector contract and cookie loss
+        run: npm run test:local-agent:wire
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && inputs.upload_artifacts == true
+        with:
+          name: web-evidence
+          path: |
+            test-results/
+            playwright-report/
+            phases/13-local-ai-research-chat/step0-output.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: hapark_local_agent_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-agent-ci-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hapark_local_agent_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/local-agent-pg-guard.test.mjs
+      - name: PostgreSQL 16 concurrent authority and queue tests
+        run: node scripts/local-agent-pg-verify.mjs
+        env:
+          CI: 'true'
+          HAPARK_PG_ISOLATED_TESTS: '1'
+          LOCAL_AGENT_PG_TEST_URL: postgresql://postgres:local-agent-ci-password@127.0.0.1:5432/hapark_local_agent_test
+
+  connector:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            architecture: x64
+          - os: macos-15
+            platform: mac
+            architecture: arm64
+          - os: macos-15-intel
+            platform: mac
+            architecture: x64
+          - os: ubuntu-24.04
+            platform: linux
+            architecture: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CONNECTOR_APP_ORIGIN: https://hapark.vercel.app
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.architecture }}
+      - name: Verify runtime and runner architecture
+        shell: bash
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const expected = process.env.EXPECTED_ARCHITECTURE;
+          const runnerArchitecture = { x64: 'X64', arm64: 'ARM64' }[expected];
+          assert.ok(runnerArchitecture, 'An explicit supported matrix architecture is required.');
+          assert.equal(process.arch, expected, 'Node architecture differs from the matrix.');
+          assert.equal(process.env.RUNNER_ARCH, runnerArchitecture, 'Runner architecture differs from the matrix.');
+          console.log(JSON.stringify({ architecture: process.arch, runnerArchitecture: process.env.RUNNER_ARCH }));
+          NODE
+      - name: Connector contracts and process cancellation
+        run: npm --prefix connector test
+      - run: npm --prefix connector/desktop ci
+      - name: Native runtime preparation regression
+        run: node connector/scripts/ci-desktop-smoke.mjs --self-test
+      - name: Native encrypted pairing and resume
+        if: runner.os != 'Linux'
+        run: node connector/scripts/ci-desktop-smoke.mjs
+      - name: Linux desktop test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gnome-keyring libsecret-1-0 xvfb dbus-x11 fonts-noto-cjk xdg-utils desktop-file-utils shared-mime-info libglib2.0-bin xdotool x11-utils scrot openbox wmctrl
+      - name: Prepare official Linux Electron sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_OS}" = Linux
+          test "$(id -u)" -ne 0
+          test -z "${ELECTRON_OVERRIDE_DIST_PATH:-}"
+          workspace="$(realpath -e "${GITHUB_WORKSPACE}")"
+          electron_package="${workspace}/connector/desktop/node_modules/electron"
+          test -f "${electron_package}/install.js"
+          test ! -L "${electron_package}/install.js"
+          node "${electron_package}/install.js"
+          test "$(cat "${electron_package}/path.txt")" = electron
+          electron_binary="${electron_package}/dist/electron"
+          sandbox="${electron_package}/dist/chrome-sandbox"
+          for executable in "${electron_binary}" "${sandbox}"; do
+            test -f "${executable}"
+            test ! -L "${executable}"
+            test "$(realpath -e "${executable}")" = "${executable}"
+            test -x "${executable}"
+          done
+          mount_options="$(findmnt --noheadings --output OPTIONS --target "${sandbox}")"
+          case ",${mount_options}," in
+            *,nosuid,*) echo '::error::Official Electron sandbox is on a nosuid mount'; exit 1 ;;
+          esac
+          sandbox_sha256="$(sha256sum "${sandbox}" | cut -d ' ' -f 1)"
+          sudo chown root:root "${sandbox}"
+          sudo chmod 4755 "${sandbox}"
+          test "$(stat --format='%u:%g:%a' "${sandbox}")" = 0:0:4755
+          test -u "${sandbox}"
+          test "$(sha256sum "${sandbox}" | cut -d ' ' -f 1)" = "${sandbox_sha256}"
+          printf '%s\n' 'Official Electron sandbox verified: root:root 4755; original binary retained.'
+      - name: Native encrypted pairing and resume in a desktop session
+        if: runner.os == 'Linux'
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: |
+          dbus-run-session -- xvfb-run -a bash -euc '
+            printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
+            node connector/scripts/ci-desktop-smoke.mjs
+          '
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && inputs.upload_artifacts == true
+        with:
+          name: native-smoke-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: |
+            connector/artifacts/ci-desktop-*/**
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Native installer build (unsigned validation artifact)
+        if: runner.os != 'macOS'
+        run: npm --prefix connector/desktop run package:${{ matrix.platform }}
+      - name: macOS native identity regression and installer build (unsigned)
+        if: runner.os == 'macOS'
+        run: npm --prefix connector/desktop run package:mac
+      - name: Verify Debian sandbox and protocol contents
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="$(realpath -e "${GITHUB_WORKSPACE}")"
+          packages=("${workspace}"/connector/dist/*.deb)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          test ! -L "${packages[0]}"
+          inspection="$(mktemp -d "${RUNNER_TEMP%/}/hapark-deb-inspection.XXXXXX")"
+          case "${inspection}" in
+            "${RUNNER_TEMP%/}"/hapark-deb-inspection.*) ;;
+            *) echo '::error::Debian inspection directory is outside the owned runner temp'; exit 1 ;;
+          esac
+          trap 'rm -rf -- "${inspection}"' EXIT
+          dpkg-deb --control "${packages[0]}" "${inspection}/control"
+          dpkg-deb --extract "${packages[0]}" "${inspection}/data"
+          mapfile -t desktop_files < <(find "${inspection}/data/usr/share/applications" -maxdepth 1 -type f -name '*.desktop' -print)
+          test "${#desktop_files[@]}" -eq 1
+          desktop="${desktop_files[0]}"
+          postinst="${inspection}/control/postinst"
+          test -s "${postinst}"
+          if grep -REin -- '--no-sandbox|--disable-sandbox|--disable-setuid-sandbox|--disable-seccomp-filter-sandbox|--disable-namespace-sandbox|--no-zygote-sandbox|ELECTRON_DISABLE_SANDBOX|apparmor_restrict_unprivileged_userns[[:space:]]*=[[:space:]]*0' "${inspection}/control" "${desktop}"; then
+            echo '::error::Debian launcher or maintainer script disables a sandbox boundary'
+            exit 1
+          else
+            scan_status="$?"
+            test "${scan_status}" -eq 1
+          fi
+          grep -Eq '^Exec="?/opt/.* %U$' "${desktop}"
+          grep -Fq 'x-scheme-handler/hapark-connect' "${desktop}"
+          grep -Fq 'unshare --user true' "${postinst}"
+          grep -Eq 'chmod 4755 .*/chrome-sandbox' "${postinst}"
+          grep -Eq 'chmod 0755 .*/chrome-sandbox' "${postinst}"
+          grep -Fq 'update-desktop-database' "${postinst}"
+          test "$(find "${inspection}/data/opt" -type f -name chrome-sandbox | wc -l)" -eq 1
+          dpkg-deb --field "${packages[0]}" Package Version Architecture
+          grep -E '^(Exec|MimeType)=' "${desktop}"
+          printf '%s\n' 'Debian archive verified: official sandbox setup and URI handler; no sandbox bypass. Installation was not performed.'
+      - name: macOS installed DMG and LaunchServices protocol
+        if: runner.os == 'macOS'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+        run: node connector/scripts/ci-installed-smoke.mjs
+      - name: Ubuntu installed Debian package and desktop protocol
+        if: runner.os == 'Linux'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+          XDG_CURRENT_DESKTOP: GNOME
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          dbus-run-session -- xvfb-run -a bash -euc '
+            printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
+            openbox --sm-disable >"${RUNNER_TEMP}/connector-installed-openbox.log" 2>&1 &
+            connector_wm_pid=$!
+            trap '\''kill "${connector_wm_pid}" 2>/dev/null || true'\'' EXIT
+            node connector/scripts/ci-installed-smoke.mjs
+          '
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && runner.os != 'Windows' && inputs.upload_artifacts == true
+        with:
+          name: installed-package-evidence-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: connector/artifacts/ci-installed-*/**
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Windows install, protocol registration and uninstall
+        if: matrix.platform == 'win'
+        env:
+          LOCAL_AGENT_INSTALL_QA: '1'
+        run: npm --prefix connector run qa:install
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && matrix.platform == 'win' && inputs.upload_artifacts == true
+        with:
+          name: windows-install-evidence
+          path: |
+            connector/artifacts/windows-installer-qa.json
+            connector/artifacts/windows-installed-uri-qa.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.2
+        if: inputs.upload_artifacts == true
+        with:
+          name: connector-${{ matrix.platform }}-${{ matrix.architecture }}-unsigned
+          path: |
+            connector/dist/*.exe
+            connector/dist/*.dmg
+            connector/dist/*.deb
+          if-no-files-found: error
+          retention-days: 14
+      - name: Record candidate package hashes
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const directory = 'connector/dist';
+          const packages = fs.existsSync(directory) ? fs.readdirSync(directory).filter(name => /\.(exe|dmg|deb)$/.test(name)).map(name => {
+            const bytes = fs.readFileSync(`${directory}/${name}`);
+            return { name, bytes: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+          }) : [];
+          const summary = JSON.stringify({ packages, signedReleasePublished: false, artifactStorage: 'opt-in; not retained by default' }, null, 2);
+          console.log(summary);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n\`\`\`json\n${summary}\n\`\`\`\n`);
+          NODE
