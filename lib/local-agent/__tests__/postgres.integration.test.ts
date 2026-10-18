@@ -41,6 +41,7 @@ import type { LocalAgentProviderSnapshot } from "@/types/local-agent";
 import { cancelTurn, createConversation, createTurn } from "@/lib/research-chat/service";
 import { finishAnalysisRun, prepareAnalysisRun, requestLocalAnalysis } from "@/lib/local-ai/service";
 import { parsePaperSource } from "@/lib/local-ai/source";
+import { hashCredential } from "../security";
 
 const enabled = Boolean(process.env.LOCAL_AGENT_PG_TEST_CLIENT_MODULE || process.env.HAPARK_PG_ISOLATED_TESTS === "1");
 const scope = (): LocalAgentScope => ({ memberId: "la-pg-owner", teamId: "la-pg-a", sessionKey: "pg-owner-session", sessionExpiresAt: new Date(Date.now() + 3_600_000) });
@@ -104,6 +105,67 @@ describe.skipIf(!enabled)("real isolated PostgreSQL 16 concurrency", () => {
     for (const suffix of ["a", "b"]) await prisma.paper.create({ data: { id: `la-pg-paper-${suffix}`, teamId: `la-pg-${suffix}`, title: "Disposable concurrency fixture", authors: "CI", abstract: "No external paper data", pdfUrl: "fixture.pdf", uploadedBy: "la-pg-owner", tags: [], analysisStatus: "ready", sourceText: JSON.stringify([{ page: 1, text: "Synthetic source text for isolated conversation concurrency. No private paper data." }]), sourceDigest: "a".repeat(64) } });
   });
   afterAll(async () => { queryHooks.before = undefined; queryHooks.after = undefined; await cleanFixtures(); await prisma.$disconnect(); });
+
+  it("fixes one five-minute first-ACK deadline across simultaneous same-key retries", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    try {
+      vi.setSystemTime(started);
+      const attempt = await createAttempt(scope());
+      const deviceToken = randomBytes(32).toString("base64url");
+      const input = { attemptId: attempt.id, launchToken: attempt.launchToken, deviceToken, deviceName: "CI first ACK PC", platform: "linux" as const };
+      vi.setSystemTime(started.getTime() + 4 * 60_000);
+      const bothRead = deferred();
+      let reads = 0;
+      queryHooks.after = async (event) => {
+        if (event.model === "LocalAgentAttempt" && event.operation === "findUnique" && whereOf(event).id === attempt.id && reads < 2) {
+          if (++reads === 2) bothRead.resolve();
+          await bounded(bothRead.promise, "both same-key ACKs read the unopened attempt");
+        }
+      };
+      const results = await Promise.all([acknowledgeDesktop(input), acknowledgeDesktop(input)]);
+      queryHooks.after = undefined;
+      const deadline = new Date(started.getTime() + 9 * 60_000);
+      expect(results[0]).toEqual(results[1]);
+      expect(results[0]).toMatchObject({ status: "awaiting_code", version: 1, expiresAt: deadline.toISOString() });
+      expect(await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).toMatchObject({ status: "awaiting_code", version: 1, failedAttempts: 0, expiresAt: deadline, pendingSecretHash: hashCredential(deviceToken) });
+      vi.setSystemTime(started.getTime() + 4 * 60_000 + 30_000);
+      expect(await acknowledgeDesktop(input)).toEqual(results[0]);
+      expect((await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).version).toBe(1);
+    } finally { queryHooks.after = undefined; vi.useRealTimers(); }
+  }, 30_000);
+
+  it("preserves the winning key and rejects a concurrent different-key ACK after rereading", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const started = new Date("2026-10-18T02:00:00.000Z");
+    try {
+      vi.setSystemTime(started);
+      const attempt = await createAttempt(scope());
+      const firstKey = randomBytes(32).toString("base64url"), secondKey = randomBytes(32).toString("base64url");
+      const input = { attemptId: attempt.id, launchToken: attempt.launchToken, deviceName: "CI concurrent ACK PC", platform: "linux" as const };
+      vi.setSystemTime(started.getTime() + 4 * 60_000);
+      const bothRead = deferred();
+      let reads = 0;
+      queryHooks.after = async (event) => {
+        if (event.model === "LocalAgentAttempt" && event.operation === "findUnique" && whereOf(event).id === attempt.id && reads < 2) {
+          if (++reads === 2) bothRead.resolve();
+          await bounded(bothRead.promise, "both different-key ACKs read the unopened attempt");
+        }
+      };
+      const results = await Promise.allSettled([acknowledgeDesktop({ ...input, deviceToken: firstKey }), acknowledgeDesktop({ ...input, deviceToken: secondKey })]);
+      queryHooks.after = undefined;
+      expect(results.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
+      for (const entry of results) if (entry.status === "rejected") expect(entry.reason).toMatchObject({ status: 409, code: "ANOTHER_CONNECTOR" });
+      const winnerKey = results[0].status === "fulfilled" ? firstKey : secondKey;
+      const saved = await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+      expect(saved).toMatchObject({ pendingSecretHash: hashCredential(winnerKey), version: 1, failedAttempts: 0, status: "awaiting_code", expiresAt: new Date(started.getTime() + 9 * 60_000) });
+      const losingKey = winnerKey === firstKey ? secondKey : firstKey;
+      await expect(acknowledgeDesktop({ ...input, deviceToken: losingKey })).rejects.toMatchObject({ status: 409, code: "ANOTHER_CONNECTOR" });
+      expect(await prisma.localAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })).toEqual(saved);
+      expect(await prisma.localAgentDevice.count()).toBe(0);
+      expect(await prisma.localAgentGrant.count()).toBe(0);
+    } finally { queryHooks.after = undefined; vi.useRealTimers(); }
+  }, 30_000);
 
   it("bounds concurrent wrong-code updates and refuses a correct code after five committed failures", async () => {
     const { attempt, deviceToken } = await start();

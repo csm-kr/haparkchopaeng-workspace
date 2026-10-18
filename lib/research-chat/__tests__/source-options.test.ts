@@ -7,7 +7,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {
 } }));
 vi.mock("@/lib/local-agent/service", () => ({ cancelJob: vi.fn(), createPreparedJob: vi.fn() }));
 const { listResearchPapers, getConversation } = await import("../service");
-const scope = { teamId: "team", memberId: "member", sessionKey: "session" };
+const scope = { teamId: "team", memberId: "member", sessionKey: "session", sessionExpiresAt: new Date(Date.now() + 3_600_000) };
 const reason = "PDF는 1~30쪽까지 분석할 수 있어요.";
 const rows = [
   { id: "failed", title: "Failed", sourceText: null, analysisError: reason },

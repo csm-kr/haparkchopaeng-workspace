@@ -79,6 +79,11 @@
       "dir": "15-ai-bridge-preview",
       "status": "completed",
       "completed_at": "2026-10-18T10:10:55+0900"
+    },
+    {
+      "dir": "16-ai-bridge-pairing-countdown",
+      "status": "completed",
+      "completed_at": "2026-10-18T10:57:33+0900"
     }
   ]
 }
