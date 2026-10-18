@@ -32,7 +32,7 @@ try {
   let listening=false;
   for(let retry=0;retry<100;retry+=1){if(server.exitCode!==null)throw new Error('Fixture could not bind loopback port 3000');if((await readFile(join(qaDir,'server.out'),'utf8')).includes('"desktopFixture":true')){listening=true;break}await wait(50)}
   if(!listening)throw new Error('Fixture did not start');
-  application=await background(electron,[join(root,'desktop'),'--connector-dev','--no-auto-open','--connector-qa',`--connector-data-dir=${data}`,`--user-data-dir=${profile}`,'--remote-debugging-port=0',`hapark-connect://connect?attemptId=qa-attempt-1&launchToken=${'a'.repeat(43)}`],'app');
+  application=await background(electron,[join(root,'desktop'),'--connector-dev','--no-auto-open','--connector-qa',...(process.platform==='win32'?['--connector-qa-tray']:[]),`--connector-data-dir=${data}`,`--user-data-dir=${profile}`,'--remote-debugging-port=0',`hapark-connect://connect?attemptId=qa-attempt-1&launchToken=${'a'.repeat(43)}`],'app');
   await writeFile(stateFile,JSON.stringify({qaDir,data,profile,pid:application.pid,serverPid:server.pid}));
   let port;
   for(let retry=0;retry<100;retry+=1){try{port=Number((await readFile(join(data,'DevToolsActivePort'),'utf8')).split('\n')[0]);if(port)break}catch{}await wait(100)}

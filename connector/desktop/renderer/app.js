@@ -9,16 +9,19 @@ function render(value) {
   const previousStage = state?.stage, newAttempt = state?.attemptId !== value.attemptId;
   if (!state || newAttempt || value.stage !== 'pairing') { $('code').value = ''; $('code').removeAttribute('aria-invalid'); $('code-error').textContent = ''; }
   state = value;
+  $('companion').hidden = ['pairing', 'connected'].includes(state.stage);
   if (state.appName) { document.title = state.appName; $('app-name').textContent = state.appName; }
   $('site-name').textContent = state.siteName;
   $('title').textContent = state.title; $('description').textContent = state.description;
-  $('status').textContent = stageNames[state.stage] ?? '확인 중'; $('status').dataset.ready = String(state.stage === 'connected');
+  $('status').textContent = stageNames[state.stage] ?? '확인 중'; $('status').dataset.ready = String(state.stage === 'connected'); $('status').dataset.stage = state.stage;
   $('target').hidden = !['pairing', 'connected'].includes(state.stage);
   $('target-site').textContent = state.siteName; $('target-account').textContent = [state.memberName, state.teamName].filter(Boolean).join(' · '); $('target-device').textContent = state.deviceName;
   $('pairing').hidden = state.stage !== 'pairing'; $('providers').hidden = state.stage !== 'connected';
   $('idle-actions').hidden = ['connected', 'pairing', 'opening'].includes(state.stage); $('pause').hidden = state.stage !== 'connected';
   $('auto-start').checked = state.autoStart === true; $('auto-start').disabled = state.platform === 'linux'; $('pet').checked = state.pet === true;
-  $('lifetime-note').textContent = state.stage === 'connected' ? '창을 닫으면 현재 연결을 유지해요. 앱 종료를 누르면 완전히 끝나요.' : '필요할 때 웹 버튼으로 실행할 수 있어요.';
+  $('lifetime-note').textContent = state.stage === 'connected'
+    ? state.closeToTray ? '창을 닫으면 트레이에서 연결을 유지해요. 트레이에서 다시 열거나 종료할 수 있어요.' : '창을 닫으면 연결도 종료돼요. 다음에는 웹 버튼으로 다시 열 수 있어요.'
+    : '필요할 때 웹 버튼으로 실행할 수 있어요.';
   if (state.stage === 'pairing') { $('code-error').textContent = state.message ?? ''; $('code').setAttribute('aria-invalid', String(!!state.message)); } else $('message').textContent = state.message ?? '';
   const nextProviderKey = JSON.stringify((state.providers ?? []).map(provider => ({ ...provider, quotaPresentation: presentQuota(provider).state })));
   if (nextProviderKey !== providerKey) { providerKey = nextProviderKey; $('provider-list').replaceChildren(...(state.providers ?? []).map(providerRow)); }

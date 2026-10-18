@@ -1,0 +1,39 @@
+{
+  "project": "hapark",
+  "phase": "17-ai-bridge-tray-character",
+  "steps": [
+    {
+      "step": 0,
+      "name": "bri-character-and-native-tray",
+      "status": "completed",
+      "paths": [
+        "connector/desktop",
+        "connector/scripts",
+        "connector/test",
+        "docs/design/AI_BRIDGE_TRAY_CHARACTER.md",
+        ".github/workflows/local-agent.yml",
+        ".github/workflows/ai-bridge-preview.yml"
+      ],
+      "checks": [
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ],
+        [
+          "node",
+          "connector/scripts/desktop-tray-qa.mjs"
+        ],
+        [
+          "node",
+          "connector/scripts/run-desktop-qa.mjs"
+        ]
+      ],
+      "started_at": "2026-10-18T11:15:42+0900",
+      "completed_at": "2026-10-18T11:20:06+0900",
+      "summary": "203 connector tests passed; real Windows Electron Tray/Menu/sandbox QA passed; full desktop pairing and encrypted resume, close/quit, 401 and lease-expiry recovery passed. Production account inference and manual OS tray clicks were not performed."
+    }
+  ],
+  "created_at": "2026-10-18T11:15:42+0900",
+  "completed_at": "2026-10-18T11:20:06+0900"
+}

@@ -105,7 +105,9 @@ jobs:
         run: node connector/scripts/ci-desktop-smoke.mjs --self-test
       - name: Native encrypted pairing and resume
         if: runner.os != 'Linux'
-        run: node connector/scripts/ci-desktop-smoke.mjs
+        run: |
+          node connector/scripts/ci-desktop-smoke.mjs
+          node connector/scripts/desktop-tray-qa.mjs
       - name: Linux desktop test dependencies
         if: runner.os == 'Linux'
         run: |
@@ -152,6 +154,7 @@ jobs:
           dbus-run-session -- xvfb-run -a bash -euc '
             printf "%s" "disposable-ci-keyring" | gnome-keyring-daemon --unlock --components=secrets
             node connector/scripts/ci-desktop-smoke.mjs
+            node connector/scripts/desktop-tray-qa.mjs
           '
       - name: Native installer build (unsigned validation artifact)
         if: runner.os != 'macOS'
