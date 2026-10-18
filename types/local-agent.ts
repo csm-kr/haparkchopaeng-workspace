@@ -19,6 +19,14 @@ export interface LocalAgentProviderSnapshot {
   quotaObservedAt?: string;
   message?: string;
 }
+/** Authenticated self-report from the running app, independent of provider metadata. */
+export interface LocalAgentBridgeMetadata {
+  bridgeVersion?: string;
+  bridgeArchitecture?: "arm64" | "x64";
+}
+export interface LocalAgentDesktopHeartbeatInput extends LocalAgentBridgeMetadata {
+  providers: LocalAgentProviderSnapshot[];
+}
 export interface LocalAgentDeviceView {
   id: string;
   name: string;
@@ -26,6 +34,9 @@ export interface LocalAgentDeviceView {
   lastSeenAt: string | null;
   online: boolean;
   leaseExpiresAt: string | null;
+  /** Unknown for old apps, an expired grant or a stale desktop heartbeat. */
+  bridgeVersion?: string | null;
+  bridgeArchitecture?: "arm64" | "x64" | null;
   providers: LocalAgentProviderSnapshot[];
 }
 export type LocalAgentAttemptStatus = "awaiting_app" | "awaiting_code" | "connected" | "cancelled" | "expired";

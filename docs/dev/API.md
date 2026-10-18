@@ -168,6 +168,8 @@
 
 설치앱은 `desktop/ack`, `desktop/pair`, `desktop/heartbeat`, `desktop/claim`, `desktop/result`에 POST한다. ack/pair는 짧은 launch credential, 나머지는 기기 bearer와 `X-Local-Agent-Device`로 인증한다. 번호는 웹에만 반환한다. 앱 heartbeat는 웹 grant를 연장하지 못한다. 응답은 `no-store, private`이며 자격 증명·작업 내용은 공개 Realtime에 방송하지 않는다. 실제 DTO·상태코드·주기는 `lib/local-agent/PROTOCOL.md`와 [LOCAL_AGENT](./LOCAL_AGENT.md)를 따른다.
 
+`desktop/heartbeat`는 기존 `providers`와 선택적인 `bridgeVersion`(최대 64자 SemVer), `bridgeArchitecture`(`arm64|x64`)를 받는다. 앱은 실행 중인 실제 버전·CPU 정보를 보고하며 명시적 `null`이나 잘못된 값은 400이다. 두 필드를 생략하는 구 앱은 그대로 동작한다. 기존 snapshot JSON의 서버 예약 `_bridge` 행을 사용해 DDL 없이 저장하고 CLI 모델·한도에서 제외한다. 웹의 `LocalAgentDeviceView`는 현재 세션·팀의 허가와 20초 미만인 heartbeat·메타데이터 관측이 유효할 때만 해당 값을 반환하며, 미보고·끊김·권한 만료는 `null`이다. 이전 버전이나 배포 manifest의 최신 버전으로 추정하지 않는다.
+
 ## 개인 연구 채팅 — `/api/research-chat` (ADR-026)
 
 작업 공간 경로는 `/ai-chat`이다. 아래 API는 모두 웹 로그인·활성 팀을 서버에서 주입하며 변이는 정확한 Origin을 검사한다. 대화는 소유자 개인에게만 반환한다. `teamId/memberId/context/purpose`를 본문으로 보내면 거절한다.

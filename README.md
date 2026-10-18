@@ -2,6 +2,8 @@
 
 최근 변경: [업데이트 노트](docs/user/UPDATE_NOTES.md) · 개발 검증: [테스트 환경](docs/dev/TESTING.md)
 
+AI 연결: 사이드바 상태 점에서 Codex·Claude Code별 모델·effort와 설치 앱 버전·업데이트를 확인한다. [연결 설정 UX](docs/design/AI_CONNECTION_CONTROLS.md), [계약 ADR-028](docs/agent/ADR.md#adr-028), [검증 phase 20](phases/20-ai-connection-controls/index.json)을 따른다.
+
 4인 리서치랩 협업 앱(웹). 한국어 UI. 이 패키지는 개발자가 실제 코드베이스에서 재구축할 수 있도록 디자인을 문서화한다.
 
 ## 개요

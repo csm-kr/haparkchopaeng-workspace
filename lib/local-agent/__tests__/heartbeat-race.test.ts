@@ -24,7 +24,7 @@ const fixture = vi.hoisted(() => {
       localAgentSnapshot: {
         findUnique: async () => { const captured = { payload: structuredClone(payload), observedAt: new Date(observedAt) }; if (++reads === 1) { oldRead.resolve(); await releaseOld.promise; } return captured; },
         findMany: async () => [{ payload: structuredClone(payload), observedAt: new Date(observedAt), provider: "codex" }],
-        upsert: async ({ update }: { update: { payload: Record<string, unknown>; observedAt: Date } }) => { payload = structuredClone(update.payload); observedAt = update.observedAt; return {}; },
+        upsert: async ({ where, update }: { where: { deviceId_provider: { provider: string } }; update: { payload: Record<string, unknown>; observedAt: Date } }) => { if (where.deviceId_provider.provider === "_bridge") return {}; payload = structuredClone(update.payload); observedAt = update.observedAt; return {}; },
         updateMany: async ({ data }: { data: { payload: Record<string, unknown>; observedAt: Date } }) => { payload = structuredClone(data.payload); observedAt = data.observedAt; return { count: 1 }; },
         deleteMany: async () => ({ count: 0 }),
       },

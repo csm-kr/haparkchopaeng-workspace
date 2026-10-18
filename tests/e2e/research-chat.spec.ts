@@ -85,11 +85,11 @@ test("자료나 모델 선택 단계 없이 대화하고 부분 답변·중지·
 
 test("계정 위 연결 설정에서 모델·effort를 고르고 @로 논문과 세미나를 부른다", async ({ page }) => {
   const fixture = await setup(page); await page.goto("/ai-chat");
-  const settings = page.getByRole("button", { name: "연결 설정", exact: true });
+  const settings = page.getByRole("button", { name: "AI 연결", exact: true });
   const account = page.locator('a[href="/profile"]').last();
   expect((await settings.boundingBox())!.y).toBeLessThan((await account.boundingBox())!.y);
   await settings.click();
-  const dialog = page.getByRole("dialog", { name: "연결 설정", exact: true });
+  const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
   await dialog.getByRole("combobox", { name: "모델" }).selectOption("codex:second-model");
   await dialog.getByRole("radio", { name: "높음", exact: true }).check();
   await dialog.screenshot({ path: test.info().outputPath("connection-settings.png") });
@@ -147,7 +147,7 @@ test("390px에서도 @ 자료 검색·설정·입력이 잘리지 않고 모달 
   await page.getByRole("textbox", { name: "연구 질문" }).fill("자료를 함께 읽어보자.");
   await expect(page.getByRole("button", { name: "보내기", exact: true })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "연결 설정", exact: true }).click();
+  await page.getByRole("button", { name: "AI 연결", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "모델" })).toBeInViewport();
   await page.keyboard.press("Escape");
 });

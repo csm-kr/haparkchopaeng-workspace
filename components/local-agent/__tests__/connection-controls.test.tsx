@@ -1,0 +1,168 @@
+import * as React from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { LocalAgentDeviceView } from "@/types/local-agent";
+import type { LocalAgentApi } from "../client";
+import { ConnectionSettings } from "../connection-settings";
+import { LocalAgentProvider, useLocalAgent } from "../provider";
+
+beforeEach(() => window.sessionStorage.clear());
+afterEach(cleanup);
+
+function device(): LocalAgentDeviceView {
+  return { id: "pc", name: "연구용 PC", platform: "windows", online: true,
+    lastSeenAt: null, leaseExpiresAt: null, providers: [
+      { provider: "codex", status: "ready", models: [
+        { id: "codex-first", name: "Codex 첫 모델", reasoningEfforts: ["low", "high"] },
+        { id: "codex-other", name: "Codex 다른 모델" },
+      ], quota: { short: null, weekly: { label: "7일 한도", remainingPercent: 44, resetsAt: null } }, observedAt: new Date().toISOString() },
+      { provider: "claude", status: "ready", models: [{ id: "haiku", name: "Claude Haiku" }], quota: null, observedAt: new Date().toISOString() },
+    ] };
+}
+
+function Selection() {
+  const agent = useLocalAgent();
+  return <output aria-label="선택 대상">{JSON.stringify({ explicit: agent?.selectedModel, target: agent?.chatTarget })}</output>;
+}
+
+function setup(collapsed = false, initial: LocalAgentDeviceView | null = device()) {
+  const attempt = { id: "focus-attempt", version: 1, status: "awaiting_app" as const,
+    code: "048217", device: null, expiresAt: new Date(Date.now() + 300_000).toISOString(),
+    launchToken: "qa-launch", deepLink: "hapark-connect://connect?attemptId=focus-attempt&launchToken=qa-launch" };
+  const api: LocalAgentApi = {
+    status: vi.fn().mockResolvedValue({ device: initial, devices: initial ? [initial] : [] }),
+    heartbeat: vi.fn().mockResolvedValue({ leaseExpiresAt: "2099-01-01T00:00:00Z" }),
+    createAttempt: vi.fn().mockResolvedValue(attempt), getAttempt: vi.fn().mockResolvedValue(attempt), cancelAttempt: vi.fn(), disconnect: vi.fn(),
+    downloads: vi.fn().mockResolvedValue({ releases: [] }), createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(),
+  };
+  render(<LocalAgentProvider teamId="team" api={api} launchConnector={() => true}><ConnectionSettings collapsed={collapsed} /><Selection /></LocalAgentProvider>);
+  return api;
+}
+
+async function open() {
+  const entry = screen.getByRole("button", { name: "AI 연결" });
+  await waitFor(() => expect(entry).toHaveAccessibleDescription("연결됨"));
+  entry.focus();
+  await act(async () => { fireEvent.click(entry); });
+  return screen.getByRole("dialog", { name: "AI 연결" });
+}
+
+it("사이드바의 8px 점은 연결 상태를 알리고 접힌 상태에서도 같은 이름을 유지한다", async () => {
+  const api = setup(true);
+  const entry = screen.getByRole("button", { name: "AI 연결" });
+  await waitFor(() => expect(entry).toHaveAccessibleDescription("연결됨"));
+  const dot = entry.querySelector("[data-connection-state]");
+  expect(dot).toHaveClass("size-2", "bg-online");
+  expect(entry.querySelector("svg")).toBeNull();
+  expect(entry).toHaveAttribute("title", "AI 연결 · 연결됨");
+  const offline = { ...device(), online: false };
+  vi.mocked(api.status).mockResolvedValue({ device: offline, devices: [offline], leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 });
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await waitFor(() => expect(entry).toHaveAccessibleDescription("다시 연결"));
+  expect(dot).toHaveClass("bg-fg-faint");
+  expect(dot).not.toHaveClass("bg-online");
+});
+
+it("도구 탭은 해당 실제 모델만 보여 주며 탭 이동만으로 실행 대상을 바꾸지 않는다", async () => {
+  setup();
+  const dialog = await open();
+  const tabs = within(dialog).getByRole("tablist", { name: "AI 도구" });
+  expect(within(tabs).getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Codex", "Claude Code"]);
+  expect(within(tabs).getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+  const model = within(dialog).getByRole("combobox", { name: "모델" });
+  expect(model).toHaveValue("codex:codex-first");
+  expect(within(model).queryByRole("option", { name: "Claude Haiku" })).toBeNull();
+  const before = screen.getByLabelText("선택 대상").textContent;
+  fireEvent.click(within(tabs).getByRole("tab", { name: "Claude Code" }));
+  expect(model).toHaveValue("");
+  expect(within(model).getByRole("option", { name: "Claude Haiku" })).toBeInTheDocument();
+  expect(within(model).queryByRole("option", { name: "Codex 첫 모델" })).toBeNull();
+  expect(screen.getByLabelText("선택 대상")).toHaveTextContent(before!);
+  expect(within(dialog).getByRole("button", { name: "지원 정보 없음" })).toBeDisabled();
+  fireEvent.change(model, { target: { value: "claude:haiku" } });
+  expect(screen.getByLabelText("선택 대상")).toHaveTextContent('"explicit":{"provider":"claude","model":"haiku"}');
+  expect(within(dialog).queryAllByRole("radio")).toHaveLength(0);
+  expect(within(dialog).getByText(/effort 지원 정보를 확인할 수 없어요/)).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole("button", { name: "완료" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("button", { name: "AI 연결" })).toHaveFocus();
+});
+
+it("실제 effort 범위와 20px 사용량 링을 재사용하고 키보드로 도구를 탐색한다", async () => {
+  setup();
+  const dialog = await open();
+  expect(within(dialog).getAllByRole("radio").map(radio => radio.getAttribute("value"))).toEqual(["low", "high"]);
+  expect(within(dialog).queryByRole("radio", { name: "보통" })).toBeNull();
+  const ring = within(dialog).getByTestId("usage-ring");
+  expect(ring).toHaveAttribute("width", "20");
+  const quota = within(dialog).getByRole("button", { name: "사용량 상세" });
+  fireEvent.focus(quota);
+  expect(screen.getByRole("tooltip")).toHaveTextContent("44% 남음");
+  fireEvent.keyDown(quota, { key: "Escape" });
+  const codex = within(dialog).getByRole("tab", { name: "Codex" });
+  codex.focus();
+  fireEvent.keyDown(codex, { key: "ArrowRight" });
+  const claude = within(dialog).getByRole("tab", { name: "Claude Code" });
+  expect(claude).toHaveFocus();
+  expect(claude).toHaveAttribute("aria-selected", "true");
+  fireEvent.keyDown(claude, { key: "Home" });
+  expect(codex).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("button", { name: "AI 연결" })).toHaveFocus();
+});
+
+it("갱신 순서가 바뀌어도 현재 도구를 유지하고 모델 삭제 시 다른 모델을 고르지 않는다", async () => {
+  const api = setup();
+  const dialog = await open();
+  const changed = device();
+  changed.providers[0].models = [{ id: "codex-other", name: "Codex 다른 모델" }];
+  changed.providers.reverse();
+  vi.mocked(api.status).mockResolvedValue({ device: changed, devices: [changed], leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 });
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  const model = within(dialog).getByRole("combobox", { name: "모델" });
+  await waitFor(() => expect(model).toHaveValue(""));
+  expect(within(dialog).getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+  expect(within(dialog).getByText(/사용하던 모델을 사용할 수 없어요/)).toBeInTheDocument();
+  expect(screen.getByLabelText("선택 대상")).toHaveTextContent('"model":"codex-first"');
+  expect(model).toBeEnabled();
+  fireEvent.change(model, { target: { value: "codex:codex-other" } });
+  expect(model).toHaveValue("codex:codex-other");
+});
+
+it("미설치 도구를 조회해도 가짜 모델이나 effort를 추가하지 않는다", async () => {
+  const initial = device();
+  initial.providers[1] = { ...initial.providers[1], status: "not_installed", models: [] };
+  setup(false, initial);
+  const dialog = await open();
+  fireEvent.click(within(dialog).getByRole("tab", { name: "Claude Code" }));
+  expect(within(dialog).getByRole("combobox", { name: "모델" })).toBeDisabled();
+  expect(within(dialog).getByText(/Claude Code 설치 안내/)).toBeInTheDocument();
+  expect(within(dialog).queryAllByRole("radio")).toHaveLength(0);
+  expect(within(dialog).queryByTestId("usage-ring")).toBeNull();
+});
+
+it.each([
+  { action: "연결하기", initial: null },
+  { action: "연결 관리", initial: device() },
+])("설정에서 $action 창으로 전환한 뒤 닫으면 사이드바에 포커스를 돌린다", async ({ action, initial }) => {
+  const api = setup(false, initial);
+  const entry = screen.getByRole("button", { name: "AI 연결" });
+  await waitFor(() => expect(entry).toHaveAccessibleDescription(initial ? "연결됨" : "AI 연결"));
+  entry.focus();
+  await act(async () => { fireEvent.click(entry); });
+  const settings = screen.getByRole("dialog", { name: "AI 연결" });
+  const next = within(settings).getByRole("button", { name: action });
+  next.focus();
+  await act(async () => { fireEvent.click(next); });
+  expect(settings.isConnected).toBe(false);
+  const connection = screen.getByRole("dialog", { name: "AI 연결" });
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  const close = within(connection).getByRole("button", { name: "연결창 닫기" });
+  close.focus();
+  fireEvent.click(close);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(entry).toHaveFocus();
+  expect(document.body.style.overflow).not.toBe("hidden");
+  if (!initial) expect(api.createAttempt).toHaveBeenCalledOnce();
+});

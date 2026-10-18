@@ -78,7 +78,9 @@ export function normalizeModels(provider, items) {
     const name = value?.displayName ?? value?.name;
     if (id === 'default' || value?.hidden || typeof name !== 'string') continue;
     try { validModel(id); } catch { continue; }
-    const efforts = (Array.isArray(value.supportedReasoningEfforts) ? value.supportedReasoningEfforts : []).map(item => item?.reasoningEffort).filter(item => ['low', 'medium', 'high', 'xhigh'].includes(item));
+    const efforts = provider === 'claude'
+      ? (value.supportsEffort === true && Array.isArray(value.supportedEffortLevels) ? value.supportedEffortLevels : []).filter(item => ['low', 'medium', 'high', 'xhigh', 'max'].includes(item))
+      : (Array.isArray(value.supportedReasoningEfforts) ? value.supportedReasoningEfforts : []).map(item => item?.reasoningEffort).filter(item => ['low', 'medium', 'high', 'xhigh'].includes(item));
     if (!models.some(item => item.id === id)) models.push({ id, name: name.replace(/[\p{Cc}\p{Cf}]/gu, '').slice(0, 100) || id, ...(efforts.length ? { reasoningEfforts: [...new Set(efforts)] } : {}) });
     if (models.length >= 64) break;
   }

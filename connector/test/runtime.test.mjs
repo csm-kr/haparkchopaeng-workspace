@@ -2,6 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConnectorSession } from '../core/runtime.mjs';
 
+test('heartbeats report only explicitly supplied bridge version and architecture, preserving legacy callers', async () => {
+  for (const options of [{}, { bridgeVersion: '0.1.5', bridgeArchitecture: 'x64' }, { bridgeVersion: '1.2.3-preview.1+build.7' }]) {
+    const requests = [];
+    const api = { post: async (route, body) => {
+      requests.push({ route, body });
+      return route === 'heartbeat' ? { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [] } : null;
+    } };
+    const session = new ConnectorSession({ api, identity: {}, adapters: {}, now: () => 1000,
+      setIntervalFn: () => 1, clearIntervalFn() {}, ...options });
+    session.start(new Date(46000).toISOString());
+    try {
+      await session.tick();
+      assert.deepEqual(requests.find(value => value.route === 'heartbeat').body, { providers: [], ...options });
+    } finally { session.stop(); }
+  }
+});
+
+test('invalid explicit bridge metadata fails before any request', () => {
+  for (const metadata of [{ bridgeVersion: null }, { bridgeVersion: 'latest' }, { bridgeVersion: '01.1.5' },
+    { bridgeVersion: '1.2.3-' }, { bridgeVersion: '1.2.3+bad/value' }, { bridgeVersion: '1.2.3\n' }, { bridgeVersion: '1.2.3-01' }, { bridgeVersion: '1.2.3-' + 'x'.repeat(64) },
+    { bridgeArchitecture: null }, { bridgeArchitecture: 'ia32' }]) {
+    assert.throws(() => new ConnectorSession({ ...metadata, api: { post() { assert.fail('No request before validation'); } } }),
+      /bridge/i);
+  }
+});
+
 const identity = { deviceId: 'device-1', deviceToken: 'a'.repeat(43), deviceName: 'This PC', platform: 'windows' };
 const providers = [{ provider: 'codex', status: 'ready', models: [{ id: 'model', name: 'Model' }], quota: null, observedAt: new Date(1000).toISOString() }];
 const claim = { job: { id: 'job-1', provider: 'codex', model: 'model', prompt: '2+2', status: 'running' }, context: 'selected paper only', claimToken: 'claim-secret', leaseExpiresAt: new Date(46000).toISOString() };

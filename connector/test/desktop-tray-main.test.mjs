@@ -15,10 +15,10 @@ import { registerHooks } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const fixture = JSON.parse(process.env.CONNECTOR_TRAY_FIXTURE);
-const windows = [], trays = [], states = [], external = [], events = [], handlers = new Map();
+const windows = [], trays = [], states = [], external = [], events = [], requests = [], handlers = new Map();
 let protocolCalls = 0;
 const app = Object.assign(new EventEmitter(), {
-  isPackaged: fixture.packaged === true, setName() {}, setPath(_key, value) { this.userData = value; },
+  isPackaged: fixture.packaged === true, getVersion: () => fixture.version ?? '0.1.5', setName() {}, setPath(_key, value) { this.userData = value; },
   getPath(key) { return key === 'appData' ? fixture.owned : this.userData; },
   requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(),
   setAsDefaultProtocolClient: () => { protocolCalls += 1; return false; }, exit(code) { events.push('exit'); this.exitCode = code; }, quit() {},
@@ -40,13 +40,27 @@ class Tray extends EventEmitter {
 const electron = { app, BrowserWindow, Tray, Menu: { buildFromTemplate: value => value },
   nativeImage: { createFromPath: () => ({ isEmpty: () => false, resize() { return this; }, setTemplateImage() {} }) },
   ipcMain: { removeHandler(name) { handlers.delete(name); }, handle(name, handler) { handlers.set(name, handler); } },
-  nativeTheme: {}, safeStorage: {}, shell: { openExternal: async () => external.push('open-web') },
+  nativeTheme: {}, safeStorage: { isEncryptionAvailable: () => true, getSelectedStorageBackend: () => 'test',
+    encryptString: value => Buffer.from(value), decryptString: value => value.toString() }, shell: { openExternal: async () => external.push('open-web') },
   screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } }) },
 };
 globalThis.__trayElectron = electron;
 const moduleText = Object.keys(electron).map(key => 'export const ' + key + '=globalThis.__trayElectron.' + key + ';').join('\n');
-registerHooks({ resolve(specifier, context, next) { return specifier === 'electron'
-  ? { url: 'data:text/javascript,' + encodeURIComponent(moduleText), shortCircuit: true } : next(specifier, context); } });
+globalThis.__versionApi = { async post(route, body) {
+  requests.push({ route, body });
+  const leaseExpiresAt = new Date(Date.now() + 45000).toISOString();
+  if (route === 'ack') return { attemptId: 'version-attempt', status: 'connected', deviceId: 'version-device', leaseExpiresAt };
+  if (route === 'heartbeat') return { leaseExpiresAt, cancelJobIds: [] };
+  if (route === 'claim') return null;
+  throw new Error('Unexpected fixture route');
+} };
+registerHooks({ resolve(specifier, context, next) {
+  const text = specifier === 'electron' ? moduleText
+    : fixture.version && /\/core\/api\.mjs$/.test(specifier) ? 'export const createApiClient = () => globalThis.__versionApi;'
+    : fixture.version && /\/core\/adapters\.mjs$/.test(specifier) ? 'export const createProviderAdapter = () => ({detect:async()=>({provider:"codex",status:"ready",models:[],quota:null,observedAt:new Date().toISOString()})});'
+    : null;
+  return text ? { url: 'data:text/javascript,' + encodeURIComponent(text), shortCircuit: true } : next(specifier, context);
+} });
 process.argv.push('--connector-dev', '--no-auto-open');
 Object.defineProperty(process, 'resourcesPath', { value: join(fixture.root, 'connector'), configurable: true });
 if (fixture.qa) process.argv.push('--connector-qa');
@@ -73,6 +87,15 @@ try {
   await until(() => states.at(-1).stage === 'error');
   assert.equal(window.visible, !quiet);
   if (tray) assert.equal(tray.tooltip, 'AI 브릿지 · 연결 오류');
+  if (fixture.version) {
+    assert.equal(states.at(-1).bridgeVersion, fixture.version, 'STATE_MUST_USE_ACTUAL_APP_VERSION');
+    assert.equal(states.at(-1).bridgeArchitecture, ['x64', 'arm64'].includes(process.arch) ? process.arch : undefined);
+    app.emit('second-instance', {}, ['hapark-connect://connect?attemptId=version-attempt&launchToken=' + 't'.repeat(43)]);
+    await until(() => requests.some(value => value.route === 'heartbeat'));
+    const heartbeat = requests.find(value => value.route === 'heartbeat').body;
+    assert.equal(heartbeat.bridgeVersion, fixture.version, 'HEARTBEAT_MUST_USE_ACTUAL_APP_VERSION');
+    assert.equal(heartbeat.bridgeArchitecture, ['x64', 'arm64'].includes(process.arch) ? process.arch : undefined);
+  }
   assert.equal(window.inactiveCalls, 0, 'Normal status changes must not restore a window.');
   if (fixture.breakTray) {
     const focused = window.focusCalls;
@@ -138,4 +161,8 @@ test('a hidden window losing its working tray returns once without focus', async
 
 test('quiet QA tray failure publishes unavailable state without showing its offscreen window', async () => {
   await runMainFixture({ qa: true, qaTray: true, breakTray: true });
+});
+
+test('native state and heartbeat use Electron app.getVersion rather than the development package version', async () => {
+  await runMainFixture({ qa: true, version: '9.8.7-native.2+fixture' });
 });

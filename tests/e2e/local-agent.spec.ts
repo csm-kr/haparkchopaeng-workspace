@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { LocalAgentAttemptCreated, LocalAgentDeviceView } from "../../types/local-agent";
+import type { ConnectorRelease } from "../../components/local-agent/client";
 
 // 연결/작업 API는 전부 격리한다. 실제 설치·CLI 검증을 이 화면 테스트로 대체하지 않는다.
 const device: LocalAgentDeviceView = {
@@ -14,11 +15,12 @@ async function login(page: Page) {
   expect(response.ok()).toBeTruthy();
 }
 
-async function mockConnector(page: Page, connected = false) {
+async function mockConnector(page: Page, connected = false, currentDevice: LocalAgentDeviceView = device, releases: ConnectorRelease[] = []) {
   let attempts = 0;
   let cancelled = false;
   let acknowledged = false;
   let serverNow = Date.now();
+  currentDevice = { ...currentDevice, lastSeenAt: new Date(serverNow).toISOString(), leaseExpiresAt: new Date(serverNow + 45_000).toISOString() };
   let attempt: LocalAgentAttemptCreated | null = null;
   // Date는 서버 fixture와 함께 이동하고, 실제 폴링·카운트다운 interval은 계속 실행한다.
   await page.clock.setFixedTime(serverNow);
@@ -30,9 +32,9 @@ async function mockConnector(page: Page, connected = false) {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
     let data: unknown;
-    if (path.endsWith("/status")) data = { devices: connected ? [device] : [], device: connected ? device : null, leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 };
+    if (path.endsWith("/status")) data = { devices: connected ? [currentDevice] : [], device: connected ? currentDevice : null, leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 };
     else if (path.endsWith("/web-heartbeat")) data = { leaseExpiresAt: new Date(serverNow + 45000).toISOString() };
-    else if (path.endsWith("/downloads")) data = { releases: [] };
+    else if (path.endsWith("/downloads")) data = { releases };
     else if (path.endsWith("/attempts") && method === "POST") {
       attempts += 1;
       cancelled = false;
@@ -55,6 +57,7 @@ async function mockConnector(page: Page, connected = false) {
   });
   return {
     attempts: () => attempts,
+    updateDevice: (patch: Partial<LocalAgentDeviceView>) => { currentDevice = { ...currentDevice, ...patch }; },
     acknowledge: () => {
       if (!attempt) throw new Error("연결 시도를 만든 뒤 앱 ACK를 보내야 합니다.");
       if (!acknowledged) {
@@ -70,13 +73,64 @@ async function mockConnector(page: Page, connected = false) {
   };
 }
 
+test("사이드바 점·도구별 모델과 effort·실제 설치 버전 갱신을 함께 표시한다", async ({ page }) => {
+  await login(page);
+  const controlled: LocalAgentDeviceView = { ...device, bridgeVersion: null, bridgeArchitecture: null, providers: [
+    { ...device.providers[0], models: [{ id: "codex-fixture", name: "Codex 실제 목록 fixture", reasoningEfforts: ["low", "high"] }] },
+    { provider: "claude", status: "ready", models: [{ id: "claude-fixture", name: "Claude 실제 목록 fixture", reasoningEfforts: ["low", "medium", "high"] }], quota: null, observedAt: new Date().toISOString() },
+  ] };
+  const release: ConnectorRelease = { platform: "windows", architecture: "x64", version: "0.1.5", url: "https://downloads.example/AI-Bridge-0.1.5.exe", filename: "AI-Bridge-0.1.5.exe", unsigned: true };
+  const connector = await mockConnector(page, true, controlled, [release]);
+  await page.route(release.url, route => route.fulfill({ status: 200, headers: { "content-type": "application/octet-stream", "content-disposition": 'attachment; filename="AI-Bridge-0.1.5.exe"' }, body: "UI download fixture; not an executable" }));
+  await page.goto("/profile");
+  await page.getByRole("group", { name: "테마 선택" }).getByRole("button", { name: /다크/ }).click();
+  const entry = page.getByRole("complementary").getByRole("button", { name: "AI 연결", exact: true });
+  const dot = entry.locator("[data-connection-state]");
+  await expect(dot).toHaveAttribute("data-connection-state", "connected");
+  await expect(dot).toHaveClass(/bg-online/);
+  await entry.click();
+  const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
+  const model = dialog.getByRole("combobox", { name: "모델", exact: true });
+  await expect(dialog.getByRole("tab", { name: "Codex", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(model.locator("option")).toHaveText(["Codex 실제 목록 fixture"]);
+  await dialog.getByRole("tab", { name: "Claude Code", exact: true }).click();
+  await expect(model).toHaveValue("");
+  await expect(model.locator("option")).toHaveText(["모델을 선택해 주세요", "Claude 실제 목록 fixture"]);
+  await model.selectOption("claude:claude-fixture");
+  await dialog.getByRole("radio", { name: "높음", exact: true }).check();
+  await expect(dialog.getByRole("radio", { name: "높음", exact: true })).toBeChecked();
+  await expect(dialog.getByText("설치 버전 미확인", { exact: true })).toBeVisible();
+  const update = dialog.getByRole("link", { name: "업데이트 받기", exact: true });
+  await expect(update).toHaveAttribute("href", release.url);
+  const downloaded = page.waitForEvent("download");
+  await update.click();
+  expect((await downloaded).suggestedFilename()).toBe(release.filename);
+  await expect(dialog.getByText(/다운로드한 설치 파일을 열면/)).toBeVisible();
+  await expect(dialog.getByText("설치 버전 미확인", { exact: true })).toBeVisible();
+  connector.updateDevice({ bridgeVersion: "0.1.5", bridgeArchitecture: "x64" });
+  // 설치 정보와 연결 상태는 기존 15초 heartbeat 주기에 따라 자동으로 갱신된다.
+  await expect(dialog.getByText("설치 0.1.5", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(dialog.getByText("최신 버전이에요", { exact: true })).toBeVisible();
+  await expect(update).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const box = await dialog.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  await dialog.screenshot({ path: test.info().outputPath("connection-controls-dark.png") });
+  await dialog.getByRole("button", { name: "완료", exact: true }).click();
+  await expect(entry).toBeFocused();
+  connector.updateDevice({ online: false });
+  await expect(dot).toHaveAttribute("data-connection-state", "offline", { timeout: 20_000 });
+  await expect(dot).toHaveClass(/bg-fg-faint/);
+});
+
 test("연결 한 곳에서 시작하고 웹 번호·설치 안내·취소가 이어진다", async ({ page }) => {
   await login(page);
   const connector = await mockConnector(page);
   let downloaded = false;
   page.on("download", () => { downloaded = true; });
   await page.goto("/profile");
-  const entry = page.getByRole("button", { name: "AI 연결", exact: true }).first();
+  const entry = page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결", exact: true });
   await entry.click();
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
   await expect(dialog.getByRole("button", { name: "설치 파일 준비 중" })).toBeDisabled();
@@ -145,7 +199,7 @@ test("좁은 화면·다크 테마에서도 연결창이 화면 안에 있고 �
   await expect(page.getByRole("button", { name: "사이드바 펼치기" })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI 연결", exact: true })).toBeVisible();
   await page.getByRole("group", { name: "테마 선택" }).getByRole("button", { name: /다크/ }).click();
-  await page.getByRole("button", { name: "AI 연결", exact: true }).first().click();
+  await page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
   await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toBeVisible();
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveCount(0);

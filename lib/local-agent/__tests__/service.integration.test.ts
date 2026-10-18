@@ -187,6 +187,40 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
     await expect(revokeDevice({ ...scope(), memberId: "la-test-bob", teamId: "la-test-b" }, identity.deviceId)).rejects.toMatchObject({ status: 404 });
   });
 
+  it("persists actual bridge metadata independently of an empty provider catalogue", async () => {
+    const { identity, attempt } = await pair();
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject({ bridgeVersion: null, bridgeArchitecture: null });
+    await desktopHeartbeat(identity, [], { bridgeVersion: "0.1.5-preview.1", bridgeArchitecture: "arm64" });
+    const expected = { online: true, bridgeVersion: "0.1.5-preview.1", bridgeArchitecture: "arm64", providers: [] };
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject(expected);
+    expect((await getAttempt(scope(), attempt.id)).device).toMatchObject(expected);
+    expect((await getStatus({ ...scope(), sessionKey: "another-session" }, identity.deviceId)).device).toBeNull();
+  });
+
+  it("clears a previous app report when an older app omits metadata while preserving actual CLI capabilities", async () => {
+    const { identity } = await pair();
+    const ready = snapshot({ models: [{ id: "actual-codex-model", name: "Actual Codex model", reasoningEfforts: ["low", "high"] }], quota: { short: { label: "5h", remainingPercent: 62, resetsAt: null }, weekly: null } });
+    await desktopHeartbeat(identity, [ready], { bridgeVersion: "0.1.5", bridgeArchitecture: "x64" });
+    await desktopHeartbeat(identity, [ready]);
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject({ bridgeVersion: null, bridgeArchitecture: null, providers: [ready] });
+    expect((await job(identity.deviceId)).status).toBe("queued");
+  });
+
+  it("hides the app report exactly when its desktop heartbeat becomes stale or its web permission expires", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime("2026-10-18T12:00:00.000Z");
+    const { identity } = await pair();
+    const metadata = { bridgeVersion: "0.1.5", bridgeArchitecture: "x64" as const };
+    await desktopHeartbeat(identity, [], metadata);
+    vi.setSystemTime(Date.now() + 20_000);
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject({ online: false, bridgeVersion: null, bridgeArchitecture: null });
+    await desktopHeartbeat(identity, [], metadata);
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject({ online: true, ...metadata });
+    await prisma.localAgentGrant.updateMany({ where: { deviceId: identity.deviceId }, data: { leaseExpiresAt: new Date() } });
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject({ online: false, bridgeVersion: null, bridgeArchitecture: null });
+    await expect(desktopHeartbeat(identity, [], metadata)).rejects.toMatchObject({ status: 403 });
+  });
+
   it("queues only actual advertised models and paper context scoped by the server, idempotently", async () => {
     const { identity } = await pair();
     await desktopHeartbeat(identity, [snapshot()]);
@@ -233,11 +267,15 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
 
   it("revokes queued/running work on logout and never permits the old session to renew it", async () => {
     const { identity } = await pair();
-    await desktopHeartbeat(identity, [snapshot()]);
+    const metadata = { bridgeVersion: "0.1.5", bridgeArchitecture: "x64" as const };
+    await desktopHeartbeat(identity, [snapshot()], metadata);
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject(metadata);
     const created = await job(identity.deviceId);
     const claim = await claimJob(identity);
     if (!claim) throw new Error("missing claim");
     await revokeSession(scope().sessionKey);
+    expect((await getStatus(scope(), identity.deviceId)).device).toBeNull();
+    await expect(desktopHeartbeat(identity, [snapshot()], metadata)).rejects.toMatchObject({ status: 403 });
     await expect(renewWebPermission(scope(), identity.deviceId)).rejects.toMatchObject({ status: 403 });
     await expect(claimJob(identity)).rejects.toMatchObject({ status: 403 });
     await expect(submitResult(identity, { jobId: created.id, claimToken: claim.claimToken, sequence: 1, status: "completed", response: "회수 후 응답" })).rejects.toMatchObject({ status: 403 });
