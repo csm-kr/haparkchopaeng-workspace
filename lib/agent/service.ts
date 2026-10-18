@@ -53,9 +53,12 @@ async function permission(db: Database, task: AgentTask, scope = scopeOf(task)) 
   if (!(await db.localAgentGrant.updateMany({ where: { id: grant.id, revokedAt: null, leaseExpiresAt: { gt: new Date() } }, data: { revokedAt: null } })).count) throw new HttpError(403, "WEB_PERMISSION_EXPIRED", "AI 연결 권한이 끝났어요. 다시 연결해주세요.");
 }
 async function lockedTask(db: Database, id: string, scope?: LocalAgentScope) {
-  const task = await db.agentTask.findFirst({ where: { id, ...(scope ? owner(scope) : {}) } });
+  // Read after the row lock: a concurrent identical save must see the committed
+  // save ledger before callers apply their explicit expectedVersion check.
+  const where = { id, ...(scope ? owner(scope) : {}) };
+  if (!(await db.agentTask.updateMany({ where, data: { version: { increment: 0 } } })).count) throw missing();
+  const task = await db.agentTask.findFirst({ where });
   if (!task) throw missing();
-  if (!(await db.agentTask.updateMany({ where: { id, version: task.version }, data: { version: { increment: 0 } } })).count) throw conflict();
   return task;
 }
 const update = (db: Database, task: AgentTask, data: Prisma.AgentTaskUpdateInput) => db.agentTask.update({ where: { id: task.id }, data: { ...data, version: { increment: 1 } } });
