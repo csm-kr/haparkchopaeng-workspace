@@ -91,7 +91,7 @@ test("계정 위 연결 설정에서 모델·effort를 고르고 @로 논문과 
   await settings.click();
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
   await dialog.getByRole("combobox", { name: "모델" }).selectOption("codex:second-model");
-  await dialog.getByRole("radio", { name: "높음", exact: true }).check();
+  await dialog.getByRole("radio", { name: "high", exact: true }).check();
   await dialog.screenshot({ path: test.info().outputPath("connection-settings.png") });
   await page.keyboard.press("Escape"); await expect(settings).toBeFocused();
   await addMaterial(page, "연구 논문 A"); await addMaterial(page, "토요일 세미나");

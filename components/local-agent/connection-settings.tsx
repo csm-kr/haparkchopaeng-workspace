@@ -31,6 +31,10 @@ export function ConnectionSettings({ collapsed = false }: { collapsed?: boolean 
   const status = connected ? "연결됨" : phaseLabel[agent.phase];
   const target = agent.chatTarget ?? agent.selectedModel;
   const selection = chatSelection(agent.device, agent.chatTarget ?? agent.selectedModel, agent.effort);
+  const targetProvider = agent.device?.providers.find(item => item.provider === (selection?.provider ?? target?.provider));
+  const targetModel = selection && targetProvider?.models.find(model => model.id === selection.model);
+  const modelLabel = targetModel?.name ?? (target ? "모델 선택 필요" : "모델 미선택");
+  const modelDescription = targetModel && targetProvider ? `${providerName[targetProvider.provider]} · ${targetModel.name}` : modelLabel;
   const deviceId = agent.device?.id ?? null;
   const firstProvider = target?.provider ?? PROVIDERS.find(name => agent.device?.providers.some(provider => provider.provider === name && provider.status === "ready")) ?? "codex";
   const active = view?.deviceId === deviceId ? view.provider : firstProvider;
@@ -49,12 +53,18 @@ export function ConnectionSettings({ collapsed = false }: { collapsed?: boolean 
     : provider.status === "error" ? "CLI 상태를 확인하지 못했어요. AI 브릿지에서 다시 확인해 주세요."
     : models.length === 0 ? "이 도구가 제공한 모델이 아직 없어요." : null;
   return <>
-    <button type="button" aria-label="AI 연결" aria-describedby={`${id}-status`} aria-haspopup="dialog" aria-expanded={open}
-      title={`AI 연결 · ${status}`} onClick={() => setOpen(true)} className={`flex min-h-11 w-full items-center gap-2 rounded-sm text-[12px] text-fg-muted hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${collapsed ? "justify-center" : "px-2.5"}`}>
-      <span aria-hidden="true" data-connection-state={agent.phase} className={`size-2 shrink-0 rounded-full ${connected ? "bg-online" : "bg-fg-faint"}`} />
-      {!collapsed && <span>AI 연결</span>}
-    </button>
-    <span id={`${id}-status`} className="sr-only">{status}</span>
+    <div role="group" aria-label="AI 연결 상태" className="flex min-w-0 items-center">
+      <button type="button" aria-label="AI 연결" aria-describedby={`${id}-status`} aria-haspopup="dialog" aria-expanded={open}
+        title={`AI 연결 · ${status} · ${modelDescription}`} onClick={() => setOpen(true)} className={`flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${collapsed ? "justify-center" : "px-2.5 py-2"}`}>
+        <span className="grid size-4 shrink-0 place-items-center"><span aria-hidden="true" data-connection-state={agent.phase} className={`size-2 rounded-full ${connected ? "bg-online" : "bg-fg-faint"}`} /></span>
+        {!collapsed && <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+          <span className="text-[13px] font-medium">AI 연결</span>
+          <span className="w-full truncate text-[11px] text-fg-subtle">{modelLabel}</span>
+        </span>}
+      </button>
+      {!collapsed && connected && targetProvider && <QuotaBadge key={targetProvider.provider} windows={quotaWindows(targetProvider)} compact label="현재 모델 사용량 상세" />}
+    </div>
+    <span id={`${id}-status`} className="sr-only">{status} · {modelDescription}</span>
     {open && <ConnectionDialog title="AI 연결" onClose={close}>
       <div className="flex items-center justify-between gap-3 rounded-md bg-bg-subtle p-3">
         <div className="min-w-0"><p className="truncate text-[13px] font-medium text-fg">{agent.device?.name ?? "내 AI 연결"}</p><p className="mt-1 text-[12px] text-fg-muted">{status}</p></div>

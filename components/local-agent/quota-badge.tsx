@@ -30,11 +30,12 @@ function Ring({ window }: { window: QuotaWindowView }) {
 }
 
 /** 비율은 공급자가 관측한 구독 한도다. 토큰 개수를 추정하지 않는다. */
-export function QuotaBadge({ windows }: { windows: QuotaWindowView[] }) {
+export function QuotaBadge({ windows, compact = false, label = "사용량 상세" }: { windows: QuotaWindowView[]; compact?: boolean; label?: string }) {
   const [open, setOpen] = React.useState(false);
   const [position, setPosition] = React.useState({ top: 0, left: 0 });
   const trigger = React.useRef<HTMLButtonElement>(null);
   const tooltip = React.useRef<HTMLDivElement>(null);
+  const pointerOpen = React.useRef<boolean | null>(null);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const tooltipId = React.useId();
   const clearClose = React.useCallback(() => { if (closeTimer.current) clearTimeout(closeTimer.current); closeTimer.current = null; }, []);
@@ -79,13 +80,18 @@ export function QuotaBadge({ windows }: { windows: QuotaWindowView[] }) {
 
   if (windows.length === 0) return null;
   return <>
-    <button ref={trigger} type="button" aria-label="사용량 상세" aria-describedby={open ? tooltipId : undefined}
-      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm px-2 text-[11px] text-fg-muted hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+    <button ref={trigger} type="button" aria-label={label} aria-describedby={open ? tooltipId : undefined}
+      className={`inline-flex shrink-0 items-center rounded-sm text-[11px] text-fg-muted hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${compact ? "min-h-11 min-w-11 justify-center gap-1 px-1" : "min-h-10 gap-2 px-2"}`}
       onPointerEnter={(event) => { if (event.pointerType !== "touch") show(); }} onPointerLeave={leave}
+      onPointerDown={() => { pointerOpen.current = open; }}
       onFocus={show} onBlur={close}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}
-      onClick={() => { if (window.matchMedia?.("(hover: none)").matches) setOpen((value) => !value); }}>
-      {windows.map((window) => <span key={window.id} className="inline-flex items-center gap-1"><Ring window={window} /><span aria-hidden="true">{window.id}</span></span>)}
+      onClick={(event) => {
+        const wasOpen = pointerOpen.current; pointerOpen.current = null;
+        if (event.detail === 0 || wasOpen === null) show();
+        else if (window.matchMedia?.("(hover: none)").matches) { clearClose(); setOpen(!wasOpen); }
+      }}>
+      {windows.map((window) => <span key={window.id} className="inline-flex items-center gap-1"><Ring window={window} />{!compact && <span aria-hidden="true">{window.id}</span>}</span>)}
     </button>
     {open && createPortal(<div ref={tooltip} id={tooltipId} role="tooltip" onPointerEnter={clearClose} onPointerLeave={leave}
       style={{ position: "fixed", top: position.top, left: position.left, width: "min(288px, calc(100vw - 24px))" }}

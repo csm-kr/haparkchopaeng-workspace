@@ -1,0 +1,68 @@
+{
+  "project": "hapark",
+  "phase": "22-ai-connection-ux",
+  "baselineCommit": "6e44b22ee297c2da7ca8e49a3bc14eb9489b838c",
+  "execution": "Isolated worktree; collaborative TDD; original user work is read-only.",
+  "steps": [
+    {
+      "step": 1,
+      "name": "restore-approved-current-device-across-tabs",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "components/local-agent/__tests__/device-restoration.test.tsx",
+          "components/local-agent/__tests__/pending-hint-race.test.tsx"
+        ]
+      ],
+      "started_at": "2026-10-18T17:37:01+0900",
+      "summary": "restore-approved-current-device-across-tabs: 1 AC commands passed",
+      "completed_at": "2026-10-18T17:37:55+0900"
+    },
+    {
+      "step": 2,
+      "name": "aligned-model-and-quota-entry-with-native-effort-labels",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "components/local-agent/__tests__/connection-controls.test.tsx",
+          "components/local-agent/__tests__/connection-settings.test.tsx",
+          "components/local-agent/__tests__/connection-widgets.test.tsx"
+        ]
+      ],
+      "started_at": "2026-10-18T17:37:09+0900",
+      "completed_at": "2026-10-18T17:37:14+0900",
+      "summary": "aligned-model-and-quota-entry-with-native-effort-labels: 1 AC commands passed"
+    },
+    {
+      "step": 3,
+      "name": "full-regression-and-browser-flow",
+      "status": "completed",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ]
+      ],
+      "additionalEvidenceRequired": [
+        "lint and production build",
+        "native browser storage events across fresh tabs",
+        "Aside production model selection, effort labels and usage tooltip",
+        "original workspace preservation"
+      ],
+      "started_at": "2026-10-18T17:38:13+0900",
+      "completed_at": "2026-10-18T17:41:55+0900",
+      "summary": "full-regression-and-browser-flow: 1 AC commands passed"
+    }
+  ],
+  "productionDeployed": false,
+  "connectorUpdateRequired": false,
+  "created_at": "2026-10-18T17:37:01+0900",
+  "completed_at": "2026-10-18T17:41:55+0900"
+}
