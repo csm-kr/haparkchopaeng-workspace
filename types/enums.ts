@@ -37,4 +37,4 @@ export type JobStatus = "queued" | "running" | "done" | "failed";
 export type InviteStatus = "not_found" | "revoked" | "expired" | "used_up" | "ready";
 
 /** 발표 자료 에셋 종류 — DB.md PresentationAsset.type */
-export type AssetType = "pdf" | "ppt" | "note";
+export type AssetType = "pdf" | "ppt" | "note" | "html";

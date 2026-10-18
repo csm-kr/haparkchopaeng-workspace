@@ -1,0 +1,55 @@
+{
+  "project": "hapark",
+  "phase": "22-paper-pt-release",
+  "execution": "2026-10-19: user requested follow-up production work after phase 21. Separate release worktree from origin/main; preserve original workspace and newer production fixes.",
+  "steps": [
+    {
+      "step": 0,
+      "name": "production-integration-regression",
+      "status": "error",
+      "checks": [
+        [
+          "node",
+          "scripts/local-agent-verify.mjs",
+          "all"
+        ],
+        [
+          "node",
+          "--test",
+          "connector/test/*.test.mjs"
+        ],
+        [
+          "node",
+          "--test",
+          "scripts/local-agent-verify.test.mjs",
+          "scripts/local-agent-pg-guard.test.mjs",
+          "scripts/agent-task-schema.test.mjs"
+        ],
+        [
+          "python",
+          "-m",
+          "pytest",
+          "scripts/test_execute.py",
+          "-q"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "lint"
+        ],
+        [
+          "node",
+          "node_modules/next/dist/bin/next",
+          "build"
+        ]
+      ],
+      "started_at": "2026-10-19T07:00:51+0900",
+      "failed_at": "2026-10-19T07:06:22+0900",
+      "error_message": "AC failed: node scripts/local-agent-verify.mjs all"
+    }
+  ],
+  "productionDeployed": false,
+  "connectorReleased": false,
+  "productionConversationVerified": false,
+  "created_at": "2026-10-19T07:00:51+0900"
+}

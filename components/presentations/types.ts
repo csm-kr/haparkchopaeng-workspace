@@ -1,4 +1,5 @@
 import type { AssetType } from "@/types";
+import type { SeminarSlide } from "@/lib/seminar/contract";
 
 // 발표 자료 화면 DTO — RSC(page)가 lib/presentations에서 채워 props로 내려준다(ADR-015).
 // 댓글은 발표 자료에 귀속된다(ADR-004). 작성자는 서버가 세션에서 주입한다(R3).
@@ -28,6 +29,9 @@ export interface SlideView {
   title: string;
   subtitle?: string | null;
   body: string;
+  visual?: SeminarSlide["visual"];
+  speakerNotes?: string;
+  citations?: SeminarSlide["citations"];
 }
 
 export interface AssetView {
@@ -75,6 +79,7 @@ export interface PresentationMeta {
   summary: string | null;
   keypoints: string[];
   slides: SlideView[];
+  sourcePaper?: { id: string; title: string };
 }
 
 export interface PresentationDetailView {

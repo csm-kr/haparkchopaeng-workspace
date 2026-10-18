@@ -5,6 +5,7 @@ import { fail, ok, toErrorResponse } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { downloadObject } from "@/lib/storage";
 import { countPdfPages } from "@/lib/pdf-page-render";
+import { createPresentationRecord } from "@/lib/presentation-writes";
 
 // POST /api/presentations — 발표 자료 생성.
 // CRITICAL: teamId는 활성 팀에서, 발표자(presenterId)는 세션에서 취한다 — 클라 입력 미신뢰(R3/R37).
@@ -56,31 +57,7 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
 
-    const pres = await prisma.presentation.create({
-      data: {
-        title,
-        teamId: team.id, // R3/R37: 활성 팀에서 주입
-        presenterId: session.memberId,
-        date: new Date(),
-        duration: duration ?? null,
-        slideCount,
-        tags: [],
-        summary: null,
-        keypoints: [],
-        slides: [],
-        assets: asset
-          ? {
-              create: {
-                name: asset.filename,
-                type: assetType(asset.filename),
-                size: asset.size,
-                url: asset.objectPath,
-              },
-            }
-          : undefined,
-      },
-      select: { id: true },
-    });
+    const pres = await createPresentationRecord(prisma, { teamId: team.id, memberId: session.memberId }, { title, duration, slideCount, asset: asset ? { ...asset, type: assetType(asset.filename) } : undefined });
 
     return ok({ id: pres.id }, 201);
   } catch (e) {

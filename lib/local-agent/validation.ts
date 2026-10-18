@@ -21,6 +21,7 @@ export const ProviderSnapshotSchema = z.object({
   observedAt: IsoDate,
   quotaObservedAt: IsoDate.optional(),
   message: z.string().max(500).optional(),
+  capabilities: z.array(z.literal("agent_step_v1")).max(1).optional(),
 }).strict();
 
 export function sanitizeProviderSnapshot(candidate: LocalAgentProviderSnapshot): LocalAgentProviderSnapshot {

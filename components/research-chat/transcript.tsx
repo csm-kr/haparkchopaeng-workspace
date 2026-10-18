@@ -6,7 +6,7 @@ import { Button } from "@/components/ui";
 import type { ResearchConversationDetail } from "@/types/research-chat";
 import { ResponseContent } from "./response-content";
 
-export function Transcript({ detail, onRetry, children }: { detail: ResearchConversationDetail | null; onRetry: (prompt: string) => void; children: React.ReactNode }) {
+export function Transcript({ detail, onRetry, children, taskContent, activityKey }: { detail: ResearchConversationDetail | null; onRetry: (prompt: string) => void; children: React.ReactNode; taskContent?: React.ReactNode; activityKey?: string }) {
   const scroller = React.useRef<HTMLDivElement>(null);
   const following = React.useRef(true);
   const [unread, setUnread] = React.useState(false);
@@ -14,7 +14,7 @@ export function Transcript({ detail, onRetry, children }: { detail: ResearchConv
   React.useLayoutEffect(() => {
     if (following.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
     else if (tail?.response) setUnread(true);
-  }, [tail?.response, tail?.status]);
+  }, [tail?.response, tail?.status, activityKey]);
   React.useEffect(() => { following.current = true; setUnread(false); if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [detail?.conversation.id]);
   return <div className="relative flex min-h-0 flex-1 flex-col">
     <div ref={scroller} role="log" aria-label="연구 대화 내용" aria-live="off" className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
@@ -32,6 +32,7 @@ export function Transcript({ detail, onRetry, children }: { detail: ResearchConv
           {turn.contextTruncated && <p className="text-[11px] leading-relaxed text-fg-muted">분량 제한으로 자료 본문 또는 이전 대화 일부를 제외했어요.</p>}
           {(turn.status === "failed" || turn.status === "cancelled") && <Button variant="ghost" size="sm" className="min-h-10 self-start" onClick={() => onRetry(turn.prompt)}>질문 다시 쓰기</Button>}
         </article>)}
+        {taskContent}
         {!detail?.turns.length && children}
       </div>
     </div>

@@ -41,7 +41,7 @@ export function isolatedEnvironment(directory, inherited = process.env) {
     DATABASE_URL: url, DIRECT_URL: url, LOCAL_AGENT_TEST_DATABASE_URL: url,
     AUTH_SECRET: "isolated-local-agent-tests-only-not-a-deployment-secret",
     PRISMA_GENERATE_SKIP_AUTOINSTALL: "1", CI: "1", NO_COLOR: "1",
-    LOCAL_AGENT_RELEASES: "", PAPER_WEEKLY_LIMIT: "20", HAPARK_ISOLATED_TESTS: "1" };
+    LOCAL_AGENT_RELEASES: "", PAPER_WEEKLY_LIMIT: "20", AGENT_TASKS_ENABLED: "1", HAPARK_ISOLATED_TESTS: "1" };
 }
 
 function launch(argv, env, capture = false) {
@@ -120,8 +120,8 @@ async function waitForApp(child, url) {
 }
 
 export async function verify(mode) {
-  if (!["unit", "all", "e2e", "wire", "serve"].includes(mode)) throw new Error("Use unit, all, e2e, wire or serve");
-  const sharedClient = mode !== "unit";
+  if (!["unit", "real", "all", "e2e", "wire", "serve"].includes(mode)) throw new Error("Use unit, real, all, e2e, wire or serve");
+  const sharedClient = !["unit","real"].includes(mode);
   const lockPath = join(root, "node_modules/.hapark-isolated-tests.lock");
   return withVerificationLock(lockPath, async () => {
   let server, log, env, restoreNextCache, clientReplaced = false;
@@ -147,8 +147,11 @@ export async function verify(mode) {
     // The schema and both datasource URLs are isolated before this write command.
     await command([prismaCli, "db", "push", "--skip-generate", "--schema", schemaPath], env);
     env.LOCAL_AGENT_TEST_CLIENT_MODULE = join(clientPath, "index.js");
-    if (mode === "unit") {
-      await command([vitestCli, "run", "--no-file-parallelism", "lib/local-agent", "lib/local-ai", "lib/research-chat", "lib/__tests__/local-agent-releases.test.ts", "components/local-agent", "components/research-chat", "app/api/local-agent", "app/api/research-chat"], env);
+    env.HAPARK_REAL_MODEL_SMOKE = mode === "real" ? "1" : "0";
+    if (mode === "real") {
+      await command([vitestCli,"run","--no-file-parallelism","lib/seminar/__tests__/real-model.smoke.test.ts"],env);
+    } else if (mode === "unit") {
+      await command([vitestCli, "run", "--no-file-parallelism", "lib/local-agent", "lib/local-ai", "lib/research-chat", "lib/agent", "lib/seminar", "lib/__tests__/local-agent-releases.test.ts", "components/local-agent", "components/research-chat", "components/agent", "components/seminar", "app/api/local-agent", "app/api/research-chat", "app/api/agent"], env);
     } else {
       // Canonical seed only runs after the fresh SQLite-only guard above.
       assertIsolatedDatabase(directory, env.DATABASE_URL);

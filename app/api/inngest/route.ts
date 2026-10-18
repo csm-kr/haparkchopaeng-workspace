@@ -2,15 +2,17 @@ import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest";
 import { analyzePaperFn } from "@/worker/analyze-paper";
 import { prepareResearchChatFn } from "@/worker/research-chat";
+import { runAgentTaskFn, reconcileAgentTasksFn } from "@/worker/agent-task";
+import { exportSeminarFn, reconcileSeminarExportsFn } from "@/worker/seminar-export";
 
-// Inngest 잡 엔드포인트. 로컬 Dev Server가 논문 본문·분석 준비와 채팅 자료 준비 함수를
-// 발견한다. 프로덕션에서는 INNGEST_* 키로 서명하고 새 함수 등록을 동기화한다.
+// Inngest 잡 엔드포인트. 로컬은 Inngest Dev Server(`npx inngest-cli dev`)가 이 경로를
+// 자동 발견해 paper/analyze 잡을 실행한다(키 불필요). 프로덕션은 INNGEST_* 키로 서명.
 
-// PDF 추출은 durable step에서 처리하고, 긴 로컬 CLI 추론은 데스크톱에서 실행한다.
-// 각 본문 준비·결과 저장 요청에 Vercel 실행 시간 상한을 적용한다(ADR-016/026).
+// 분석은 단일 step에서 Gemini 3호출 + figure 렌더로 분 단위가 될 수 있다 — Vercel 함수
+// 타임아웃을 Hobby 상한(60초)까지 올린다. 그래도 넘치면 step 분할이 필요(ADR-013→016).
 export const maxDuration = 60;
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [analyzePaperFn, prepareResearchChatFn],
+  functions: [analyzePaperFn, prepareResearchChatFn, runAgentTaskFn, reconcileAgentTasksFn, exportSeminarFn, reconcileSeminarExportsFn],
 });

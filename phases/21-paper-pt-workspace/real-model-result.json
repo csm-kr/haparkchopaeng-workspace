@@ -1,0 +1,482 @@
+{
+  "model": "gpt-6.1-sol",
+  "fixture": "controlled synthetic source; actual CLI inference",
+  "transcript": [
+    {
+      "revision": 0,
+      "response": "{\"version\":1,\"action\":\"seminar_directions\",\"message\":\"원문은 출판 논문이 아닌 통제된 검증용 자료입니다. 단일 조건의 결과와 일반화 한계를 함께 설명하는 ‘메모리 절감의 근거와 범위’를 추천합니다. 이후 목차와 발표 자료는 정확히 3장, 각 본문은 90자 이내로 구성하겠습니다. 제공된 그림과 원문 표가 없어 출처를 명시한 재구성 도식을 중심으로 제안합니다.\",\"directions\":[{\"id\":\"evidence\",\"title\":\"메모리 절감의 근거와 범위\",\"message\":\"동일 정확도에서 관찰된 메모리 감소는 이번 단일 실험 조건에 한정해 해석해야 합니다.\",\"focus\":\"실험 조건, 메모리와 정확도 비교, 일반화 한계를 3장으로 연결\",\"tradeoff\":\"라우팅 계산 과정의 상세 설명은 줄입니다.\",\"citations\":[{\"page\":3,\"quote\":\"The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs.\"},{\"page\":3,\"quote\":\"This single configuration does not prove general speed gains.\"}]},{\"id\":\"method\",\"title\":\"희소 라우팅의 작동 원리\",\"message\":\"토큰마다 두 전문가를 선택하고 균형 손실을 적용하는 과정이 방법 설명의 핵심입니다.\",\"focus\":\"선택 과정의 재구성 도식, 균형 손실의 역할, 관찰 결과를 3장으로 설명\",\"tradeoff\":\"재현 절차와 추가 실험 설계에 할애할 분량은 줄입니다.\",\"citations\":[{\"page\":2,\"quote\":\"The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs.\"},{\"page\":2,\"quote\":\"A balancing loss prevents one expert from receiving every token.\"}]},{\"id\":\"reproduction\",\"title\":\"재현 조건과 후속 실험 설계\",\"message\":\"효율성 주장을 확장하려면 재현 조건을 맞추고 메모리와 실행 시간을 구분해 측정해야 합니다.\",\"focus\":\"재현 조건, 측정 항목, 후속 검증 계획을 3장의 도식으로 구성\",\"tradeoff\":\"방법 자체와 기존 결과의 소개는 핵심만 남깁니다.\",\"citations\":[{\"page\":4,\"quote\":\"Reproduction requires the same tokenization, batch size, expert count and hardware.\"},{\"page\":4,\"quote\":\"Measure peak activation memory separately from stored parameters.\"},{\"page\":6,\"quote\":\"Discussion: test multiple seeds and longer sequences before generalizing.\"}]}]}"
+    },
+    {
+      "revision": 1,
+      "response": "{\"version\":1,\"action\":\"seminar_question\",\"message\":\"선택한 방향에 맞춰 실험 조건, 메모리와 정확도 비교, 일반화 한계를 정확히 3장으로 연결하겠습니다. 원문에는 그림이나 표가 없어 재구성 도식과 원문 수치를 정리한 표를 구분해 표시하고, 각 본문은 90자 이내로 구성하겠습니다.\",\"brief\":{\"purpose\":\"실험 조건과 관찰 결과를 바탕으로 메모리 절감 주장의 범위를 설명한다\",\"message\":\"동일 정확도에서 관찰된 메모리 감소는 이번 단일 실험 조건에 한정해 해석해야 한다\",\"discussionGoal\":\"실험 조건과 일반화 한계를 함께 토론한다\",\"assumptions\":[\"발표 시간은 우선 30분으로 가정하며 변경할 수 있다.\",\"청중은 같은 연구팀 동료로 가정하며 변경할 수 있다.\",\"목차와 발표 자료는 각각 정확히 3장으로 구성한다.\",\"각 장 본문은 90자 이내로 쓰고 원문 근거를 남긴다.\",\"원문 수치 정리표와 설명용 재구성 도식을 사용하고 원문 표로 오인하지 않도록 표시한다.\"]},\"question\":{\"id\":\"discussion_focus\",\"text\":\"마지막 장에서 어떤 논의에 가장 무게를 둘까요?\",\"options\":[{\"id\":\"a\",\"label\":\"현재 결과로 주장할 수 있는 범위\"},{\"id\":\"b\",\"label\":\"일반화를 위해 추가할 실험\"}],\"recommendedId\":\"a\",\"reason\":\"선택한 방향에 맞게 단일 조건의 메모리 결과와 속도·보편적 효율성 주장을 구분하는 데 집중할 수 있습니다.\"}}"
+    },
+    {
+      "revision": 2,
+      "response": "{\"version\":1,\"action\":\"seminar_question\",\"message\":\"재현을 맡을 팀원 대상의 15분 발표로 반영했습니다. 실험 조건, 메모리와 정확도 비교, 일반화 한계를 도식 중심의 정확히 3장으로 연결하고 각 본문은 90자 이내로 구성하겠습니다. 원문은 메모리 측정 항목을 분리하도록 요구하지만, 보고된 메모리 수치의 측정 범위는 명시하지 않아 재현 시 확인이 필요합니다.\",\"brief\":{\"purpose\":\"재현할 팀원에게 메모리 절감의 실험 근거와 구현 조건, 일반화 한계를 설명한다\",\"audience\":\"재현을 수행할 팀원\",\"message\":\"동일 정확도에서 관찰된 메모리 감소는 단일 실험 조건의 결과이며 측정 범위와 재현 조건을 확인해야 한다\",\"discussionGoal\":\"구현 조건과 한계를 검토하고 재현 실험의 우선순위를 정한다\",\"durationMinutes\":15,\"depth\":\"재현에 필요한 구현 조건과 측정 기준 중심\",\"assumptions\":[\"목차와 발표 자료는 각각 정확히 3장으로 구성한다.\",\"각 장 본문은 90자 이내로 작성하고 원문 근거를 남긴다.\",\"원문에 그림과 표가 없어 설명용 재구성 도식을 중심으로 구성하고 재구성임을 명시한다.\",\"실험 조건, 메모리와 정확도 비교, 일반화 한계 순서로 연결한다.\"]},\"question\":{\"id\":\"reproduction_priority\",\"text\":\"마지막 장에서 팀이 우선 결정할 재현 과제는 무엇으로 할까요?\",\"options\":[{\"id\":\"measurement\",\"label\":\"측정 기준과 구현 조건 확정\"},{\"id\":\"robustness\",\"label\":\"여러 시드와 긴 시퀀스 검증\"},{\"id\":\"latency\",\"label\":\"라우팅 불균형과 지연 측정\"}],\"recommendedId\":\"measurement\",\"reason\":\"원문은 활성화 메모리와 저장된 매개변수를 분리해 측정하도록 요구하므로, 보고된 메모리 결과를 재현하려면 측정 기준과 구현 조건부터 맞추는 것이 우선입니다.\"}}"
+    },
+    {
+      "revision": 3,
+      "response": "{\"version\":1,\"action\":\"seminar_outline\",\"message\":\"재현 팀원을 위한 15분 발표를 정확히 3장으로 구성했습니다. 실험 조건, 관찰 결과, 일반화 한계를 연결하고 구현 조건과 후속 실험을 토론하도록 설계했습니다. 원문에 그림과 표가 없어 시각자료는 재구성임을 명시하며, 발표 자료의 각 본문은 90자 이내로 작성합니다.\",\"brief\":{\"purpose\":\"재현할 팀원에게 메모리 절감의 실험 근거와 구현 조건, 일반화 한계를 설명한다\",\"audience\":\"재현을 수행할 팀원\",\"message\":\"동일 정확도에서 관찰된 메모리 감소는 단일 실험 조건의 결과이며 측정 범위와 재현 조건을 확인해야 한다\",\"discussionGoal\":\"구현 조건과 한계를 검토하고 재현 실험의 우선순위를 정한다\",\"durationMinutes\":15,\"depth\":\"재현에 필요한 구현 조건과 측정 기준 중심\",\"assumptions\":[\"목차와 발표 자료는 각각 정확히 3장으로 구성한다.\",\"각 장 본문은 90자 이내로 작성한다.\",\"자료는 출판 논문이 아닌 통제된 검증용 자료다.\",\"원문에 그림과 표가 없어 재구성 도식과 원문 수치를 정리한 표를 사용하고 출처와 재구성 여부를 명시한다.\",\"보고된 메모리 수치의 측정 범위는 원문에서 명확하지 않아 재현 시 확인한다.\"]},\"outline\":[{\"id\":\"s1\",\"title\":\"실험 조건과 재현 구현의 기준\",\"claim\":\"배치 크기 8과 시퀀스 길이 1024가 비교 조건이며, 재현에는 토큰화·전문가 수·하드웨어도 맞춰야 한다.\",\"visualPlan\":\"원문을 바탕으로 재구성한 도식으로 입력 토큰 → 라우팅 점수 → 상위 두 전문가 선택 → 가중 출력의 흐름을 표시한다. 균형 손실의 역할과 재현 조건을 함께 적는다. 근거: 2쪽의 처리 과정과 균형 손실, 3쪽의 비교 조건, 4쪽의 재현 요구사항. 5분 배정.\",\"sourcePages\":[2,3,4]},{\"id\":\"s2\",\"title\":\"동일 정확도에서 관찰된 메모리 감소\",\"claim\":\"이 단일 조건에서 밀집 기준 모델은 12 GB, 희소 라우팅은 8 GB였으며 정확도는 모두 82%였다.\",\"visualPlan\":\"원문 3쪽 수치를 정리한 재구성 표로 두 실행의 메모리와 정확도를 비교한다. 원문 표가 아님을 명시한다. 4쪽에 근거해 최대 활성화 메모리와 저장 파라미터를 분리 측정하는 도식을 덧붙이고, 보고 수치의 측정 범위는 확인 사항으로 표시한다. 5분 배정.\",\"sourcePages\":[3,4]},{\"id\":\"s3\",\"title\":\"일반화 한계와 재현 실험의 우선순위\",\"claim\":\"단일 합성 벤치마크와 단일 시드의 메모리 결과만으로 일반적인 속도나 추론 효율 향상을 주장할 수 없다.\",\"visualPlan\":\"원문을 바탕으로 재구성한 도식으로 현재 한계 → 추가 검증 → 주장 범위를 연결한다. 여러 시드·긴 시퀀스·파라미터 수를 맞춘 기준 모델·라우팅 활용률을 검증 항목으로 표시하고, 통신 측정 부재와 라우팅 불균형의 지연 가능성을 토론한다. 근거는 3·5·6쪽이며 팀의 검증 우선순위 결정에 5분을 배정한다.\",\"sourcePages\":[3,5,6]}]}"
+    },
+    {
+      "revision": 4,
+      "response": "{\"version\":1,\"action\":\"seminar_draft\",\"message\":\"합의한 목차에 따라 15분 발표 초안을 정확히 3장으로 구성했습니다. 각 본문은 90자 이내이며, 원문에 그림과 표가 없어 재구성 도식과 원문 수치 정리표를 사용했습니다. 측정된 결과와 재현 시 확인할 사항을 구분했습니다.\",\"draft\":{\"title\":\"희소 라우팅의 메모리 절감 근거와 재현 범위\",\"durationMinutes\":15,\"summary\":\"재현 팀원을 대상으로 구현 조건, 동일 정확도에서 관찰된 메모리 감소, 일반화 한계와 후속 검증을 설명한다.\",\"keypoints\":[\"동일한 비교 조건과 라우팅 구현 조건을 확인한다.\",\"보고된 메모리는 12 GB와 8 GB이며 정확도는 모두 82%다.\",\"단일 조건의 메모리 결과만으로 일반적인 속도나 추론 효율을 주장할 수 없다.\"],\"slides\":[{\"title\":\"실험 조건과 재현 구현의 기준\",\"body\":\"배치 8·길이 1024에서 비교했다. 토큰화·전문가 수·하드웨어도 맞춰 재현한다. (p.2–4)\",\"speakerNotes\":\"5분 배정. 이 자료는 출판 논문이 아닌 통제된 검증용 자료임을 먼저 밝힌다(p.1). 도식은 원문 p.2의 처리 과정을 재구성한 설명이다. 입력 토큰의 라우팅 점수를 계산하고 상위 두 전문가를 선택한 뒤 가중 출력을 만든다. 균형 손실은 한 전문가에 모든 토큰이 몰리는 것을 방지한다. 비교 실행은 모두 배치 크기 8, 시퀀스 길이 1024를 사용했다(p.3). 재현에는 토큰화, 배치 크기, 전문가 수, 하드웨어를 맞춰야 한다(p.4). 제공된 원문에는 구체적인 전문가 수나 하드웨어 사양이 없으므로 재현 전에 확인해야 한다.\",\"citations\":[{\"page\":1,\"quote\":\"Controlled research fixture, not a published paper.\"},{\"page\":2,\"quote\":\"The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs.\"},{\"page\":2,\"quote\":\"A balancing loss prevents one expert from receiving every token.\"},{\"page\":3,\"quote\":\"In this controlled comparison, both runs use batch size 8 and sequence length 1024.\"},{\"page\":4,\"quote\":\"Reproduction requires the same tokenization, batch size, expert count and hardware.\"}],\"visual\":{\"kind\":\"diagram\",\"caption\":\"원문을 바탕으로 재구성한 설명 도식\",\"nodes\":[{\"id\":\"input\",\"label\":\"입력 토큰\"},{\"id\":\"scores\",\"label\":\"라우팅 점수\"},{\"id\":\"experts\",\"label\":\"상위 두 전문가 선택\"},{\"id\":\"output\",\"label\":\"가중 출력\"},{\"id\":\"balance\",\"label\":\"균형 손실\"}],\"edges\":[{\"from\":\"input\",\"to\":\"scores\"},{\"from\":\"scores\",\"to\":\"experts\"},{\"from\":\"experts\",\"to\":\"output\"},{\"from\":\"balance\",\"to\":\"experts\",\"label\":\"쏠림 방지\"}]}},{\"title\":\"동일 정확도에서 관찰된 메모리 감소\",\"body\":\"메모리는 12 GB에서 8 GB로 감소했고 정확도는 모두 82%였다. 측정 범위는 확인이 필요하다. (p.3–4)\",\"speakerNotes\":\"5분 배정. 표는 원문 표가 아니라 p.3의 문장에 제시된 수치를 정리한 재구성 표다. 밀집 기준 모델과 희소 라우팅의 보고 메모리는 각각 12 GB와 8 GB이며 정확도는 모두 82%다. 이 결과는 앞 장의 단일 비교 조건에 한정된다. p.4는 최대 활성화 메모리와 저장 파라미터를 분리 측정하라고 요구하지만, p.3의 수치가 어느 측정 범위를 뜻하는지는 명확하지 않다. 재현에서는 두 항목을 분리하고 데이터 로딩 시간과 모델 계산 시간도 별도로 보고한다. 표의 메모리 수치를 활성화 메모리라고 단정하지 않는다.\",\"citations\":[{\"page\":3,\"quote\":\"The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs.\"},{\"page\":4,\"quote\":\"Measure peak activation memory separately from stored parameters.\"},{\"page\":4,\"quote\":\"Data loading time must be reported separately from model compute time.\"}],\"visual\":{\"kind\":\"table\",\"caption\":\"원문 3쪽 수치를 정리한 재구성 표\",\"columns\":[\"실행\",\"보고 메모리\",\"정확도\"],\"rows\":[[\"밀집 기준 모델\",\"12 GB\",\"82%\"],[\"희소 라우팅\",\"8 GB\",\"82%\"]]}},{\"title\":\"일반화 한계와 재현 실험의 우선순위\",\"body\":\"단일 합성 벤치마크·단일 시드의 결과다. 속도·추론 효율 일반화에 앞서 추가 검증이 필요하다. (p.3,5–6)\",\"speakerNotes\":\"5분 배정. 현재 근거는 단일 합성 벤치마크와 단일 시드에 한정되며 분산 통신 측정이 없다(p.5). 라우팅 불균형은 지연을 늘릴 수 있으므로 메모리 감소를 속도 향상과 동일하게 해석하지 않는다. 도식의 검증 항목은 p.6의 제안이며 검증 결과가 아니다. 여러 시드와 더 긴 시퀀스를 시험하고, 파라미터 수를 맞춘 기준 모델과 비교하며 라우팅 활용률을 보고한다. 팀 토론에서는 이 항목들의 실행 순서와 통신·지연 측정 범위를 정한다. 측정된 사실과 설명을 위한 재구성의 구분을 유지한다.\",\"citations\":[{\"page\":3,\"quote\":\"This single configuration does not prove general speed gains.\"},{\"page\":5,\"quote\":\"Limitations: one synthetic benchmark, one random seed and no distributed communication measurements.\"},{\"page\":5,\"quote\":\"Routing imbalance can increase latency. The memory result cannot establish universal inference efficiency.\"},{\"page\":6,\"quote\":\"Discussion: test multiple seeds and longer sequences before generalizing.\"},{\"page\":6,\"quote\":\"Compare a matched parameter baseline and report routing utilization.\"}],\"visual\":{\"kind\":\"diagram\",\"caption\":\"원문을 바탕으로 재구성한 설명 도식\",\"nodes\":[{\"id\":\"limits\",\"label\":\"단일 조건·통신 미측정\"},{\"id\":\"seeds\",\"label\":\"여러 시드·긴 시퀀스\"},{\"id\":\"baseline\",\"label\":\"파라미터 수 맞춘 비교\"},{\"id\":\"routing\",\"label\":\"라우팅 활용률 보고\"},{\"id\":\"scope\",\"label\":\"일반화 가능 범위 검토\"}],\"edges\":[{\"from\":\"limits\",\"to\":\"seeds\",\"label\":\"추가 검증\"},{\"from\":\"limits\",\"to\":\"baseline\",\"label\":\"추가 검증\"},{\"from\":\"limits\",\"to\":\"routing\",\"label\":\"추가 검증\"},{\"from\":\"seeds\",\"to\":\"scope\"},{\"from\":\"baseline\",\"to\":\"scope\"},{\"from\":\"routing\",\"to\":\"scope\"}]}}],\"citations\":[{\"page\":1,\"quote\":\"Controlled research fixture, not a published paper.\"},{\"page\":2,\"quote\":\"The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs.\"},{\"page\":3,\"quote\":\"The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs.\"},{\"page\":4,\"quote\":\"Reproduction requires the same tokenization, batch size, expert count and hardware.\"},{\"page\":4,\"quote\":\"Measure peak activation memory separately from stored parameters.\"},{\"page\":5,\"quote\":\"Limitations: one synthetic benchmark, one random seed and no distributed communication measurements.\"},{\"page\":6,\"quote\":\"The distinction between measured facts and an explanatory reconstruction must remain visible.\"}]}}"
+    },
+    {
+      "revision": 5,
+      "response": "{\"version\":1,\"action\":\"seminar_draft\",\"message\":\"마지막 장을 실험 조건과 연구 한계 중심으로 수정했습니다. 후속 실험 목록 대신 단일 비교 조건, 통신 측정 부재, 속도·추론 효율 주장의 한계를 연결했습니다. 전체 3장과 도식 중심 구성, 본문 90자 이내를 유지했으며 모든 시각자료에 재구성 여부와 원문 근거를 표시했습니다.\",\"draft\":{\"title\":\"희소 라우팅의 메모리 절감 근거와 재현 범위\",\"durationMinutes\":15,\"summary\":\"재현 팀원을 위한 15분 발표로 구현 조건, 메모리와 정확도 비교, 실험 조건과 연구 한계를 설명한다.\",\"keypoints\":[\"비교 조건은 배치 크기 8과 시퀀스 길이 1024이며 재현에는 추가 구현 조건 확인이 필요하다.\",\"보고 메모리는 12 GB와 8 GB이고 정확도는 모두 82%다.\",\"단일 합성 벤치마크와 단일 시드의 결과이며 일반적인 속도와 추론 효율을 입증하지 않는다.\"],\"slides\":[{\"title\":\"실험 조건과 재현 구현의 기준\",\"body\":\"배치 8·길이 1024에서 비교했다. 토큰화·전문가 수·하드웨어도 맞춰 재현한다. (p.2–4)\",\"speakerNotes\":\"5분 배정. 원문은 출판 논문이 아닌 통제된 검증용 자료다(p.1). 도식은 p.2의 설명을 재구성했다. 입력 토큰에서 라우팅 점수를 계산하고 상위 두 전문가를 선택한 뒤 가중 출력을 만든다. 균형 손실은 한 전문가에 모든 토큰이 몰리는 것을 방지한다. 두 비교 실행의 배치 크기는 8, 시퀀스 길이는 1024다(p.3). 재현에는 같은 토큰화, 배치 크기, 전문가 수, 하드웨어가 요구된다(p.4). 제공된 원문에는 구체적인 전문가 수와 하드웨어 사양이 없어 팀에서 확인해야 한다.\",\"citations\":[{\"page\":1,\"quote\":\"Controlled research fixture, not a published paper.\"},{\"page\":2,\"quote\":\"The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs.\"},{\"page\":2,\"quote\":\"A balancing loss prevents one expert from receiving every token.\"},{\"page\":3,\"quote\":\"In this controlled comparison, both runs use batch size 8 and sequence length 1024.\"},{\"page\":4,\"quote\":\"Reproduction requires the same tokenization, batch size, expert count and hardware.\"}],\"visual\":{\"kind\":\"diagram\",\"caption\":\"원문을 바탕으로 재구성한 설명 도식\",\"nodes\":[{\"id\":\"input\",\"label\":\"입력 토큰\"},{\"id\":\"scores\",\"label\":\"라우팅 점수\"},{\"id\":\"experts\",\"label\":\"상위 두 전문가 선택\"},{\"id\":\"output\",\"label\":\"가중 출력\"},{\"id\":\"balance\",\"label\":\"균형 손실\"}],\"edges\":[{\"from\":\"input\",\"to\":\"scores\"},{\"from\":\"scores\",\"to\":\"experts\"},{\"from\":\"experts\",\"to\":\"output\"},{\"from\":\"balance\",\"to\":\"experts\",\"label\":\"쏠림 방지\"}]}},{\"title\":\"동일 정확도에서 관찰된 메모리 감소\",\"body\":\"메모리는 12 GB에서 8 GB로 감소했고 정확도는 모두 82%였다. 측정 범위는 확인이 필요하다. (p.3–4)\",\"speakerNotes\":\"5분 배정. 표는 원문 표가 아니라 p.3의 문장에 나온 수치를 정리한 재구성 표다. 밀집 기준 모델은 12 GB, 희소 라우팅은 8 GB이며 정확도는 모두 82%다. p.4는 최대 활성화 메모리와 저장 파라미터를 분리 측정하도록 요구하지만, 보고된 수치의 측정 범위는 명시하지 않는다. 재현 시 이 범위를 확인하고 두 항목을 분리 측정한다. 데이터 로딩 시간과 모델 계산 시간도 별도로 보고한다. 메모리 감소를 실행 시간 감소로 해석하지 않는다.\",\"citations\":[{\"page\":3,\"quote\":\"The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs.\"},{\"page\":4,\"quote\":\"Measure peak activation memory separately from stored parameters.\"},{\"page\":4,\"quote\":\"Data loading time must be reported separately from model compute time.\"}],\"visual\":{\"kind\":\"table\",\"caption\":\"원문 3쪽 수치를 정리한 재구성 표\",\"columns\":[\"실행\",\"보고 메모리\",\"정확도\"],\"rows\":[[\"밀집 기준 모델\",\"12 GB\",\"82%\"],[\"희소 라우팅\",\"8 GB\",\"82%\"]]}},{\"title\":\"실험 조건과 연구 한계\",\"body\":\"배치 8·길이 1024의 단일 합성 벤치마크·단일 시드 결과다. 통신은 미측정이며 속도 일반화는 어렵다. (p.3,5)\",\"speakerNotes\":\"5분 배정. 마지막 장은 후속 실험 목록보다 현재 증거가 성립하는 조건과 연구 한계에 집중한다. 비교 조건은 배치 크기 8과 시퀀스 길이 1024다(p.3). 연구는 합성 벤치마크 하나와 무작위 시드 하나에 한정되며 분산 통신 측정이 없다(p.5). 라우팅 불균형은 지연을 늘릴 수 있다는 가능성이 제시되어 있으나 실제 지연 증가가 측정됐다고 해석해서는 안 된다. 따라서 이 메모리 결과만으로 일반적인 속도 향상이나 보편적인 추론 효율을 주장할 수 없다. 팀 토론에서는 우리 재현 환경이 이 조건과 어떻게 다른지, 통신 미측정과 메모리 측정 범위의 불명확성이 해석을 어떻게 제한하는지 검토한다. 도식의 연결은 원문 설명을 정리한 것이며 측정된 인과관계가 아니다.\",\"citations\":[{\"page\":3,\"quote\":\"In this controlled comparison, both runs use batch size 8 and sequence length 1024.\"},{\"page\":3,\"quote\":\"This single configuration does not prove general speed gains.\"},{\"page\":5,\"quote\":\"Limitations: one synthetic benchmark, one random seed and no distributed communication measurements.\"},{\"page\":5,\"quote\":\"Routing imbalance can increase latency.\"},{\"page\":5,\"quote\":\"The memory result cannot establish universal inference efficiency.\"}],\"visual\":{\"kind\":\"diagram\",\"caption\":\"원문을 바탕으로 재구성한 설명 도식\",\"nodes\":[{\"id\":\"conditions\",\"label\":\"배치 8·길이 1024\"},{\"id\":\"sample\",\"label\":\"합성 벤치마크·시드 각 1\"},{\"id\":\"communication\",\"label\":\"분산 통신 미측정\"},{\"id\":\"routing\",\"label\":\"불균형 시 지연 가능\"},{\"id\":\"scope\",\"label\":\"속도·추론 효율 일반화 제한\"}],\"edges\":[{\"from\":\"conditions\",\"to\":\"scope\",\"label\":\"단일 조건\"},{\"from\":\"sample\",\"to\":\"scope\",\"label\":\"검증 범위\"},{\"from\":\"communication\",\"to\":\"scope\",\"label\":\"측정 공백\"},{\"from\":\"routing\",\"to\":\"scope\",\"label\":\"지연 가능성\"}]}}],\"citations\":[{\"page\":1,\"quote\":\"Controlled research fixture, not a published paper.\"},{\"page\":2,\"quote\":\"The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs.\"},{\"page\":3,\"quote\":\"In this controlled comparison, both runs use batch size 8 and sequence length 1024.\"},{\"page\":3,\"quote\":\"The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs.\"},{\"page\":4,\"quote\":\"Reproduction requires the same tokenization, batch size, expert count and hardware.\"},{\"page\":4,\"quote\":\"Measure peak activation memory separately from stored parameters.\"},{\"page\":5,\"quote\":\"Limitations: one synthetic benchmark, one random seed and no distributed communication measurements.\"},{\"page\":5,\"quote\":\"Routing imbalance can increase latency. The memory result cannot establish universal inference efficiency.\"},{\"page\":6,\"quote\":\"The distinction between measured facts and an explanatory reconstruction must remain visible.\"}]}}"
+    }
+  ],
+  "workspace": {
+    "version": 1,
+    "type": "paper_pt",
+    "stage": "deck",
+    "pending": null,
+    "directions": [
+      {
+        "id": "evidence",
+        "title": "메모리 절감의 근거와 범위",
+        "message": "동일 정확도에서 관찰된 메모리 감소는 이번 단일 실험 조건에 한정해 해석해야 합니다.",
+        "focus": "실험 조건, 메모리와 정확도 비교, 일반화 한계를 3장으로 연결",
+        "tradeoff": "라우팅 계산 과정의 상세 설명은 줄입니다.",
+        "citations": [
+          {
+            "page": 3,
+            "quote": "The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs."
+          },
+          {
+            "page": 3,
+            "quote": "This single configuration does not prove general speed gains."
+          }
+        ]
+      },
+      {
+        "id": "method",
+        "title": "희소 라우팅의 작동 원리",
+        "message": "토큰마다 두 전문가를 선택하고 균형 손실을 적용하는 과정이 방법 설명의 핵심입니다.",
+        "focus": "선택 과정의 재구성 도식, 균형 손실의 역할, 관찰 결과를 3장으로 설명",
+        "tradeoff": "재현 절차와 추가 실험 설계에 할애할 분량은 줄입니다.",
+        "citations": [
+          {
+            "page": 2,
+            "quote": "The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs."
+          },
+          {
+            "page": 2,
+            "quote": "A balancing loss prevents one expert from receiving every token."
+          }
+        ]
+      },
+      {
+        "id": "reproduction",
+        "title": "재현 조건과 후속 실험 설계",
+        "message": "효율성 주장을 확장하려면 재현 조건을 맞추고 메모리와 실행 시간을 구분해 측정해야 합니다.",
+        "focus": "재현 조건, 측정 항목, 후속 검증 계획을 3장의 도식으로 구성",
+        "tradeoff": "방법 자체와 기존 결과의 소개는 핵심만 남깁니다.",
+        "citations": [
+          {
+            "page": 4,
+            "quote": "Reproduction requires the same tokenization, batch size, expert count and hardware."
+          },
+          {
+            "page": 4,
+            "quote": "Measure peak activation memory separately from stored parameters."
+          },
+          {
+            "page": 6,
+            "quote": "Discussion: test multiple seeds and longer sequences before generalizing."
+          }
+        ]
+      }
+    ],
+    "selectedDirectionId": "evidence",
+    "brief": {
+      "purpose": "재현할 팀원에게 메모리 절감의 실험 근거와 구현 조건, 일반화 한계를 설명한다",
+      "audience": "재현을 수행할 팀원",
+      "message": "동일 정확도에서 관찰된 메모리 감소는 단일 실험 조건의 결과이며 측정 범위와 재현 조건을 확인해야 한다",
+      "discussionGoal": "구현 조건과 한계를 검토하고 재현 실험의 우선순위를 정한다",
+      "durationMinutes": 15,
+      "depth": "재현에 필요한 구현 조건과 측정 기준 중심",
+      "style": "figures",
+      "assumptions": [
+        "목차와 발표 자료는 각각 정확히 3장으로 구성한다.",
+        "각 장 본문은 90자 이내로 작성한다.",
+        "자료는 출판 논문이 아닌 통제된 검증용 자료다.",
+        "원문에 그림과 표가 없어 재구성 도식과 원문 수치를 정리한 표를 사용하고 출처와 재구성 여부를 명시한다.",
+        "보고된 메모리 수치의 측정 범위는 원문에서 명확하지 않아 재현 시 확인한다."
+      ]
+    },
+    "question": null,
+    "outline": [
+      {
+        "id": "s1",
+        "title": "실험 조건과 재현 구현의 기준",
+        "claim": "배치 크기 8과 시퀀스 길이 1024가 비교 조건이며, 재현에는 토큰화·전문가 수·하드웨어도 맞춰야 한다.",
+        "visualPlan": "원문을 바탕으로 재구성한 도식으로 입력 토큰 → 라우팅 점수 → 상위 두 전문가 선택 → 가중 출력의 흐름을 표시한다. 균형 손실의 역할과 재현 조건을 함께 적는다. 근거: 2쪽의 처리 과정과 균형 손실, 3쪽의 비교 조건, 4쪽의 재현 요구사항. 5분 배정.",
+        "sourcePages": [
+          2,
+          3,
+          4
+        ]
+      },
+      {
+        "id": "s2",
+        "title": "동일 정확도에서 관찰된 메모리 감소",
+        "claim": "이 단일 조건에서 밀집 기준 모델은 12 GB, 희소 라우팅은 8 GB였으며 정확도는 모두 82%였다.",
+        "visualPlan": "원문 3쪽 수치를 정리한 재구성 표로 두 실행의 메모리와 정확도를 비교한다. 원문 표가 아님을 명시한다. 4쪽에 근거해 최대 활성화 메모리와 저장 파라미터를 분리 측정하는 도식을 덧붙이고, 보고 수치의 측정 범위는 확인 사항으로 표시한다. 5분 배정.",
+        "sourcePages": [
+          3,
+          4
+        ]
+      },
+      {
+        "id": "s3",
+        "title": "일반화 한계와 재현 실험의 우선순위",
+        "claim": "단일 합성 벤치마크와 단일 시드의 메모리 결과만으로 일반적인 속도나 추론 효율 향상을 주장할 수 없다.",
+        "visualPlan": "원문을 바탕으로 재구성한 도식으로 현재 한계 → 추가 검증 → 주장 범위를 연결한다. 여러 시드·긴 시퀀스·파라미터 수를 맞춘 기준 모델·라우팅 활용률을 검증 항목으로 표시하고, 통신 측정 부재와 라우팅 불균형의 지연 가능성을 토론한다. 근거는 3·5·6쪽이며 팀의 검증 우선순위 결정에 5분을 배정한다.",
+        "sourcePages": [
+          3,
+          5,
+          6
+        ]
+      }
+    ],
+    "deck": {
+      "title": "희소 라우팅의 메모리 절감 근거와 재현 범위",
+      "durationMinutes": 15,
+      "summary": "재현 팀원을 위한 15분 발표로 구현 조건, 메모리와 정확도 비교, 실험 조건과 연구 한계를 설명한다.",
+      "keypoints": [
+        "비교 조건은 배치 크기 8과 시퀀스 길이 1024이며 재현에는 추가 구현 조건 확인이 필요하다.",
+        "보고 메모리는 12 GB와 8 GB이고 정확도는 모두 82%다.",
+        "단일 합성 벤치마크와 단일 시드의 결과이며 일반적인 속도와 추론 효율을 입증하지 않는다."
+      ],
+      "slides": [
+        {
+          "title": "실험 조건과 재현 구현의 기준",
+          "body": "배치 8·길이 1024에서 비교했다. 토큰화·전문가 수·하드웨어도 맞춰 재현한다. (p.2–4)",
+          "speakerNotes": "5분 배정. 원문은 출판 논문이 아닌 통제된 검증용 자료다(p.1). 도식은 p.2의 설명을 재구성했다. 입력 토큰에서 라우팅 점수를 계산하고 상위 두 전문가를 선택한 뒤 가중 출력을 만든다. 균형 손실은 한 전문가에 모든 토큰이 몰리는 것을 방지한다. 두 비교 실행의 배치 크기는 8, 시퀀스 길이는 1024다(p.3). 재현에는 같은 토큰화, 배치 크기, 전문가 수, 하드웨어가 요구된다(p.4). 제공된 원문에는 구체적인 전문가 수와 하드웨어 사양이 없어 팀에서 확인해야 한다.",
+          "visual": {
+            "kind": "diagram",
+            "caption": "원문을 바탕으로 재구성한 설명 도식",
+            "nodes": [
+              {
+                "id": "input",
+                "label": "입력 토큰"
+              },
+              {
+                "id": "scores",
+                "label": "라우팅 점수"
+              },
+              {
+                "id": "experts",
+                "label": "상위 두 전문가 선택"
+              },
+              {
+                "id": "output",
+                "label": "가중 출력"
+              },
+              {
+                "id": "balance",
+                "label": "균형 손실"
+              }
+            ],
+            "edges": [
+              {
+                "from": "input",
+                "to": "scores"
+              },
+              {
+                "from": "scores",
+                "to": "experts"
+              },
+              {
+                "from": "experts",
+                "to": "output"
+              },
+              {
+                "from": "balance",
+                "to": "experts",
+                "label": "쏠림 방지"
+              }
+            ]
+          },
+          "citations": [
+            {
+              "page": 1,
+              "quote": "Controlled research fixture, not a published paper."
+            },
+            {
+              "page": 2,
+              "quote": "The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs."
+            },
+            {
+              "page": 2,
+              "quote": "A balancing loss prevents one expert from receiving every token."
+            },
+            {
+              "page": 3,
+              "quote": "In this controlled comparison, both runs use batch size 8 and sequence length 1024."
+            },
+            {
+              "page": 4,
+              "quote": "Reproduction requires the same tokenization, batch size, expert count and hardware."
+            }
+          ]
+        },
+        {
+          "title": "동일 정확도에서 관찰된 메모리 감소",
+          "body": "메모리는 12 GB에서 8 GB로 감소했고 정확도는 모두 82%였다. 측정 범위는 확인이 필요하다. (p.3–4)",
+          "speakerNotes": "5분 배정. 표는 원문 표가 아니라 p.3의 문장에 나온 수치를 정리한 재구성 표다. 밀집 기준 모델은 12 GB, 희소 라우팅은 8 GB이며 정확도는 모두 82%다. p.4는 최대 활성화 메모리와 저장 파라미터를 분리 측정하도록 요구하지만, 보고된 수치의 측정 범위는 명시하지 않는다. 재현 시 이 범위를 확인하고 두 항목을 분리 측정한다. 데이터 로딩 시간과 모델 계산 시간도 별도로 보고한다. 메모리 감소를 실행 시간 감소로 해석하지 않는다.",
+          "visual": {
+            "kind": "table",
+            "caption": "원문 3쪽 수치를 정리한 재구성 표",
+            "columns": [
+              "실행",
+              "보고 메모리",
+              "정확도"
+            ],
+            "rows": [
+              [
+                "밀집 기준 모델",
+                "12 GB",
+                "82%"
+              ],
+              [
+                "희소 라우팅",
+                "8 GB",
+                "82%"
+              ]
+            ]
+          },
+          "citations": [
+            {
+              "page": 3,
+              "quote": "The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs."
+            },
+            {
+              "page": 4,
+              "quote": "Measure peak activation memory separately from stored parameters."
+            },
+            {
+              "page": 4,
+              "quote": "Data loading time must be reported separately from model compute time."
+            }
+          ]
+        },
+        {
+          "title": "실험 조건과 연구 한계",
+          "body": "배치 8·길이 1024의 단일 합성 벤치마크·단일 시드 결과다. 통신은 미측정이며 속도 일반화는 어렵다. (p.3,5)",
+          "speakerNotes": "5분 배정. 마지막 장은 후속 실험 목록보다 현재 증거가 성립하는 조건과 연구 한계에 집중한다. 비교 조건은 배치 크기 8과 시퀀스 길이 1024다(p.3). 연구는 합성 벤치마크 하나와 무작위 시드 하나에 한정되며 분산 통신 측정이 없다(p.5). 라우팅 불균형은 지연을 늘릴 수 있다는 가능성이 제시되어 있으나 실제 지연 증가가 측정됐다고 해석해서는 안 된다. 따라서 이 메모리 결과만으로 일반적인 속도 향상이나 보편적인 추론 효율을 주장할 수 없다. 팀 토론에서는 우리 재현 환경이 이 조건과 어떻게 다른지, 통신 미측정과 메모리 측정 범위의 불명확성이 해석을 어떻게 제한하는지 검토한다. 도식의 연결은 원문 설명을 정리한 것이며 측정된 인과관계가 아니다.",
+          "visual": {
+            "kind": "diagram",
+            "caption": "원문을 바탕으로 재구성한 설명 도식",
+            "nodes": [
+              {
+                "id": "conditions",
+                "label": "배치 8·길이 1024"
+              },
+              {
+                "id": "sample",
+                "label": "합성 벤치마크·시드 각 1"
+              },
+              {
+                "id": "communication",
+                "label": "분산 통신 미측정"
+              },
+              {
+                "id": "routing",
+                "label": "불균형 시 지연 가능"
+              },
+              {
+                "id": "scope",
+                "label": "속도·추론 효율 일반화 제한"
+              }
+            ],
+            "edges": [
+              {
+                "from": "conditions",
+                "to": "scope",
+                "label": "단일 조건"
+              },
+              {
+                "from": "sample",
+                "to": "scope",
+                "label": "검증 범위"
+              },
+              {
+                "from": "communication",
+                "to": "scope",
+                "label": "측정 공백"
+              },
+              {
+                "from": "routing",
+                "to": "scope",
+                "label": "지연 가능성"
+              }
+            ]
+          },
+          "citations": [
+            {
+              "page": 3,
+              "quote": "In this controlled comparison, both runs use batch size 8 and sequence length 1024."
+            },
+            {
+              "page": 3,
+              "quote": "This single configuration does not prove general speed gains."
+            },
+            {
+              "page": 5,
+              "quote": "Limitations: one synthetic benchmark, one random seed and no distributed communication measurements."
+            },
+            {
+              "page": 5,
+              "quote": "Routing imbalance can increase latency."
+            },
+            {
+              "page": 5,
+              "quote": "The memory result cannot establish universal inference efficiency."
+            }
+          ]
+        }
+      ],
+      "citations": [
+        {
+          "page": 1,
+          "quote": "Controlled research fixture, not a published paper."
+        },
+        {
+          "page": 2,
+          "quote": "The pipeline is input tokens, routing scores, top-two expert selection, weighted outputs."
+        },
+        {
+          "page": 3,
+          "quote": "In this controlled comparison, both runs use batch size 8 and sequence length 1024."
+        },
+        {
+          "page": 3,
+          "quote": "The dense baseline uses 12 GB; sparse routing uses 8 GB. Accuracy is 82 percent for both runs."
+        },
+        {
+          "page": 4,
+          "quote": "Reproduction requires the same tokenization, batch size, expert count and hardware."
+        },
+        {
+          "page": 4,
+          "quote": "Measure peak activation memory separately from stored parameters."
+        },
+        {
+          "page": 5,
+          "quote": "Limitations: one synthetic benchmark, one random seed and no distributed communication measurements."
+        },
+        {
+          "page": 5,
+          "quote": "Routing imbalance can increase latency. The memory result cannot establish universal inference efficiency."
+        },
+        {
+          "page": 6,
+          "quote": "The distinction between measured facts and an explanatory reconstruction must remain visible."
+        }
+      ]
+    },
+    "messages": [
+      {
+        "id": "d18246d7-a6b6-426f-a6f5-6c3887d59a0c",
+        "role": "user",
+        "text": "논문을 먼저 읽고 발표 방향 2~3개를 제안하자. 한 번에 질문 하나씩 대화하자. 검증용이므로 목차와 PT는 정확히 3장, 각 장의 본문은 90자 이내, 도식이나 실제 원문 표 중심으로 만들자. 원문 근거를 남기고 수치를 만들지 말자.",
+        "at": "2026-10-18T15:20:09.188Z"
+      },
+      {
+        "id": "65c1fa6c-6f0a-4f36-9497-7ea921117a53",
+        "role": "assistant",
+        "text": "원문은 출판 논문이 아닌 통제된 검증용 자료입니다. 단일 조건의 결과와 일반화 한계를 함께 설명하는 ‘메모리 절감의 근거와 범위’를 추천합니다. 이후 목차와 발표 자료는 정확히 3장, 각 본문은 90자 이내로 구성하겠습니다. 제공된 그림과 원문 표가 없어 출처를 명시한 재구성 도식을 중심으로 제안합니다.",
+        "at": "2026-10-18T15:20:24.889Z"
+      },
+      {
+        "id": "01664b4d-2666-48cb-9447-132ce23f2084",
+        "role": "user",
+        "text": "메모리 절감의 근거와 범위 방향으로 준비할게. 실험 조건, 메모리와 정확도 비교, 일반화 한계를 3장으로 연결",
+        "at": "2026-10-18T15:20:24.921Z"
+      },
+      {
+        "id": "32602371-289d-41c5-a03a-14ed8a98dbcb",
+        "role": "assistant",
+        "text": "선택한 방향에 맞춰 실험 조건, 메모리와 정확도 비교, 일반화 한계를 정확히 3장으로 연결하겠습니다. 원문에는 그림이나 표가 없어 재구성 도식과 원문 수치를 정리한 표를 구분해 표시하고, 각 본문은 90자 이내로 구성하겠습니다.",
+        "at": "2026-10-18T15:20:37.245Z"
+      },
+      {
+        "id": "f5f89334-f1cf-4849-8cd5-c095c5529c9b",
+        "role": "user",
+        "text": "재현을 할 팀원 대상이고 15분, 도식 중심으로 3장만 만들자. 구현 조건과 한계를 토론하고 싶어.",
+        "at": "2026-10-18T15:20:37.274Z"
+      },
+      {
+        "id": "8b9405f3-92de-4250-87cc-f122cf6eb7dc",
+        "role": "assistant",
+        "text": "재현을 맡을 팀원 대상의 15분 발표로 반영했습니다. 실험 조건, 메모리와 정확도 비교, 일반화 한계를 도식 중심의 정확히 3장으로 연결하고 각 본문은 90자 이내로 구성하겠습니다. 원문은 메모리 측정 항목을 분리하도록 요구하지만, 보고된 메모리 수치의 측정 범위는 명시하지 않아 재현 시 확인이 필요합니다.",
+        "at": "2026-10-18T15:20:51.407Z"
+      },
+      {
+        "id": "fff5c855-72c3-4e79-84b3-3a4cca786e93",
+        "role": "user",
+        "text": "지금까지의 대화와 브리프를 바탕으로 장별 주장·근거·시각자료 계획이 있는 목차를 만들어줘.",
+        "at": "2026-10-18T15:20:51.441Z"
+      },
+      {
+        "id": "68577048-2775-4cbd-9127-54c3868efecb",
+        "role": "assistant",
+        "text": "재현 팀원을 위한 15분 발표를 정확히 3장으로 구성했습니다. 실험 조건, 관찰 결과, 일반화 한계를 연결하고 구현 조건과 후속 실험을 토론하도록 설계했습니다. 원문에 그림과 표가 없어 시각자료는 재구성임을 명시하며, 발표 자료의 각 본문은 90자 이내로 작성합니다.",
+        "at": "2026-10-18T15:21:11.015Z"
+      },
+      {
+        "id": "d0457567-81a5-418a-86cf-7330bf513f2e",
+        "role": "user",
+        "text": "이 목차로 논문 Figure·표·설명 도식 중심의 발표 슬라이드를 만들어줘.",
+        "at": "2026-10-18T15:21:11.050Z"
+      },
+      {
+        "id": "c4c845b3-9285-4d62-9246-d8f9cfc310dd",
+        "role": "assistant",
+        "text": "합의한 목차에 따라 15분 발표 초안을 정확히 3장으로 구성했습니다. 각 본문은 90자 이내이며, 원문에 그림과 표가 없어 재구성 도식과 원문 수치 정리표를 사용했습니다. 측정된 결과와 재현 시 확인할 사항을 구분했습니다.",
+        "at": "2026-10-18T15:21:45.391Z"
+      },
+      {
+        "id": "1396a656-0b1d-4458-85d0-db8c867f857b",
+        "role": "user",
+        "text": "마지막 장은 실험 조건과 연구 한계에 집중해줘. 전체 3장과 도식 중심 구성은 유지하자.",
+        "at": "2026-10-18T15:21:45.433Z"
+      },
+      {
+        "id": "655c9417-0ecf-48ff-b92b-417e76638b2f",
+        "role": "assistant",
+        "text": "마지막 장을 실험 조건과 연구 한계 중심으로 수정했습니다. 후속 실험 목록 대신 단일 비교 조건, 통신 측정 부재, 속도·추론 효율 주장의 한계를 연결했습니다. 전체 3장과 도식 중심 구성, 본문 90자 이내를 유지했으며 모든 시각자료에 재구성 여부와 원문 근거를 표시했습니다.",
+        "at": "2026-10-18T15:22:20.636Z"
+      }
+    ],
+    "turnCount": 5
+  },
+  "export": {
+    "id": "0c170410-c3f4-4fec-a9b8-69c36faaed23",
+    "status": "done",
+    "current": true,
+    "error": null,
+    "files": [
+      {
+        "format": "html",
+        "href": "/api/agent/tasks/cmvdz250m0007ud6gu9idrz9y/exports/0c170410-c3f4-4fec-a9b8-69c36faaed23/file?format=html"
+      },
+      {
+        "format": "pdf",
+        "href": "/api/agent/tasks/cmvdz250m0007ud6gu9idrz9y/exports/0c170410-c3f4-4fec-a9b8-69c36faaed23/file?format=pdf"
+      }
+    ],
+    "qa": {
+      "slideCount": 3,
+      "aspectRatio": "16:9",
+      "embeddedFonts": [
+        "Pretendard-Regular",
+        "Pretendard-SemiBold"
+      ],
+      "issues": []
+    }
+  }
+}

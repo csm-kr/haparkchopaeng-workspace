@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { VisualSchema, CitationsSchema } from "@/lib/seminar/contract";
 import type { AssetType } from "@/types";
 import type {
   AssetView,
@@ -28,10 +29,14 @@ function toSlides(value: unknown): SlideView[] {
     if (s && typeof s === "object") {
       const o = s as Record<string, unknown>;
       if (typeof o.title === "string" && typeof o.body === "string") {
+        const visual = VisualSchema.safeParse(o.visual), citations = CitationsSchema.safeParse(o.citations);
         slides.push({
           title: o.title,
           subtitle: typeof o.subtitle === "string" ? o.subtitle : null,
           body: o.body,
+          ...(visual.success ? { visual: visual.data } : {}),
+          ...(citations.success ? { citations: citations.data } : {}),
+          ...(typeof o.speakerNotes === "string" ? { speakerNotes: o.speakerNotes } : {}),
         });
       }
     }
@@ -41,7 +46,7 @@ function toSlides(value: unknown): SlideView[] {
 
 /** DB의 PresentationAsset.type(String)을 유니온으로 좁힌다. */
 function toAssetType(value: string): AssetType {
-  return value === "ppt" || value === "note" ? value : "pdf";
+  return value === "ppt" || value === "note" || value === "html" ? value : "pdf";
 }
 
 interface MemberRow {
@@ -110,6 +115,7 @@ export async function getPresentationDetail(
   const pres = await prisma.presentation.findFirst({
     where: { id, teamId },
     include: {
+      sourcePaper: { select: { id: true, title: true, teamId: true } },
       assets: true,
       versions: { orderBy: { createdAt: "desc" } },
       comments: {
@@ -170,6 +176,7 @@ export async function getPresentationDetail(
       summary: pres.summary,
       keypoints: toStringArray(pres.keypoints),
       slides: toSlides(pres.slides),
+      ...(pres.sourcePaper?.teamId === teamId ? { sourcePaper: { id: pres.sourcePaper.id, title: pres.sourcePaper.title } } : {}),
     },
     assets,
     versions,

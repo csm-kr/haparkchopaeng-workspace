@@ -1,0 +1,145 @@
+{
+  "checkedAt": "2026-10-18T22:01:24.198Z",
+  "project": "ocprfnjuakugiraimeoo",
+  "identity": [
+    {
+      "database": "postgres",
+      "role": "postgres",
+      "schema": "public"
+    }
+  ],
+  "tables": [
+    {
+      "tablename": "Analysis",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "AppSetting",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Comment",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Figure",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "FineConfig",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Invite",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Job",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "LiveSession",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "LocalAgentAttempt",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "LocalAgentDevice",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "LocalAgentGrant",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "LocalAgentJob",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "LocalAgentSnapshot",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Member",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "MemberLedger",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Membership",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Paper",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Participant",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Presentation",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "PresentationAsset",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "PresentationVersion",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Publication",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Reaction",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "ResearchConversation",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "ScheduleMonth",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "ScheduleWeek",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "SectionNote",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Team",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "TeamInviteAcceptance",
+      "rowsecurity": true
+    },
+    {
+      "tablename": "Workspace",
+      "rowsecurity": true
+    }
+  ],
+  "sourceColumn": [],
+  "roles": [
+    {
+      "rolname": "authenticated"
+    },
+    {
+      "rolname": "anon"
+    },
+    {
+      "rolname": "service_role"
+    }
+  ]
+}

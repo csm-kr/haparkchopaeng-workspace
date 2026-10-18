@@ -1,4 +1,5 @@
 import { FileText, History } from "lucide-react";
+import Link from "next/link";
 import { Avatar, Badge, Card } from "@/components/ui";
 import { SlideDeck } from "./slide-deck";
 import { PdfSlideViewer } from "./pdf-slide-viewer";
@@ -21,6 +22,7 @@ const ASSET_LABEL: Record<AssetView["type"], string> = {
   pdf: "PDF",
   ppt: "PPT",
   note: "NOTE",
+  html: "HTML",
 };
 
 export function PresentationViewer({
@@ -34,6 +36,7 @@ export function PresentationViewer({
 
   return (
     <div className="flex flex-col gap-5">
+      {presentation.sourcePaper && <p className="text-[13px] text-fg-muted">바탕 논문 · <Link href={`/papers/${presentation.sourcePaper.id}`} className="text-accent hover:underline">{presentation.sourcePaper.title}</Link></p>}
       {summary && (
         <Card className="p-4">
           <h2 className="text-[16px] font-semibold text-fg">요약</h2>
@@ -57,7 +60,7 @@ export function PresentationViewer({
         </Card>
       )}
 
-      {slides.length > 0 && <SlideDeck slides={slides} />}
+      {slides.length > 0 && <SlideDeck slides={slides} sourcePaperId={presentation.sourcePaper?.id} />}
 
       {pdf && (
         <PdfSlideViewer

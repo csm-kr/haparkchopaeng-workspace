@@ -216,3 +216,7 @@ LiveKit 기반 다자간 화상 룸. 라이브가 없을 때의 빈 상태 — �
 별도 메뉴 `/ai-chat`에서 자료 없이 개인 대화를 시작하고 후속 질문을 이어간다. 입력창의 `@`로 같은 팀 논문·발표 자료를 합계 10개까지 질문마다 선택하며, 지난 질문의 자료 기록은 보존한다. 자료 준비는 Inngest에서 처리한다. 부분 답변·중지·연결 끊김을 구분하고 대화 기록과 현재 PC 실행 권한을 분리한다. 목록 최근 100개·상세 50턴, 모델 문맥은 완료된 최근 8턴·원문 합계 20만 자이며 생략 여부를 표시한다. 현재 CLI는 텍스트 전용으로 Figure는 본문·캡션 기반 추론, 외부 저장소는 미검증이다. Gemini·다른 CLI·원격 유료 API로 자동 대체하지 않는다.
 
 소스 `3f16685`의 [CI 39033348260](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/39033348260)에서 웹 946개·실제 PostgreSQL 16 동시성 13개·Chromium 8개·HTTP 쿠키 회수·3 OS native/패키징을 통과했다. 합성 2쪽 PDF의 실제 Codex 구조화 분석은 형식 안내 수정 뒤 1회 성공했으며 이전 형식 거절 2회와 구분한다. 운영 DB·서명 배포는 아직 미완료다. 기존 연결 5개 테이블 이후 연구 대화 테이블·추가 컬럼을 수동 적용해야 한다. [화면과 검증 HTML](docs/reports/local-ai-research-chat-2026-10-17.html), [제품 범위](docs/user/PRD.md), [ADR-026](docs/agent/ADR.md#adr-026), [API](docs/dev/API.md), [스키마·운영 적용 순서](docs/dev/DB.md#local-ai-schema), [검증 하네스](phases/13-local-ai-research-chat/index.json)를 참조한다.
+
+## 논문으로 PT 함께 만들기
+
+`/presentations/new`에서 논문 읽기 → 발표 방향 2~3개 → 한 질문씩 대화 → 목차 합의 → 원문 Figure·표·설명 도식 → 대화 수정 → HTML/PDF 검수·명시적 팀 등록으로 이어진다. [제작 계약](docs/design/PAPER_PT_WORKSPACE.md), ADR-031/032와 [운영 반영 기록](phases/22-paper-pt-release/index.json)을 따른다. 스키마·최신 AI 브릿지·Inngest를 준비한 뒤 `AGENT_TASKS_ENABLED=1`로 켠다.

@@ -57,3 +57,10 @@ REST v1의 ACK/pair/claim/result DTO는 유지한다. 자유 대화는 자료가
 실제 모델 카탈로그의 `reasoningEfforts?`는 확인된 `low|medium|high|xhigh|max` 값의 목록이다. 미제공이면 UI가 추론 강도를 표시·전송하지 않는다. 명시한 값은 입장과 claim 직전에 현재 카탈로그로 재검사하며, 지원 정보가 사라지면 안전하게 취소한다. 강도는 claim의 새 top-level 키가 아니라 서버 문맥의 `execution.effort`에 넣는다. 새 adapter만 이를 검증해 Codex `model_reasoning_effort` 또는 Claude `--effort`로 전달한다. 기존 앱에서 묵시적으로 지원한다고 표시하지 않는다.
 
 새 필드를 받는 웹을 연결기보다 먼저 배포한다. 새 앱이 기존 strict 서버에 메타데이터를 보내면 거절될 수 있다. 기존 paperIds 배열과 새 version 2 Json 선택을 함께 읽는 호환 reader를 유지하며, 새 대화 데이터를 기록한 뒤에는 이전 배열 전용 서비스로 단순 롤백하지 않는다.
+
+
+## Agent step capability (ADR-031)
+
+provider snapshot은 `capabilities?: ["agent_step_v1"]`을 광고한다. 필드가 없는 기존 브릿지는 일반 채팅·분석을 계속 지원하지만 `purpose=agent_step`은 claim하지 못한다. 서버는 생성·enqueue·claim에서 capability와 최신 snapshot을 확인한다.
+
+context는 `{version:1,kind:"agent_task",decisionContract,task,observation,results,previousDecisionInvalid,execution:{effort}}`다. 어댑터는 전용 JSON 행동 지침을 사용하고 기존 CLI 도구·셸·브라우저·MCP 제한을 유지한다. 모델에 쓰기 도구·검토 승인을 제공하지 않는다. 기존 grant·sequence·취소·실제 모델 카탈로그 계약을 따른다.

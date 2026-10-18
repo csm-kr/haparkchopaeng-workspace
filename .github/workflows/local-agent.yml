@@ -38,7 +38,7 @@ jobs:
       - name: Harness and isolation guards
         run: |
           python -m pytest scripts/test_execute.py -q
-          node --test scripts/local-agent-verify.test.mjs scripts/local-agent-pg-guard.test.mjs
+          node --test scripts/local-agent-verify.test.mjs scripts/local-agent-pg-guard.test.mjs scripts/agent-task-schema.test.mjs
       - name: Harness gate — isolated regression, lint and production build
         run: python scripts/execute.py 13-local-ai-research-chat --verify --step 0
       - name: Summarize captured quality evidence
