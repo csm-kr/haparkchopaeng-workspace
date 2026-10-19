@@ -67,7 +67,7 @@ for (const width of [1280, 390]) test(`${width}px에서 발표 자료 목록의 
   await expect(page.getByRole("heading", { name: "어떤 논문으로 세미나를 준비할까요?" })).toBeVisible();
   await page.getByRole("textbox", { name: "연구 질문" }).fill("@격리");
   await page.getByRole("option", { name: /격리 검증용 논문/ }).click();
-  await page.getByRole("button", { name: "세미나 만들기", exact: true }).click();
+  await page.getByRole("button", { name: "세미나 자료 만들기", exact: true }).click();
   await expect(page.getByText("초안 검토 대기", { exact: true })).toBeVisible();
   expect(fixture.creates()).toBe(1); expect(fixture.saves()).toBe(0);
   await page.getByRole("textbox", { name: "세미나 제목" }).fill("검토한 세미나 제목");

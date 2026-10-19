@@ -45,7 +45,7 @@ for (const width of [1280, 390]) test(`${width}px 전용 PT 공간에서 논문�
   await page.setViewportSize({ width, height: 1000 });
   const fixture = await setup(page);
   await page.goto("/presentations");
-  await page.getByRole("link", { name: "세미나 만들기", exact: true }).click();
+  await page.getByRole("link", { name: "세미나 자료 만들기", exact: true }).click();
   await expect(page).toHaveURL(/\/presentations\/new$/);
   await page.getByRole("combobox", { name: "발표할 논문" }).selectOption("local-agent-paper");
   await page.getByRole("button", { name: "논문 읽고 시작하기" }).click();
