@@ -19,6 +19,11 @@ test('the product macOS package uses an ASCII bundle/executable while preserving
   assert.equal(source.build.mac.hardenedRuntime, true);
 });
 
+test('the Mac build ad-hoc signs the whole bundle so a downloaded copy is not rejected as damaged', () => {
+  assert.equal(source.build.mac.identity, '-');
+  assert.equal(require('../desktop/mac-builder.cjs').mac.identity, '-');
+});
+
 test('installed-package configuration separates the Mac bundle filename from its display name and existing profile', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'connector-macos-packaging-'));
   try {

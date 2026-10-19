@@ -642,6 +642,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       gatekeeperExitCode: gatekeeper.code, quarantinePresent: quarantine.code === 0,
       quarantineModified: false, notarizationVerified: false,
       strictVerification: classifyMacSignatureVerification(signatureVerification) };
+    // A broken bundle seal makes Gatekeeper call a downloaded copy damaged, with no Open Anyway path.
+    assert.equal(result.distribution.strictVerification.valid, true, 'The installed bundle signature does not pass strict verification.');
+    checked('Installed bundle passed strict deep code signature verification.');
 
     evidence.phase = 'macos_protocol_registration';
     registered = true; // Cleanup also unregisters a partially successful registration.

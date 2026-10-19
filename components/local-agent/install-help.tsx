@@ -61,7 +61,7 @@ export function InstallHelp() {
       {release?.unsigned === true && <p id={unsignedNoticeId} className="text-[12px] leading-relaxed text-fg-muted">
         <span className="font-medium text-fg">테스트 버전 · 게시자 서명 없음</span>
         {release.platform === "windows" && " · Windows에서 게시자 확인 안내가 나올 수 있어요."}
-        {release.platform === "macos" && " · macOS 보안 확인으로 실행이 제한될 수 있어요."}
+        {release.platform === "macos" && " · 처음 열 때 막히면 시스템 설정 > 개인정보 보호 및 보안에서 '그래도 열기'를 눌러 주세요."}
       </p>}
       <a href={url} download={release?.filename || undefined} aria-describedby={release?.unsigned === true ? unsignedNoticeId : undefined} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 text-[13px] font-medium text-accent-fg hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"><Download size={14} aria-hidden="true" />AI 브릿지 다운로드</a>
       <p className="text-[12px] leading-relaxed text-fg-muted">다운로드한 파일을 열어 설치해 주세요. 설치 후 AI 브릿지가 응답하면 이 화면에서 이어져요. macOS·Ubuntu는 설치 후 앱을 처음 열어야 할 수 있어요.</p>
