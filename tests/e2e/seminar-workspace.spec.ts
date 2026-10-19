@@ -3,12 +3,12 @@ import type { AgentTaskView } from "../../types/agent-task";
 import { acceptSeminarDecision, createSeminarWorkspace, queueSeminarAction } from "../../lib/seminar/workflow";
 
 // Browser contract fixture; actual persistence/authority/model transitions are tested on the disposable DB.
-async function setup(page: Page) {
+async function setup(page: Page, capable = true) {
   expect((await page.request.post("/api/auth/login", { data: { email: "de8167@gmail.com" } })).ok()).toBeTruthy();
   const now = new Date().toISOString();
   await page.addInitScript(() => Object.defineProperty(navigator, "userActivation", { configurable: true, value: { isActive: false } }));
-  const device = { id: "pt-ui-pc", name: "PT 검증 PC", platform: "windows", online: true, lastSeenAt: now, leaseExpiresAt: new Date(Date.now()+45_000).toISOString(), providers: [{ provider: "codex", status: "ready", models: [{ id: "fixture-model", name: "Fixture model" }], quota: null, observedAt: now, capabilities: ["agent_step_v1"] }] };
-  await page.route("**/api/local-agent/**", route => { const path = new URL(route.request().url()).pathname; return route.fulfill({ json: { data: path.endsWith("/status") ? { device, devices: [device], leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 } : path.endsWith("/web-heartbeat") ? { leaseExpiresAt: device.leaseExpiresAt } : { releases: [] } } }); });
+  const device = { id: "pt-ui-pc", name: "PT 검증 PC", platform: "windows", online: true, lastSeenAt: now, leaseExpiresAt: new Date(Date.now()+45_000).toISOString(), providers: [{ provider: "codex", status: "ready", models: [{ id: "fixture-model", name: "Fixture model" }], quota: null, observedAt: now, capabilities: capable ? ["agent_step_v1"] : [] }] };
+  await page.route("**/api/local-agent/**", route => { const path = new URL(route.request().url()).pathname; return route.fulfill({ json: { data: path.endsWith("/status") ? { device, devices: [device], leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 } : path.endsWith("/web-heartbeat") ? { leaseExpiresAt: device.leaseExpiresAt } : { releases: [{ platform: "windows", architecture: "x64", version: "0.1.8", url: "https://downloads.example/bridge-0.1.8.exe" }] } } }); });
   const citation = { page: 1, quote: "Sparse routing reduces memory" }, pages = [{ page: 1, text: "Sparse routing reduces memory under a fixed batch size." }];
   const initial = createSeminarWorkspace("논문을 먼저 읽고 발표 방향을 제안해줘");
   const directions = [
@@ -18,9 +18,10 @@ async function setup(page: Page) {
   const outline = ["연구 문제", "라우팅 방법", "재현과 토론"].map((title, i) => ({ id: `s${i+1}`, title, claim: "메모리 절감의 조건을 검토한다", visualPlan: "원문에 근거한 설명 도식", sourcePages: [1] }));
   const deck = { title: "희소 라우팅 연구 세미나", durationMinutes: 30, summary: "기여와 실험 조건을 함께 토론한다", keypoints: ["희소 라우팅", "배치 조건"], citations: [citation], slides: outline.map(slide => ({ title: slide.title, body: "원문 p.1에서 희소 라우팅과 메모리 사용의 관계를 확인한다.", speakerNotes: "입력과 라우팅 단계를 차례로 설명한다.", citations: [citation], visual: { kind: "diagram" as const, caption: "원문을 바탕으로 재구성한 설명 도식", nodes: [{ id: "a", label: "입력" }, { id: "b", label: "희소 라우팅" }], edges: [{ from: "a", to: "b", label: "선택" }] } })) };
   let task: AgentTaskView = { id: "seminar-ui-task", kind: "seminar", conversationId: null, version: 100, revision: 0, goal: initial.messages[0].text, status: "waiting_input", phase: "seminar_directions", paper: { id: "local-agent-paper", title: "격리 검증용 논문" }, draft: null, seminarDraft: null, savedNote: null, savedPresentation: null, error: null, goalVerified: false, canCancel: true, canSave: false, canResume: true, decisionCount: 1, toolCount: 2, createdAt: now, updatedAt: now, activity: [], workspace: acceptSeminarDecision(initial, { version: 1, action: "seminar_directions", message: "원문을 읽고 두 방향을 찾았어요. 방법 이해를 추천해요.", directions }, pages, []) };
-  let saved = 0; const turns: Record<string, unknown>[] = [];
+  let saved = 0, created = 0; const turns: Record<string, unknown>[] = [];
   await page.route("**/api/agent/tasks**", async route => {
     const path = new URL(route.request().url()).pathname, method = route.request().method();
+    if (method === "POST" && path.endsWith("/tasks")) created++;
     if (method === "POST" && path.endsWith("/exports")) {
       const input = route.request().postDataJSON();
       task = { ...task, version: task.version+1, seminarDraft: input.seminar, workspace: { ...task.workspace!, deck: input.seminar }, export: { id: input.requestId, status: "done", current: true, error: null, files: ["html", "pdf"].map(format => ({ format: format as "html"|"pdf", href: `/api/agent/tasks/${task.id}/exports/${input.requestId}/file?format=${format}` })), qa: { slideCount: 3, aspectRatio: "16:9", embeddedFonts: ["Pretendard"], issues: [] } } };
@@ -38,8 +39,33 @@ async function setup(page: Page) {
     }
     await route.fulfill({ status: method === "POST" ? 202 : 200, json: { data: method === "GET" && path.endsWith("/tasks") ? [] : task } });
   });
-  return { saved: () => saved, turns: () => turns };
+  return { saved: () => saved, created: () => created, turns: () => turns, allowAgentTasks: () => { device.providers[0].capabilities = ["agent_step_v1"]; } };
 }
+
+for (const width of [1280, 390]) test(`${width}px 논문 선택과 브릿지 업데이트 조건을 안내하고 선택을 보존한다`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 1000 });
+  const fixture = await setup(page, false);
+  await page.goto("/presentations/new");
+  const start = page.getByRole("button", { name: "논문 읽고 시작하기", exact: true });
+  await expect(start).toBeDisabled();
+  await expect(start).toHaveAccessibleDescription("발표할 논문을 선택하면 시작할 수 있어요.");
+  const paper = page.getByRole("combobox", { name: "발표할 논문" });
+  await paper.selectOption("local-agent-paper");
+  await expect(start).toBeDisabled();
+  await expect(start).toHaveAccessibleDescription("논문 읽기를 시작하려면 AI 브릿지를 먼저 업데이트해주세요.");
+  await expect(page.getByText("연결된 AI 브릿지에 업데이트가 필요해요.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", "https://downloads.example/bridge-0.1.8.exe");
+  expect(fixture.created()).toBe(0);
+  fixture.allowAgentTasks();
+  await page.getByRole("button", { name: "업데이트 후 연결 확인" }).click();
+  await expect(start).toBeEnabled();
+  await expect(paper).toHaveValue("local-agent-paper");
+  await expect(page.getByText("연결된 AI 브릿지에 업데이트가 필요해요.", { exact: true })).not.toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await start.click();
+  await expect(page).toHaveURL(/\/presentations\/create\/seminar-ui-task$/);
+  expect(fixture.created()).toBe(1);
+});
 
 for (const width of [1280, 390]) test(`${width}px 전용 PT 공간에서 논문→방향→대화→목차→도식 슬라이드→등록을 이어간다`, async ({ page }) => {
   await page.setViewportSize({ width, height: 1000 });

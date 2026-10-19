@@ -1,18 +1,54 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSeminarWorkspace } from "@/lib/seminar/workflow";
 import type { AgentTaskView } from "@/types/agent-task";
 import { SeminarWorkspace } from "../workspace";
 import { AgentApiError } from "@/components/agent/client";
 
-const mock = vi.hoisted(() => ({ preferred: false, replace: vi.fn(), open: vi.fn(), create: vi.fn(), get: vi.fn(), turn: vi.fn(), control: vi.fn(), save: vi.fn() }));
+const mock = vi.hoisted(() => ({ connected: true, capable: true, preferred: false, replace: vi.fn(), open: vi.fn(), refresh: vi.fn(), downloads: vi.fn(), create: vi.fn(), get: vi.fn(), turn: vi.fn(), control: vi.fn(), save: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: mock.replace, refresh: vi.fn() }) }));
-vi.mock("@/components/local-agent/provider", () => ({ useLocalAgent: () => ({ phase: "connected", device: { id: "pc", providers: [{ provider: "codex", status: "ready", models: [{ id: "model", name: "Model" }, { id: "chosen-model", name: "Chosen model" }] }] }, selectedModel: { provider: "codex", model: "model" }, chatTarget: mock.preferred ? { provider: "codex", model: "chosen-model" } : null, effort: "medium", open: mock.open }) }));
+vi.mock("@/components/local-agent/provider", () => ({ useLocalAgent: () => ({ phase: mock.connected ? "connected" : "offline", device: { id: "pc", platform: "windows", providers: [{ provider: "codex", status: "ready", models: [{ id: "model", name: "Model" }, { id: "chosen-model", name: "Chosen model" }], ...(mock.capable ? { capabilities: ["agent_step_v1"] } : {}) }, { provider: "claude", status: "ready", models: [{ id: "other-model", name: "Other model" }], capabilities: ["agent_step_v1"] }] }, selectedModel: { provider: "codex", model: "model" }, chatTarget: mock.preferred ? { provider: "codex", model: "chosen-model" } : null, effort: "medium", open: mock.open, refresh: mock.refresh, api: mock }) }));
 vi.mock("../client", () => ({ seminarApi: { create: mock.create, get: mock.get, turn: mock.turn, control: mock.control, save: mock.save } }));
 const papers = [{ id: "paper", title: "희소 라우팅 논문", sourceReady: true }];
 const makeTask = (): AgentTaskView => ({ id: "task", kind: "seminar", conversationId: null, version: 2, revision: 0, goal: "논문으로 PT 만들기", status: "waiting_input", phase: "seminar_interview", paper: { id: "paper", title: papers[0].title }, draft: null, seminarDraft: null, savedNote: null, error: null, goalVerified: false, canCancel: true, canSave: false, canResume: true, decisionCount: 1, toolCount: 2, createdAt: "2026-10-18T00:00:00Z", updatedAt: "2026-10-18T00:00:00Z", activity: [], workspace: { ...createSeminarWorkspace("논문으로 PT 만들기"), pending: null, stage: "interview", selectedDirectionId: "method", question: { id: "depth", text: "어떤 깊이로 설명할까요?", options: [{ id: "core", label: "핵심 개념" }, { id: "repro", label: "재현 단계" }], recommendedId: "repro", reason: "팀의 재현 목표와 맞아요." } } });
 
 describe("전용 논문 PT 제작 공간", () => {
+  beforeEach(() => { vi.clearAllMocks(); mock.capable = true; mock.connected = true; });
+  it("explains why paper selection is required before starting", () => {
+    render(<SeminarWorkspace teamId="team" papers={papers} />);
+    expect(screen.getByRole("button", { name: "논문 읽고 시작하기" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "논문 읽고 시작하기" })).toHaveAccessibleDescription("발표할 논문을 선택하면 시작할 수 있어요.");
+  });
+  it("offers an update before submitting to an unsupported bridge and keeps the paper after reconnecting", async () => {
+    mock.capable = false;
+    mock.downloads.mockResolvedValue({ releases: [{ platform: "windows", architecture: "x64", version: "0.1.8", url: "https://downloads.example/bridge-0.1.8.exe" }] });
+    const { rerender } = render(<SeminarWorkspace teamId="team" papers={papers} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "발표할 논문" }), { target: { value: "paper" } });
+    const start = screen.getByRole("button", { name: "논문 읽고 시작하기" });
+    expect(start).toBeDisabled();
+    expect(start).toHaveAccessibleDescription("논문 읽기를 시작하려면 AI 브릿지를 먼저 업데이트해주세요.");
+    expect(screen.getByText("연결된 AI 브릿지에 업데이트가 필요해요.")).toBeVisible();
+    fireEvent.click(start);
+    expect(mock.create).not.toHaveBeenCalled();
+    expect(await screen.findByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", "https://downloads.example/bridge-0.1.8.exe");
+    fireEvent.click(screen.getByRole("button", { name: "업데이트 후 연결 확인" }));
+    expect(mock.refresh).toHaveBeenCalledTimes(1);
+    mock.capable = true;
+    rerender(<SeminarWorkspace teamId="team" papers={papers} />);
+    expect(screen.getByRole("combobox", { name: "발표할 논문" })).toHaveValue("paper");
+    expect(start).toBeEnabled();
+    expect(screen.queryByText("연결된 AI 브릿지에 업데이트가 필요해요.")).not.toBeInTheDocument();
+  });
+  it("explains that a selected paper still needs a connected bridge and offers the connection action", () => {
+    mock.connected = false;
+    render(<SeminarWorkspace teamId="team" papers={papers} initialPaperId="paper" />);
+    const start = screen.getByRole("button", { name: "논문 읽고 시작하기" });
+    expect(start).toBeDisabled();
+    expect(start).toHaveAccessibleDescription("AI 브릿지를 연결하면 논문 읽기를 시작할 수 있어요.");
+    fireEvent.click(screen.getByRole("button", { name: "AI 연결하기", exact: true }));
+    expect(mock.open).toHaveBeenCalledOnce();
+    expect(mock.create).not.toHaveBeenCalled();
+  });
   it("uses the model chosen in current connection settings instead of an older analysis selection", async () => {
     mock.preferred = true;
     mock.create.mockClear();
