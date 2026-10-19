@@ -16,5 +16,5 @@ export async function SeminarWorkspacePage({ taskId, paperId }: { taskId?: strin
   let papers: ResearchPaperOption[] = [], task: AgentTaskView | null = null, error: string | null = null;
   try { [papers, task] = await Promise.all([listResearchPapers(scope), taskId ? getTask(scope, taskId) : Promise.resolve(null)]); if (task && !task.workspace) throw new HttpError(404, "NOT_FOUND", "이 작업은 PT 제작 대화가 아니에요."); }
   catch (cause) { error = cause instanceof HttpError ? cause.message : "PT 제작 공간을 불러오지 못했어요. 잠시 뒤 다시 확인해주세요."; task = null; }
-  return <><Topbar crumbs={[{ label: "발표 자료", href: "/presentations" }, { label: "PT 만들기" }]} /><SeminarWorkspace teamId={team.id} papers={papers} initialTask={task} initialPaperId={papers.some(paper => paper.id === paperId) ? paperId : undefined} initialError={error} enabled={process.env.AGENT_TASKS_ENABLED === "1"} /></>;
+  return <><Topbar crumbs={[{ label: "발표 자료", href: "/presentations" }, { label: "세미나 자료 만들기" }]} /><SeminarWorkspace teamId={team.id} papers={papers} initialTask={task} initialPaperId={papers.some(paper => paper.id === paperId) ? paperId : undefined} initialError={error} enabled={process.env.AGENT_TASKS_ENABLED === "1"} /></>;
 }
