@@ -57,7 +57,9 @@ for (const width of [1280, 390]) test(`${width}px 논문 선택과 브릿지 업
   await expect(page.getByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", "https://downloads.example/bridge-0.1.8.exe");
   expect(fixture.created()).toBe(0);
   fixture.allowAgentTasks();
-  await page.getByRole("button", { name: "업데이트 후 연결 확인" }).click();
+  await expect(page.getByRole("button", { name: "업데이트 후 연결 확인" })).toHaveCount(0);
+  // 업데이트한 브릿지는 별도 확인 버튼 없이 창으로 돌아올 때의 연결 동기화로 반영된다.
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(start).toBeEnabled();
   await expect(paper).toHaveValue("local-agent-paper");
   await expect(page.getByText("연결된 AI 브릿지에 업데이트가 필요해요.", { exact: true })).not.toBeVisible();

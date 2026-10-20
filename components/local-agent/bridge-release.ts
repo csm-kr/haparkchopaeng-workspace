@@ -53,6 +53,17 @@ export function safeBridgeDownloadUrl(value: string | undefined, origin: string)
   } catch { return null; }
 }
 
+export type BridgeChip = "arm64" | "x64";
+
+/** Only Chromium reports the CPU family; other browsers resolve to null. */
+export async function detectBridgeChip(): Promise<BridgeChip | null> {
+  const data = (navigator as Navigator & { userAgentData?: { getHighEntropyValues?: (hints: string[]) => Promise<{ architecture?: string }> } }).userAgentData;
+  try {
+    const architecture = (await data?.getHighEntropyValues?.(["architecture"]))?.architecture;
+    return architecture === "arm" ? "arm64" : architecture === "x86" ? "x64" : null;
+  } catch { return null; }
+}
+
 export function detectBridgePlatform(): LocalAgentPlatform | "" {
   if (typeof navigator === "undefined" || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)) return "";
   if (/Windows/i.test(navigator.userAgent)) return "windows";

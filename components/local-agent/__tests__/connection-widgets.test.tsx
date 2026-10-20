@@ -21,14 +21,33 @@ function renderInstallHelp(releases: ConnectorRelease[]) {
 }
 
 describe("설치 전에 확인하는 배포 상태", () => {
-  it("설치 안내와 다운로드에서 앱 이름을 AI 브릿지로 표시한다", async () => {
-    renderInstallHelp([{
-      platform: "windows", version: "0.1.0", url: "https://downloads.example/connector.exe",
-    }]);
-    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "windows" } });
-    expect(await screen.findByRole("link", { name: "AI 브릿지 다운로드" })).toBeVisible();
+  const macNotice = "테스트 버전 · 게시자 서명 없음 · 처음 열 때 막히면 시스템 설정 > 개인정보 보호 및 보안에서 '그래도 열기'를 눌러 주세요.";
+
+  it("감지한 운영체제의 파일을 버튼 하나로 바로 받고, 다른 선택지는 접어 둔다", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    renderInstallHelp([
+      { platform: "windows", architecture: "x64", version: "0.1.0", url: "https://downloads.example/connector.exe" },
+      { platform: "macos", architecture: "arm64", version: "0.1.0", url: "https://downloads.example/connector.dmg" },
+    ]);
+    const download = await screen.findByRole("link", { name: "AI 브릿지 받기" });
+    expect(download).toBeVisible();
+    expect(download).toHaveAttribute("href", "https://downloads.example/connector.exe");
+    expect(screen.getByText("Windows용 · 0.1.0")).toBeVisible();
+    expect(screen.getAllByRole("link")).toEqual([download]);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.getByLabelText("운영체제")).not.toBeVisible();
     expect(screen.getByText("AI 브릿지가 열리지 않았나요?")).toBeVisible();
     expect(screen.getByText(/설치 후 AI 브릿지가 응답하면/)).toBeVisible();
+  });
+
+  it("운영체제를 모르면 선택지를 펼쳐 두고 고른 뒤에 버튼을 준다", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; FreeBSD amd64)");
+    renderInstallHelp([{ platform: "windows", version: "0.1.0", url: "https://downloads.example/connector.exe" }]);
+    const platform = screen.getByLabelText("운영체제");
+    expect(platform).toBeVisible();
+    expect(screen.getByText("사용하는 PC의 운영체제를 선택해 주세요.")).toBeVisible();
+    fireEvent.change(platform, { target: { value: "windows" } });
+    expect(await screen.findByRole("link", { name: "AI 브릿지 받기" })).toHaveAttribute("href", "https://downloads.example/connector.exe");
   });
 
   it("미서명 Windows 파일은 다운로드 전에 테스트 버전과 게시자 확인 안내를 제공한다", async () => {
@@ -36,8 +55,8 @@ describe("설치 전에 확인하는 배포 상태", () => {
       platform: "windows", architecture: "x64", version: "0.1.0-preview",
       url: "https://downloads.example/connector-preview.exe", unsigned: true,
     }]);
-    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "windows" } });
-    const download = await screen.findByRole("link", { name: "AI 브릿지 다운로드" });
+    fireEvent.change(screen.getByLabelText("운영체제"), { target: { value: "windows" } });
+    const download = await screen.findByRole("link", { name: "AI 브릿지 받기" });
     expect(screen.getByText("테스트 버전 · 게시자 서명 없음")).toBeVisible();
     expect(download).toHaveAccessibleDescription(/테스트 버전 · 게시자 서명 없음.*Windows.*게시자 확인/);
     expect(screen.queryByText(/그래도 열기/)).toBeNull();
@@ -48,8 +67,8 @@ describe("설치 전에 확인하는 배포 상태", () => {
     renderInstallHelp([{
       platform: "windows", version: "0.1.0", url: "https://downloads.example/connector.exe", unsigned,
     }]);
-    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "windows" } });
-    const download = await screen.findByRole("link", { name: "AI 브릿지 다운로드" });
+    fireEvent.change(screen.getByLabelText("운영체제"), { target: { value: "windows" } });
+    const download = await screen.findByRole("link", { name: "AI 브릿지 받기" });
     expect(download).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
     expect(screen.queryByText(/게시자 확인/)).toBeNull();
@@ -60,12 +79,12 @@ describe("설치 전에 확인하는 배포 상태", () => {
     renderInstallHelp([{
       platform: "windows", version: "0.1.0-preview", url: "https://downloads.example/connector.exe", unsigned: true,
     }]);
-    const platform = screen.getByLabelText("설치할 운영체제");
+    const platform = screen.getByLabelText("운영체제");
     fireEvent.change(platform, { target: { value: "windows" } });
-    expect(await screen.findByRole("link", { name: "AI 브릿지 다운로드" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "AI 브릿지 받기" })).toBeVisible();
     for (const value of ["macos", "linux"]) {
       fireEvent.change(platform, { target: { value } });
-      expect(screen.queryByRole("link", { name: "AI 브릿지 다운로드" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "AI 브릿지 받기" })).toBeNull();
       expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
       expect(screen.queryByText(/게시자 확인/)).toBeNull();
       expect(screen.queryByText(/그래도 열기/)).toBeNull();
@@ -73,23 +92,21 @@ describe("설치 전에 확인하는 배포 상태", () => {
     }
   });
 
-  it.each([undefined, false])("macOS는 선택한 미서명 칩에만 실행 제한을 안내하고 다른 칩의 %s 표시는 경고하지 않는다", async (unsigned) => {
+  it.each([undefined, false])("macOS는 칩을 모르면 Apple Silicon 파일을 주고, 다른 칩의 미서명 표시 %s는 경고하지 않는다", async (unsigned) => {
     renderInstallHelp([{
       platform: "macos", architecture: "arm64", version: "0.1.0-preview", url: "https://downloads.example/arm64.dmg", unsigned: true,
     }, {
       platform: "macos", architecture: "x64", version: "0.1.0", url: "https://downloads.example/x64.dmg", unsigned,
     }]);
-    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "macos" } });
-    const chip = await screen.findByLabelText("칩 종류");
-    expect(chip).toHaveValue("");
-    expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
-    expect(screen.queryByText(/그래도 열기/)).toBeNull();
-    fireEvent.change(chip, { target: { value: "arm64" } });
-    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAccessibleDescription("테스트 버전 · 게시자 서명 없음 · 처음 열 때 막히면 시스템 설정 > 개인정보 보호 및 보안에서 '그래도 열기'를 눌러 주세요.");
+    fireEvent.change(screen.getByLabelText("운영체제"), { target: { value: "macos" } });
+    const download = await screen.findByRole("link", { name: "AI 브릿지 받기" });
+    expect(download).toHaveAttribute("href", "https://downloads.example/arm64.dmg");
+    expect(download).toHaveAccessibleDescription(macNotice);
+    expect(screen.getByText("Mac · Apple Silicon용 · 0.1.0-preview")).toBeVisible();
     expect(screen.queryByText(/게시자 확인/)).toBeNull();
-    fireEvent.change(chip, { target: { value: "x64" } });
-    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAttribute("href", "https://downloads.example/x64.dmg");
-    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).not.toHaveAttribute("aria-describedby");
+    fireEvent.change(screen.getByLabelText("칩 종류"), { target: { value: "x64" } });
+    expect(screen.getByRole("link", { name: "AI 브릿지 받기" })).toHaveAttribute("href", "https://downloads.example/x64.dmg");
+    expect(screen.getByRole("link", { name: "AI 브릿지 받기" })).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
     expect(screen.queryByText(/그래도 열기/)).toBeNull();
   });
@@ -98,8 +115,8 @@ describe("설치 전에 확인하는 배포 상태", () => {
     renderInstallHelp([{
       platform: "linux", architecture: "x64", version: "0.1.0-preview", url: "https://downloads.example/connector.deb", unsigned: true,
     }]);
-    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "linux" } });
-    const download = await screen.findByRole("link", { name: "AI 브릿지 다운로드" });
+    fireEvent.change(screen.getByLabelText("운영체제"), { target: { value: "linux" } });
+    const download = await screen.findByRole("link", { name: "AI 브릿지 받기" });
     expect(download).toHaveAccessibleDescription("테스트 버전 · 게시자 서명 없음");
     expect(screen.queryByText(/게시자 확인/)).toBeNull();
     expect(screen.queryByText(/그래도 열기/)).toBeNull();
