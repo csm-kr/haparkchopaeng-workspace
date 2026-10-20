@@ -66,7 +66,7 @@ describe("로컬 AI 연결 흐름", () => {
     await act(async () => { render(<View api={api} />); });
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
     await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
-    expect(screen.getByLabelText("설치할 운영체제")).toBeInTheDocument();
+    expect(screen.getByLabelText("운영체제")).toBeInTheDocument();
     expect(screen.queryByLabelText("연결 확인 번호")).toBeNull();
     expect(screen.queryByRole("timer")).toBeNull();
   });
@@ -96,7 +96,7 @@ describe("로컬 AI 연결 흐름", () => {
     expect(screen.queryByRole("button", { name: "내 PC 연결됨" })).toBeNull();
   });
 
-  it("설치 파일이 있는 macOS는 칩 선택을 안내하고 고른 아키텍처만 내려받는다", async () => {
+  it("설치 파일이 있는 macOS는 Apple Silicon 파일을 기본으로 주고 Intel은 직접 고른다", async () => {
     const api = makeApi();
     vi.mocked(api.downloads).mockResolvedValue({ releases: [
       { platform: "macos", architecture: "arm64", version: "0.1.0", url: "https://downloads.example/arm64.dmg" },
@@ -107,12 +107,10 @@ describe("로컬 AI 연결 흐름", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     await waitFor(() => expect(api.downloads).toHaveBeenCalled());
-    fireEvent.change(screen.getByLabelText("설치할 운영체제"), { target: { value: "macos" } });
-    expect(await screen.findByLabelText("칩 종류")).toHaveValue("");
-    expect(screen.getByText("칩 종류를 먼저 선택해 주세요.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "AI 브릿지 다운로드" })).toBeNull();
-    fireEvent.change(screen.getByLabelText("칩 종류"), { target: { value: "arm64" } });
-    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAttribute("href", "https://downloads.example/arm64.dmg");
+    fireEvent.change(screen.getByLabelText("운영체제"), { target: { value: "macos" } });
+    expect(await screen.findByRole("link", { name: "AI 브릿지 받기" })).toHaveAttribute("href", "https://downloads.example/arm64.dmg");
+    fireEvent.change(screen.getByLabelText("칩 종류"), { target: { value: "x64" } });
+    expect(screen.getByRole("link", { name: "AI 브릿지 받기" })).toHaveAttribute("href", "https://downloads.example/x64.dmg");
   });
 
   it("취소 뒤 도착한 생성 응답은 실행·연결을 되살리지 않는다", async () => {
@@ -213,7 +211,7 @@ describe("로컬 AI 연결 흐름", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     expect(await screen.findByRole("button", { name: /설치 파일 준비 중/ })).toBeDisabled();
-    expect(screen.getByText(/응답이 없어도 설치 여부를 확정할 수 없어요/)).toBeInTheDocument();
+    expect(screen.getByText(/처음이라면 AI 브릿지를 설치해 주세요/)).toBeInTheDocument();
     expect(document.querySelector('a[download]')).toBeNull();
   });
 
