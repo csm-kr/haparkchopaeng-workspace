@@ -35,6 +35,15 @@ test('the actual Mac build command selects a schema-valid full Mac configuration
   await validateConfiguration(config);
 });
 
+test('ad-hoc signing under hardened runtime keeps the builder entitlement that lets ad-hoc frameworks load', async () => {
+  assert.equal(config.mac.identity, '-');
+  assert.equal(config.mac.hardenedRuntime, true);
+  assert.equal(config.mac.entitlements, undefined);
+  assert.equal(config.mac.entitlementsInherit, undefined);
+  const entitlements = await parsePlistFile(requireBuilder.resolve('app-builder-lib/templates/entitlements.mac.plist'));
+  assert.equal(entitlements['com.apple.security.cs.disable-library-validation'], true);
+});
+
 test('actual builder AppInfo separates ASCII native names from the Korean runtime metadata', () => {
   assert.equal(appInfo.productName, 'hapark-connector');
   assert.equal(appInfo.sanitizedProductName, 'hapark-connector');

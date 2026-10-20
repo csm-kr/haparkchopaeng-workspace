@@ -62,7 +62,7 @@ export function BridgeUpdateInfo() {
     </label>}
     <p role="status" className="text-[12px] text-fg-muted">{state === "loading" ? "최신 버전 확인 중…" : state === "error" ? "최신 버전을 확인하지 못했어요" : !release || !url ? (!architecture && needsChipChoice ? "칩 종류를 선택하면 업데이트 파일을 확인할 수 있어요" : "이 환경의 설치 파일을 준비 중이에요") : comparison === 0 ? "최신 버전이에요" : comparison !== null && comparison > 0 ? "설치 버전이 더 최신이에요" : installed ? "새 버전으로 업데이트할 수 있어요" : "최신 설치 파일로 업데이트하면 앱 버전도 확인할 수 있어요"}</p>
     {canUpdate && <>
-      {release?.unsigned && <p id={noticeId} className="text-[11px] leading-relaxed text-fg-subtle">테스트 버전 · 게시자 서명 없음{platform === "windows" ? " · Windows 게시자 확인 안내가 나올 수 있어요." : platform === "macos" ? " · macOS 보안 확인으로 실행이 제한될 수 있어요." : ""}</p>}
+      {release?.unsigned && <p id={noticeId} className="text-[11px] leading-relaxed text-fg-subtle">테스트 버전 · 게시자 서명 없음{platform === "windows" ? " · Windows 게시자 확인 안내가 나올 수 있어요." : platform === "macos" ? " · 처음 열 때 막히면 시스템 설정 > 개인정보 보호 및 보안에서 '그래도 열기'를 눌러 주세요." : ""}</p>}
       <a href={url!} download={release?.filename} aria-describedby={release?.unsigned ? noticeId : undefined} onClick={() => setDownloaded(true)} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-sm border border-border-strong bg-bg-elevated px-3 text-[12px] font-medium text-fg hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"><Download size={13} aria-hidden="true" />업데이트 받기</a>
       {downloaded && <p className="text-[12px] leading-relaxed text-fg-muted">다운로드한 설치 파일을 열면 기존 앱을 업데이트할 수 있어요. 설치를 마친 뒤 웹의 AI 연결을 다시 눌러 주세요. 앱이 새 버전을 알려 주면 이 표시도 바뀌어요.</p>}
     </>}

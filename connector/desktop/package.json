@@ -32,7 +32,7 @@
     "asar": true,
     "win": { "target": ["nsis"], "icon": "assets/icon.ico", "signExecutable": false },
     "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "deleteAppDataOnUninstall": false, "shortcutName": "AI 브릿지", "include": "installer.nsh" },
-    "mac": { "target": ["dmg"], "executableName": "hapark-connector", "icon": "assets/icon.png", "category": "public.app-category.productivity", "hardenedRuntime": true, "gatekeeperAssess": false },
+    "mac": { "target": ["dmg"], "executableName": "hapark-connector", "icon": "assets/icon.png", "category": "public.app-category.productivity", "hardenedRuntime": true, "identity": "-", "gatekeeperAssess": false },
     "linux": { "target": ["deb"], "maintainer": "Hapark maintainers", "icon": "assets/icon.png", "category": "Utility", "mimeTypes": ["x-scheme-handler/hapark-connect"], "desktop": { "entry": { "Name": "AI 브릿지", "Comment": "웹과 내 PC의 AI 연결", "Terminal": "false" } } },
     "publish": null
   }

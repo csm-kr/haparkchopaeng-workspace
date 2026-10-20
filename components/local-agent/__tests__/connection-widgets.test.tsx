@@ -40,7 +40,7 @@ describe("설치 전에 확인하는 배포 상태", () => {
     const download = await screen.findByRole("link", { name: "AI 브릿지 다운로드" });
     expect(screen.getByText("테스트 버전 · 게시자 서명 없음")).toBeVisible();
     expect(download).toHaveAccessibleDescription(/테스트 버전 · 게시자 서명 없음.*Windows.*게시자 확인/);
-    expect(screen.queryByText(/macOS 보안 확인/)).toBeNull();
+    expect(screen.queryByText(/그래도 열기/)).toBeNull();
     expect(download).toHaveAttribute("href", "https://downloads.example/connector-preview.exe");
   });
 
@@ -53,7 +53,7 @@ describe("설치 전에 확인하는 배포 상태", () => {
     expect(download).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
     expect(screen.queryByText(/게시자 확인/)).toBeNull();
-    expect(screen.queryByText(/macOS 보안 확인/)).toBeNull();
+    expect(screen.queryByText(/그래도 열기/)).toBeNull();
   });
 
   it("Windows 미서명 파일과 안내를 다른 운영체제에 표시하지 않는다", async () => {
@@ -68,7 +68,7 @@ describe("설치 전에 확인하는 배포 상태", () => {
       expect(screen.queryByRole("link", { name: "AI 브릿지 다운로드" })).toBeNull();
       expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
       expect(screen.queryByText(/게시자 확인/)).toBeNull();
-      expect(screen.queryByText(/macOS 보안 확인/)).toBeNull();
+      expect(screen.queryByText(/그래도 열기/)).toBeNull();
       expect(screen.getByRole("button", { name: "설치 파일 준비 중" })).toBeDisabled();
     }
   });
@@ -83,15 +83,15 @@ describe("설치 전에 확인하는 배포 상태", () => {
     const chip = await screen.findByLabelText("칩 종류");
     expect(chip).toHaveValue("");
     expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
-    expect(screen.queryByText(/macOS 보안 확인/)).toBeNull();
+    expect(screen.queryByText(/그래도 열기/)).toBeNull();
     fireEvent.change(chip, { target: { value: "arm64" } });
-    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAccessibleDescription("테스트 버전 · 게시자 서명 없음 · macOS 보안 확인으로 실행이 제한될 수 있어요.");
+    expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAccessibleDescription("테스트 버전 · 게시자 서명 없음 · 처음 열 때 막히면 시스템 설정 > 개인정보 보호 및 보안에서 '그래도 열기'를 눌러 주세요.");
     expect(screen.queryByText(/게시자 확인/)).toBeNull();
     fireEvent.change(chip, { target: { value: "x64" } });
     expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).toHaveAttribute("href", "https://downloads.example/x64.dmg");
     expect(screen.getByRole("link", { name: "AI 브릿지 다운로드" })).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByText("테스트 버전 · 게시자 서명 없음")).toBeNull();
-    expect(screen.queryByText(/macOS 보안 확인/)).toBeNull();
+    expect(screen.queryByText(/그래도 열기/)).toBeNull();
   });
 
   it("Ubuntu 미서명 파일은 게시자 서명 제목만 안내한다", async () => {
@@ -102,7 +102,7 @@ describe("설치 전에 확인하는 배포 상태", () => {
     const download = await screen.findByRole("link", { name: "AI 브릿지 다운로드" });
     expect(download).toHaveAccessibleDescription("테스트 버전 · 게시자 서명 없음");
     expect(screen.queryByText(/게시자 확인/)).toBeNull();
-    expect(screen.queryByText(/macOS 보안 확인/)).toBeNull();
+    expect(screen.queryByText(/그래도 열기/)).toBeNull();
   });
 });
 

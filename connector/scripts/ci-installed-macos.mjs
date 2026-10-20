@@ -443,12 +443,21 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       join(helperDirectory.path, 'workspace.swift'), '-o', join(helperDirectory.path, 'workspace')], { timeout: 90_000 });
     swiftReady = true; evidence.phase = 'macos_preflight';
     assert.deepEqual((await swift('running', appId)).applications, [], 'An existing app with this bundle ID is running.');
+    const dist = join(connectorRoot, 'dist');
+    await assertMacPathInside(dist, connectorRoot);
+    // LaunchServices may auto-register the unpacked builder output, which then claims the scheme before installation.
+    result.unregisteredBuildOutputs = [];
+    for (const name of (await readdir(dist)).filter(entry => /^mac(?:-[a-z0-9]+)?$/.test(entry))) {
+      const bundle = join(dist, name, `${macBundleName}.app`);
+      if (!(await exists(bundle)) || (await lstat(bundle)).isSymbolicLink()) continue;
+      await assertMacPathInside(bundle, dist);
+      await run(lsregister, ['-u', bundle], { allowFailure: true });
+      result.unregisteredBuildOutputs.push(name);
+    }
     assert.equal(await handler(), null, 'A protocol handler already exists; refusing to replace it.');
     for (const parent of ['/Applications', join(homedir(), 'Applications')]) {
       assert.equal(await exists(join(parent, `${macBundleName}.app`)), false, 'An existing installation must be preserved.');
     }
-    const dist = join(connectorRoot, 'dist');
-    await assertMacPathInside(dist, connectorRoot);
     const suffix = `-${packageVersion}-mac-${process.arch}.dmg`;
     const images = (await readdir(dist)).filter(name => name.endsWith(suffix));
     assert.equal(images.length, 1, 'Expected exactly one DMG for this package version and native architecture.');
@@ -642,6 +651,9 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       gatekeeperExitCode: gatekeeper.code, quarantinePresent: quarantine.code === 0,
       quarantineModified: false, notarizationVerified: false,
       strictVerification: classifyMacSignatureVerification(signatureVerification) };
+    // A broken bundle seal makes Gatekeeper call a downloaded copy damaged, with no Open Anyway path.
+    assert.equal(result.distribution.strictVerification.valid, true, 'The installed bundle signature does not pass strict verification.');
+    checked('Installed bundle passed strict deep code signature verification.');
 
     evidence.phase = 'macos_protocol_registration';
     registered = true; // Cleanup also unregisters a partially successful registration.
