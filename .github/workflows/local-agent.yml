@@ -239,6 +239,10 @@ jobs:
         run: npm --prefix connector/desktop run package:${{ matrix.platform }}
       - name: macOS native identity regression and installer build (unsigned)
         if: runner.os == 'macOS'
+        env:
+          # electron-builder skips all signing on PR builds; ad-hoc signing uses no secret,
+          # so PRs must validate the same sealed bundle that dispatch releases ship.
+          CSC_FOR_PULL_REQUEST: 'true'
         run: npm --prefix connector/desktop run package:mac
       - name: Verify Debian sandbox and protocol contents
         if: runner.os == 'Linux'
