@@ -80,6 +80,7 @@ describe("실제 설치 앱과 최신 파일의 업데이트 안내", () => {
     expect(screen.getByText("Mac · Apple Silicon용 · 0.1.5")).toBeVisible();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.getByLabelText("칩 종류")).not.toBeVisible();
+    expect(screen.getByText("Intel Mac이나 다른 컴퓨터용 파일")).toBeVisible();
     fireEvent.change(screen.getByLabelText("칩 종류"), { target: { value: "x64" } });
     expect(screen.getByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", intel.url);
   });
@@ -107,6 +108,8 @@ describe("실제 설치 앱과 최신 파일의 업데이트 안내", () => {
   it("Mac 파일이 Apple Silicon 하나만 있어도 칩을 묻지 않고 바로 받게 한다", async () => {
     setup(null, [arm], "macos", null);
     expect(await screen.findByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", arm.url);
+    expect(screen.getByText("다른 컴퓨터용 파일")).toBeVisible();
+    expect(screen.queryByText(/Intel/)).toBeNull();
   });
 
   it("잘못된 다운로드 URL을 실행 링크로 만들지 않는다", async () => {

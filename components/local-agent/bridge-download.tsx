@@ -60,7 +60,7 @@ export function BridgeDownload({ target, label, unavailable, onDownload }: {
     </> : unavailable}
     <details open={startOpen} className="text-[12px] text-fg-muted">
       <summary className="cursor-pointer select-none rounded-sm py-1 hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft">
-        {!platform ? "운영체제 선택" : platform === "macos" ? "Intel Mac이나 다른 컴퓨터용 파일" : "다른 컴퓨터용 파일"}
+        {!platform ? "운영체제 선택" : platform === "macos" && chips.includes("x64") ? "Intel Mac이나 다른 컴퓨터용 파일" : "다른 컴퓨터용 파일"}
       </summary>
       <div className="mt-2 flex flex-col gap-2">
         <label className="flex flex-col gap-1">운영체제
