@@ -1,4 +1,7 @@
-import { basename, dirname, join } from 'node:path';
+import { posix } from 'node:path';
+
+// macOS-only paths; posix keeps the same separators when the suite runs on Windows CI.
+const { basename, dirname, join } = posix;
 
 // Before the rename the Mac bundle was hapark-connector.app. It shares this bundle ID and URL scheme, so a leftover
 // copy (some were rejected as damaged) could still be opened for hapark-connect:// links.
