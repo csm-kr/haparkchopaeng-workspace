@@ -251,6 +251,24 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
     await expect(submitResult(identity, { jobId: created.id, claimToken: claim.claimToken, sequence: 3, status: "completed", response: "늦은 완료" })).rejects.toMatchObject({ code: "JOB_CANCELLED" });
   });
 
+  it("keeps the web permission for two minutes while handing the desktop at most 45 seconds at a time", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = Date.now();
+    const { paired, identity } = await pair();
+    // Installed 0.1.9 apps reject a lease more than 60 seconds ahead.
+    expect(Date.parse(paired.leaseExpiresAt ?? "")).toBeLessThanOrEqual(start + 45_000);
+    const renewed = await renewWebPermission(scope(), identity.deviceId);
+    expect(Date.parse(renewed.leaseExpiresAt)).toBe(start + 120_000);
+    // A hidden tab may renew only once a minute; the desktop must still be authorized in between.
+    vi.setSystemTime(start + 70_000);
+    const heartbeat = await desktopHeartbeat(identity, [snapshot()]);
+    expect(Date.parse(heartbeat.leaseExpiresAt)).toBe(start + 115_000);
+    vi.setSystemTime(start + 100_000);
+    expect(Date.parse((await desktopHeartbeat(identity, [snapshot()])).leaseExpiresAt)).toBe(start + 120_000);
+    vi.setSystemTime(start + 120_000);
+    await expect(desktopHeartbeat(identity, [snapshot()])).rejects.toMatchObject({ status: 403, code: "WEB_PERMISSION_EXPIRED" });
+  });
+
   it("blocks claims and result writes at lease expiry; a desktop heartbeat cannot extend the lease", async () => {
     const { identity } = await pair();
     await desktopHeartbeat(identity, [snapshot()]);
@@ -275,7 +293,8 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
     if (!claim) throw new Error("missing claim");
     await revokeSession(scope().sessionKey);
     expect((await getStatus(scope(), identity.deviceId)).device).toBeNull();
-    await expect(desktopHeartbeat(identity, [snapshot()], metadata)).rejects.toMatchObject({ status: 403 });
+    // A revoked grant must not look like a late renewal that the app should wait for.
+    await expect(desktopHeartbeat(identity, [snapshot()], metadata)).rejects.toMatchObject({ status: 403, code: "WEB_PERMISSION_REVOKED" });
     await expect(renewWebPermission(scope(), identity.deviceId)).rejects.toMatchObject({ status: 403 });
     await expect(claimJob(identity)).rejects.toMatchObject({ status: 403 });
     await expect(submitResult(identity, { jobId: created.id, claimToken: claim.claimToken, sequence: 1, status: "completed", response: "회수 후 응답" })).rejects.toMatchObject({ status: 403 });

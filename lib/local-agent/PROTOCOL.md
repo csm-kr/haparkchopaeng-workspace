@@ -38,7 +38,7 @@ heartbeat는 기존 `providers` 외에 선택 필드 `bridgeVersion?: string`, `
 
 heartbeat/claim/result는 `Authorization: Bearer <deviceToken>` 및 `X-Local-Agent-Device: <deviceId>` 헤더가 필요하다. deviceToken은 32 random bytes의 base64url(43자)이며 로컬 OS 암호화 저장소에 보관하고 서버는 SHA256 지문만 저장한다. 기존 키·같은 웹 세션·같은 팀·회수되지 않은 grant가 있으면 ack에서 자동 재연결한다. 이 조건이 없으면 앱에서 웹의 6자리 번호를 직접 입력해야 한다.
 
-웹 heartbeat는 15초마다 현재 인증·팀·기기 grant를 확인해 45초 허가를 갱신한다. 연결기 heartbeat는 5초마다 상태/모델/한도를 올리고 현재 허가 만료와 취소 ID를 받는다. 연결기는 이를 갱신할 수 없다. 허가 만료·401/403이면 즉시 작업을 취소하고 새 claim을 중단한다. 웹 로그아웃·팀 변경은 즉시 서버 grant를 회수한다. 쿠키 삭제·웹 강제종료는 마지막 허가부터 최장 45초 뒤 차단된다.
+웹 heartbeat는 15초마다 현재 인증·팀·기기 grant를 확인해 2분 허가를 갱신한다. 브라우저가 숨겨진 탭의 타이머를 약 1분에 한 번으로 늦춰도 갱신 사이에 만료되지 않게 하려는 값이다. 연결기 heartbeat는 5초마다 상태/모델/한도를 올리고 현재 허가 만료와 취소 ID를 받는다. 연결기에 주는 만료(`ack`·`pair`·heartbeat의 `leaseExpiresAt`)는 grant 안에서 최대 45초 앞까지만 보낸다. 0.1.9 이하 앱은 60초보다 먼 만료를 거절하기 때문이다. 연결기 heartbeat에서 grant가 만료됐지만 웹이 아직 갱신할 수 있으면 `403 WEB_PERMISSION_EXPIRED`, 로그아웃·팀 전환·연결 해제로 회수됐으면 `403 WEB_PERMISSION_REVOKED`로 응답한다. 0.1.10부터 앱은 앞의 코드에서만 갱신을 기다린다. 연결기는 이를 갱신할 수 없다. 허가 만료·401/403이면 즉시 작업을 취소하고 새 claim을 중단한다. 웹 로그아웃·팀 변경은 즉시 서버 grant를 회수한다. 쿠키 삭제·웹 강제종료는 마지막 허가부터 최장 2분 뒤 차단된다.
 
 작업은 DB에 queued로 기록하고 즉시 202 응답한다. 연결기는 claim을 2초 간격으로 요청하며, 유효한 grant의 자기 기기 작업 1개만 원자 claim한다. claimToken은 작업 결과 제출용 별도 자격이고 재사용된 requestId는 동일 작업을 돌려준다. 결과는 full accumulated response와 단조 증가 sequence를 전송한다. 같은/낮은 sequence는 중복으로 무시한다. 최종 상태 뒤 덮어쓰기·취소 후 응답·허가 만료 후 결과는 거절한다. 각 작업 최대 10분; 서버가 claim 시 전달하는 논문/분석 context와 질문만 사용한다.
 

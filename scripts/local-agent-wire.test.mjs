@@ -8,7 +8,7 @@ import { ConnectorSession } from "../connector/core/runtime.mjs";
 
 const enabled = process.env.HAPARK_ISOLATED_TESTS === "1" && process.env.DATABASE_URL?.startsWith("file:");
 
-test("real HTTP server and desktop runtime: pairing, research result, cancellation, logout and cookie-loss expiry", { skip: !enabled, timeout: 150_000 }, async () => {
+test("real HTTP server and desktop runtime: pairing, research result, cancellation, logout and cookie-loss expiry", { skip: !enabled, timeout: 240_000 }, async () => {
   const origin = process.env.LOCAL_AGENT_E2E_URL;
   assert.match(origin, /^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
   const cookies = new Map();
@@ -83,16 +83,18 @@ test("real HTTP server and desktop runtime: pairing, research result, cancellati
 
   // Same installed identity, new signed-in session: code is required again.
   await signIn(); paired = await pair();
+  const expires = Date.parse((await web(`/api/local-agent/status?deviceId=${identity.deviceId}`)).device.leaseExpiresAt);
   const heartbeat = await api.post("heartbeat", { providers: [provider()] }, identity);
-  const expires = Date.parse(heartbeat.leaseExpiresAt);
+  // The web grant lasts two minutes, but the app only ever sees 45 seconds ahead.
+  assert.ok(Date.parse(heartbeat.leaseExpiresAt) <= Date.now() + 45_000);
   cookies.clear(); // No logout request reaches the server.
   const expiring = new ConnectorSession({ api, identity, adapters: { codex: adapter } });
   expiring.setProviders([provider()]); expiring.start(heartbeat.leaseExpiresAt);
   try {
     await new Promise((accept, reject) => {
-      const timer = setTimeout(() => reject(new Error("Cookie-loss permission outlived its 45-second lease")), 47_000);
+      const timer = setTimeout(() => reject(new Error("Cookie-loss permission outlived its two-minute web grant")), expires - Date.now() + 5_000);
       const observe = (state) => {
-        if (state.status === "authorization_required") { clearTimeout(timer); expiring.off("state", observe); accept(); }
+        if (["authorization_required", "recovering"].includes(state.status)) { clearTimeout(timer); expiring.off("state", observe); accept(); }
       };
       expiring.on("state", observe);
     });
