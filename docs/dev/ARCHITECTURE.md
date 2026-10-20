@@ -152,7 +152,7 @@ src/
 
 ## 로컬 CLI 연결 (ADR-025)
 
-`lib/local-agent`와 인증된 `app/api/local-agent`가 페어링·45초 허가·DB 큐를 담당하고 `connector/` 설치앱이 기존 CLI를 실행한다. 웹은 자체 API만 호출한다. 질문은 적재 후 202로 끝나며 연결기가 claim/result를 전송한다. 앱 heartbeat는 웹 허가를 갱신하지 못한다. 서버리스 함수에서 CLI나 지속 WebSocket을 띄우지 않는다. 인증된 짧은 상태 조회로 연결을 동기화하며 기존 live Realtime의 역할은 유지한다. [상세](./LOCAL_AGENT.md).
+`lib/local-agent`와 인증된 `app/api/local-agent`가 페어링·2분 허가·DB 큐를 담당하고 `connector/` 설치앱이 기존 CLI를 실행한다. 웹은 자체 API만 호출한다. 질문은 적재 후 202로 끝나며 연결기가 claim/result를 전송한다. 앱 heartbeat는 웹 허가를 갱신하지 못한다. 서버리스 함수에서 CLI나 지속 WebSocket을 띄우지 않는다. 인증된 짧은 상태 조회로 연결을 동기화하며 기존 live Realtime의 역할은 유지한다. [상세](./LOCAL_AGENT.md).
 
 ## 개인 연구 채팅과 결과 수명 (ADR-026)
 

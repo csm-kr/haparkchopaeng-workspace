@@ -4,7 +4,7 @@ import type { Prisma, LocalAgentAttempt, LocalAgentDevice, LocalAgentGrant, Loca
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
 import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentBridgeMetadata, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
-import { ATTEMPT_MS, DESKTOP_HEARTBEAT_SECONDS, LEASE_MS, MAX_JOB_MS, MAX_PAIR_FAILURES, SNAPSHOT_FRESH_MS, WEB_HEARTBEAT_SECONDS, assertGrantUsable, hashCredential, pairingCode, sameCredential, validateDeviceToken } from "./security";
+import { ATTEMPT_MS, DESKTOP_HEARTBEAT_SECONDS, DESKTOP_LEASE_MS, LEASE_MS, MAX_JOB_MS, MAX_PAIR_FAILURES, SNAPSHOT_FRESH_MS, WEB_HEARTBEAT_SECONDS, assertGrantUsable, hashCredential, pairingCode, sameCredential, validateDeviceToken } from "./security";
 import { BridgeMetadataSchema, BridgeVersionSchema, EffortSchema, JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
 
 type Database = Prisma.TransactionClient;
@@ -23,6 +23,7 @@ const AgentExecutionSchema = z.object({ version: z.literal(1), kind: z.literal("
 function unavailable(): never { throw new HttpError(404, "NOT_FOUND", "연결 요청을 찾을 수 없어요. 웹에서 다시 연결해주세요."); }
 function conflict(): never { throw new HttpError(409, "CONNECTION_CHANGED", "연결 상태가 바뀌었어요. 다시 확인해주세요."); }
 function leaseUntil(now: Date, expiresAt: Date): Date { return new Date(Math.min(now.getTime() + LEASE_MS, expiresAt.getTime())); }
+function desktopLease(grantLease: Date, now = new Date()): string { return new Date(Math.min(grantLease.getTime(), now.getTime() + DESKTOP_LEASE_MS)).toISOString(); }
 function scopeWhere(scope: LocalAgentScope) { return { memberId: scope.memberId, teamId: scope.teamId, sessionKey: scope.sessionKey }; }
 
 async function assertMembership(db: Database, memberId: string, teamId: string): Promise<void> {
@@ -111,7 +112,7 @@ export async function cancelAttempt(scope: LocalAgentScope, id: string): Promise
 
 async function desktopAttemptView(db: Database, attempt: LocalAgentAttempt, deviceId: string | null, grant: LocalAgentGrant | null): Promise<LocalAgentDesktopAttempt> {
   const [team, member] = await Promise.all([db.team.findUnique({ where: { id: attempt.teamId }, select: { name: true } }), db.member.findUnique({ where: { id: attempt.memberId }, select: { name: true } })]);
-  return { attemptId: attempt.id, version: attempt.version, status: deviceId ? "connected" : "awaiting_code", expiresAt: attempt.expiresAt.toISOString(), siteName: "하박조팽", teamName: team?.name ?? "팀", memberName: member?.name ?? "사용자", deviceId, leaseExpiresAt: grant?.leaseExpiresAt.toISOString() ?? null };
+  return { attemptId: attempt.id, version: attempt.version, status: deviceId ? "connected" : "awaiting_code", expiresAt: attempt.expiresAt.toISOString(), siteName: "하박조팽", teamName: team?.name ?? "팀", memberName: member?.name ?? "사용자", deviceId, leaseExpiresAt: grant ? desktopLease(grant.leaseExpiresAt) : null };
 }
 
 async function loadDesktopAttempt(db: Database, attemptId: string, launchToken: string, now: Date): Promise<LocalAgentAttempt> {
@@ -282,7 +283,7 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
     }
     await expireDeviceJobs(tx, device.id, now);
     const cancelled = await tx.localAgentJob.findMany({ where: { deviceId: device.id, status: "cancelled", claimedAt: { not: null }, updatedAt: { gt: new Date(now.getTime() - MAX_JOB_MS) } }, select: { id: true }, take: 100 });
-    return { leaseExpiresAt: grant.leaseExpiresAt.toISOString(), cancelJobIds: cancelled.map((row) => row.id), heartbeatIntervalSeconds: DESKTOP_HEARTBEAT_SECONDS };
+    return { leaseExpiresAt: desktopLease(grant.leaseExpiresAt, now), cancelJobIds: cancelled.map((row) => row.id), heartbeatIntervalSeconds: DESKTOP_HEARTBEAT_SECONDS };
   });
 }
 

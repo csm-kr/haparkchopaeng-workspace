@@ -1,7 +1,10 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { HttpError } from "@/lib/http";
 
-export const LEASE_MS = 45_000;
+// Browsers wake hidden tabs about once a minute, so the web grant must outlive one missed renewal.
+export const LEASE_MS = 120_000;
+// Installed apps reject a lease more than 60 seconds ahead; they refresh it every desktop heartbeat.
+export const DESKTOP_LEASE_MS = 45_000;
 export const WEB_HEARTBEAT_SECONDS = 15;
 export const DESKTOP_HEARTBEAT_SECONDS = 5;
 export const ATTEMPT_MS = 5 * 60_000;
