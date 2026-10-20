@@ -17,8 +17,7 @@ const env = {
   PREVIEW_RELEASE_TAG: tag, PREVIEW_EXPECTED_SHA: sha,
 };
 const names = ['web', 'postgres', 'connector (windows-latest, win, x64)',
-  'connector (macos-15, mac, arm64)', 'connector (macos-15-intel, mac, x64)',
-  'connector (ubuntu-24.04, linux, x64)'];
+  'connector (macos-15, mac, arm64)', 'connector (ubuntu-24.04, linux, x64)'];
 
 function githubFixture(overrides = {}) {
   const responses = {
@@ -31,7 +30,7 @@ function githubFixture(overrides = {}) {
         head_repository: { full_name: repository }, status: 'completed', conclusion: 'success' }],
     },
     [`repos/${repository}/actions/runs/100/jobs?filter=latest&per_page=100`]: {
-      total_count: 6, jobs: names.map(name => ({ name, status: 'completed', conclusion: 'success' })),
+      total_count: names.length, jobs: names.map(name => ({ name, status: 'completed', conclusion: 'success' })),
     },
     ...overrides,
   };
@@ -97,8 +96,8 @@ test('the final upload refresh also rejects a newly ambiguous draft tag', async 
 test('an apparently successful run with a skipped native architecture cannot authorize release uploads', async () => {
   const github = githubFixture({
     [`repos/${repository}/actions/runs/100/jobs?filter=latest&per_page=100`]: {
-      total_count: 6, jobs: names.map(name => ({ name, status: 'completed',
-        conclusion: name.includes('macos-15-intel') ? 'skipped' : 'success' })),
+      total_count: names.length, jobs: names.map(name => ({ name, status: 'completed',
+        conclusion: name.includes('macos-15') ? 'skipped' : 'success' })),
     },
   });
   await assert.rejects(preflightPreview({ env, head: sha, github }), { code: 'SUCCESSFUL_VALIDATION_REQUIRED' });
@@ -164,7 +163,7 @@ test('a matching CI result from another repository or a missing native job is in
   await assert.rejects(preflightPreview({ env, head: sha, github }), { code: 'SUCCESSFUL_VALIDATION_REQUIRED' });
   const missing = githubFixture({
     [`repos/${repository}/actions/runs/100/jobs?filter=latest&per_page=100`]: {
-      total_count: 5, jobs: names.slice(0, 5).map(name => ({ name, status: 'completed', conclusion: 'success' })),
+      total_count: names.length - 1, jobs: names.slice(0, -1).map(name => ({ name, status: 'completed', conclusion: 'success' })),
     },
   });
   await assert.rejects(preflightPreview({ env, head: sha, github: missing }), { code: 'SUCCESSFUL_VALIDATION_REQUIRED' });
@@ -257,9 +256,8 @@ test('a remote tag moved after preflight still blocks the upload mutation', asyn
   assert.equal(uploads, 0);
 });
 
-test('Intel macOS and Ubuntu publish only their own verified installer', async t => {
+test('Ubuntu publishes only its own verified installer', async t => {
   for (const [platform, architecture, name] of [
-    ['mac', 'x64', 'AI-Bridge-0.1.1-mac-x64.dmg'],
     ['linux', 'x64', 'AI-Bridge-0.1.1-linux-x64.deb'],
   ]) await t.test(`${platform}-${architecture}`, async child => {
     const fixture = await packageFixture(child, platform, architecture);

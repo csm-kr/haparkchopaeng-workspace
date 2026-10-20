@@ -14,7 +14,7 @@
     "start:dev": "node ../scripts/start-desktop.mjs --connector-dev --no-auto-open",
     "configure": "node ../scripts/configure-desktop.mjs",
     "package:win": "npm run configure && electron-builder --win nsis --x64",
-    "package:mac": "npm run configure && node ../scripts/mac-builder.test.mjs && electron-builder --config mac-builder.cjs --mac dmg --arm64 --x64",
+    "package:mac": "npm run configure && node ../scripts/mac-builder.test.mjs && electron-builder --config mac-builder.cjs --mac dmg --arm64",
     "package:linux": "npm run configure && electron-builder --linux deb --x64",
     "package:dir": "npm run configure && electron-builder --dir"
   },

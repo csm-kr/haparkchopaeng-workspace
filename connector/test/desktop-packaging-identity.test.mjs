@@ -20,6 +20,10 @@ test('the product macOS package uses an ASCII bundle/executable while preserving
   assert.equal(source.build.mac.hardenedRuntime, true);
 });
 
+test('the Mac build ships Apple Silicon only; Intel Macs are no longer built or released', () => {
+  assert.match(source.scripts['package:mac'], /--mac dmg --arm64$/);
+});
+
 test('the Mac build ad-hoc signs the whole bundle so a downloaded copy is not rejected as damaged', () => {
   assert.equal(source.build.mac.identity, '-');
   assert.equal(require('../desktop/mac-builder.cjs').mac.identity, '-');

@@ -60,9 +60,6 @@ jobs:
           - os: macos-15
             platform: mac
             architecture: arm64
-          - os: macos-15-intel
-            platform: mac
-            architecture: x64
           - os: ubuntu-24.04
             platform: linux
             architecture: x64
