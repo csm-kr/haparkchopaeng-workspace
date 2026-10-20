@@ -258,7 +258,12 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
     if (!locked.count) throw new HttpError(401, "DEVICE_UNAUTHORIZED", "AI 브릿지 승인이 필요해요. 웹에서 다시 연결해주세요.");
     const device = await authenticateDesktop(tx, identity);
     const grant = await tx.localAgentGrant.findFirst({ where: { deviceId: device.id, revokedAt: null, leaseExpiresAt: { gt: now } }, orderBy: { leaseExpiresAt: "desc" } });
-    if (!grant) throw new HttpError(403, "WEB_PERMISSION_EXPIRED", "웹에서 AI 연결을 다시 눌러주세요.");
+    if (!grant) {
+      // Apps wait for a late renewal only while an unrevoked grant can still be renewed by the web.
+      const renewable = await tx.localAgentGrant.findFirst({ where: { deviceId: device.id, revokedAt: null }, select: { id: true } });
+      if (renewable) throw new HttpError(403, "WEB_PERMISSION_EXPIRED", "웹에서 AI 연결을 다시 눌러주세요.");
+      throw new HttpError(403, "WEB_PERMISSION_REVOKED", "웹 연결이 끝났어요. 웹에서 AI 연결을 다시 눌러주세요.");
+    }
     const parsedMetadata = BridgeMetadataSchema.safeParse(metadata);
     if (!parsedMetadata.success) throw new HttpError(400, "BAD_REQUEST", "요청 내용을 확인해주세요.");
     for (const candidate of providers) {

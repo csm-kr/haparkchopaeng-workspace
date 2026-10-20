@@ -293,7 +293,8 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
     if (!claim) throw new Error("missing claim");
     await revokeSession(scope().sessionKey);
     expect((await getStatus(scope(), identity.deviceId)).device).toBeNull();
-    await expect(desktopHeartbeat(identity, [snapshot()], metadata)).rejects.toMatchObject({ status: 403 });
+    // A revoked grant must not look like a late renewal that the app should wait for.
+    await expect(desktopHeartbeat(identity, [snapshot()], metadata)).rejects.toMatchObject({ status: 403, code: "WEB_PERMISSION_REVOKED" });
     await expect(renewWebPermission(scope(), identity.deviceId)).rejects.toMatchObject({ status: 403 });
     await expect(claimJob(identity)).rejects.toMatchObject({ status: 403 });
     await expect(submitResult(identity, { jobId: created.id, claimToken: claim.claimToken, sequence: 1, status: "completed", response: "회수 후 응답" })).rejects.toMatchObject({ status: 403 });
