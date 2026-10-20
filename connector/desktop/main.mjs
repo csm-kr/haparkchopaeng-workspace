@@ -2,8 +2,12 @@ import { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, shell, screen } 
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename } from 'node:path';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, lstat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { homedir } from 'node:os';
+import { promisify } from 'node:util';
 import { createConnectorTray, shouldHideWindowToTray, shutdownWithTray } from './tray.mjs';
+import { retireLegacyMacBundles } from './legacy-mac-bundle.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pendingUrls = [];
@@ -58,6 +62,11 @@ else {
       available: () => safeStorage.isEncryptionAvailable() && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'),
       encrypt: value => safeStorage.encryptString(value), decrypt: value => safeStorage.decryptString(value),
     });
+    // Unregister pre-rename copies first so the URL scheme resolves to this bundle.
+    if (!quietQa) await retireLegacyMacBundles({ platform: process.platform, packaged: app.isPackaged, execPath: process.execPath, home: homedir(), lstat,
+      readBundleId: async path => (await promisify(execFile)('/usr/bin/plutil', ['-extract', 'CFBundleIdentifier', 'raw', '-o', '-', join(path, 'Contents', 'Info.plist')], { timeout: 5000 })).stdout.trim(),
+      unregister: path => promisify(execFile)('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-u', path], { timeout: 10_000 }),
+      trash: path => shell.trashItem(path) });
     for (const application of applications) {
       if (!quietQa) app.setAsDefaultProtocolClient(application.scheme, ...(app.isPackaged ? [] : [process.execPath, [directory, '--connector-dev', '--no-auto-open']]));
     }

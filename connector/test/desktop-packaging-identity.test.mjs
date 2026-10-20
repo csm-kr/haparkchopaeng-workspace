@@ -10,7 +10,8 @@ const source = JSON.parse(await readFile(new URL('../desktop/package.json', impo
 const require = createRequire(import.meta.url);
 
 test('the product macOS package uses an ASCII bundle/executable while preserving its Korean display identity', () => {
-  assert.equal(source.build.mac.executableName, 'hapark-connector');
+  // electron-builder names the Mac bundle after this value, so users see AI Bridge.app instead of the old hapark-connector.app.
+  assert.equal(source.build.mac.executableName, 'AI Bridge');
   assert.equal(source.productName, 'AI 브릿지');
   assert.equal(source.version, '0.1.8');
   assert.equal(source.stableProfileName, '하박조팽 연결기');
@@ -37,12 +38,12 @@ test('installed-package configuration separates the Mac bundle filename from its
       development: false, applications: [{ scheme: 'hapark-connect' }],
     }), { flag: 'wx' });
     const config = await loadConfiguration(directory);
-    assert.equal(config.macBundleName, 'hapark-connector');
+    assert.equal(config.macBundleName, 'AI Bridge');
     assert.equal(config.productName, 'AI 브릿지');
     assert.equal(config.stableProfileName, '하박조팽 연결기');
     assert.equal(config.appId, 'kr.hapark.connector');
     assert.equal(config.scheme, 'hapark-connect');
-    assert.equal(config.macInternalName, 'hapark-connector');
+    assert.equal(config.macInternalName, 'AI Bridge');
     assert.equal(config.macDisplayName, source.productName);
     assert.equal(config.runtimeProductName, source.productName);
     assert.deepEqual(config.profileRelativePath, []);
@@ -57,8 +58,8 @@ test('only the Mac build command selects the full native naming override', () =>
   assert.doesNotMatch(source.scripts['package:win'], /mac-builder/);
   assert.doesNotMatch(source.scripts['package:linux'], /mac-builder/);
   const config = require('../desktop/mac-builder.cjs');
-  assert.equal(config.productName, 'hapark-connector');
-  assert.equal(config.mac.executableName, 'hapark-connector');
+  assert.equal(config.productName, 'AI Bridge');
+  assert.equal(config.mac.executableName, 'AI Bridge');
   assert.equal(config.mac.extendInfo.CFBundleDisplayName, source.productName);
   assert.equal(config.extraMetadata.productName, source.productName);
   assert.deepEqual(config.win, source.build.win);

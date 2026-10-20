@@ -26,13 +26,13 @@
     "appId": "kr.hapark.connector",
     "artifactName": "hapark-connector-${version}-${os}-${arch}.${ext}",
     "directories": { "output": "../dist" },
-    "files": ["main.mjs", "tray.mjs", "preload.cjs", "renderer/**", "assets/**", "apps.generated.json", "package.json"],
+    "files": ["main.mjs", "tray.mjs", "legacy-mac-bundle.mjs", "preload.cjs", "renderer/**", "assets/**", "apps.generated.json", "package.json"],
     "extraResources": [{ "from": "../core", "to": "core", "filter": ["**/*.mjs"] }],
     "protocols": [{ "name": "AI 브릿지", "schemes": ["hapark-connect"] }],
     "asar": true,
     "win": { "target": ["nsis"], "icon": "assets/icon.ico", "signExecutable": false },
     "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "deleteAppDataOnUninstall": false, "shortcutName": "AI 브릿지", "include": "installer.nsh" },
-    "mac": { "target": ["dmg"], "executableName": "hapark-connector", "icon": "assets/icon.png", "category": "public.app-category.productivity", "hardenedRuntime": true, "identity": "-", "gatekeeperAssess": false },
+    "mac": { "target": ["dmg"], "executableName": "AI Bridge", "icon": "assets/icon.png", "category": "public.app-category.productivity", "hardenedRuntime": true, "identity": "-", "gatekeeperAssess": false },
     "linux": { "target": ["deb"], "maintainer": "Hapark maintainers", "icon": "assets/icon.png", "category": "Utility", "mimeTypes": ["x-scheme-handler/hapark-connect"], "desktop": { "entry": { "Name": "AI 브릿지", "Comment": "웹과 내 PC의 AI 연결", "Terminal": "false" } } },
     "publish": null
   }
