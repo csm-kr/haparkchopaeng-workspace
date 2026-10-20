@@ -53,17 +53,92 @@ test('session claims one job, streams accumulated sequenced answers and does not
 test('expired web lease and server 401 abort running CLI immediately and stop future claims', async () => {
   for (const unauthorized of [false, true]) {
     let now = 1000, aborted = false, denied = false, claimCount = 0;
-    const api = { post: async (path) => { if (path === 'heartbeat') { if (denied) throw Object.assign(new Error('Unauthorized'), { status: 401 }); return { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [], heartbeatIntervalSeconds: 5 }; } if (path === 'claim') { claimCount += 1; return claim; } return {}; } };
+    const api = { post: async (path) => { if (path === 'heartbeat') { if (denied) throw Object.assign(new Error('Unauthorized'), { status: 401 }); if (now >= 46000) throw Object.assign(new Error('Expired'), { status: 403, code: 'WEB_PERMISSION_EXPIRED' }); return { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [], heartbeatIntervalSeconds: 5 }; } if (path === 'claim') { claimCount += 1; return claim; } return {}; } };
     const session = new ConnectorSession({ api, identity, now: () => now, setIntervalFn: () => 1, clearIntervalFn: () => {}, adapters: { codex: { run: async ({ signal }) => new Promise(resolve => signal.addEventListener('abort', () => { aborted = true; resolve(); }, { once: true })) } } });
     session.setProviders(providers); session.start(new Date(46000).toISOString());
     await session.tick();
     now = unauthorized ? 7000 : 47000; denied = unauthorized;
     await session.tick(); await session.whenIdle();
     assert.equal(aborted, true);
-    assert.equal(session.getState().status, 'authorization_required');
-    await session.tick();
+    // A lapsed web lease waits for the web to renew; a revoked device credential is final.
+    assert.equal(session.getState().status, unauthorized ? 'authorization_required' : 'recovering');
+    now += 5000; await session.tick();
     assert.equal(claimCount, 1);
+    session.stop();
   }
+});
+
+test('a late web renewal resumes the same session without pairing again', async () => {
+  let now = 1000, lease = 46000, claims = 0;
+  const api = { post: async (path) => {
+    if (path === 'heartbeat') {
+      if (now >= lease) throw Object.assign(new Error('Expired'), { status: 403, code: 'WEB_PERMISSION_EXPIRED' });
+      return { leaseExpiresAt: new Date(Math.min(lease, now + 45000)).toISOString(), cancelJobIds: [] };
+    }
+    if (path === 'claim') { claims += 1; return null; }
+    return {};
+  } };
+  const states = [];
+  const session = new ConnectorSession({ api, identity, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: {} });
+  session.on('state', value => states.push(value.status));
+  session.start(new Date(lease).toISOString());
+  await session.tick();
+  assert.equal(claims, 1);
+  // The hidden tab missed its renewal; the server refuses until the web renews.
+  now = 50000; await session.tick();
+  assert.equal(session.getState().status, 'recovering');
+  assert.equal(claims, 1);
+  now = 55000; await session.tick();
+  assert.equal(session.getState().status, 'recovering');
+  assert.equal(claims, 1);
+  lease = 180000; now = 60000; await session.tick();
+  assert.equal(session.getState().status, 'connected');
+  assert.equal(session.getState().message, '');
+  assert.equal(claims, 2);
+  assert.equal(states.includes('authorization_required'), false);
+  session.stop();
+});
+
+test('a local lease lapse without any server reply also waits instead of ending the session', async () => {
+  let now = 1000, offline = false;
+  const api = { post: async (path) => {
+    if (offline) throw Object.assign(new Error('Network down'), { status: undefined });
+    return path === 'heartbeat' ? { leaseExpiresAt: new Date(now + 45000).toISOString(), cancelJobIds: [] } : null;
+  } };
+  const session = new ConnectorSession({ api, identity, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: {} });
+  session.start(new Date(46000).toISOString());
+  await session.tick();
+  offline = true; now = 47000; await session.tick();
+  assert.equal(session.getState().status, 'recovering');
+  offline = false; now = 52000; await session.tick();
+  assert.equal(session.getState().status, 'connected');
+  session.stop();
+});
+
+test('revocation, removal and expired pairings still end the session immediately', async () => {
+  for (const failure of [{ status: 401, code: 'DEVICE_UNAUTHORIZED' }, { status: 403, code: 'FORBIDDEN' }, { status: 410, code: 'PAIRING_EXPIRED' }]) {
+    let now = 1000;
+    const api = { post: async (path) => { if (path === 'heartbeat' && now > 1000) throw Object.assign(new Error('Denied'), failure); return path === 'heartbeat' ? { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [] } : null; } };
+    const session = new ConnectorSession({ api, identity, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: {} });
+    session.start(new Date(46000).toISOString());
+    await session.tick();
+    now = 6000; await session.tick();
+    assert.equal(session.getState().status, 'authorization_required', failure.code);
+  }
+});
+
+test('a web lease that stays lapsed past the recovery window ends the session', async () => {
+  let now = 1000;
+  const api = { post: async (path) => { if (path === 'heartbeat' && now >= 46000) throw Object.assign(new Error('Expired'), { status: 403, code: 'WEB_PERMISSION_EXPIRED' }); return path === 'heartbeat' ? { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [] } : null; } };
+  const session = new ConnectorSession({ api, identity, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: {}, recoveryMs: 60000 });
+  session.start(new Date(46000).toISOString());
+  await session.tick();
+  now = 47000; await session.tick();
+  assert.equal(session.getState().status, 'recovering');
+  now = 100000; await session.tick();
+  assert.equal(session.getState().status, 'recovering');
+  now = 107000; await session.tick();
+  assert.equal(session.getState().status, 'authorization_required');
 });
 
 test('server cancellation aborts only the matching job without sending a late final answer', async () => {
