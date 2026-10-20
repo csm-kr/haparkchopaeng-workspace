@@ -45,9 +45,9 @@ test('ad-hoc signing under hardened runtime keeps the builder entitlement that l
 });
 
 test('actual builder AppInfo separates ASCII native names from the Korean runtime metadata', () => {
-  assert.equal(appInfo.productName, 'hapark-connector');
-  assert.equal(appInfo.sanitizedProductName, 'hapark-connector');
-  assert.equal(appInfo.productFilename, 'hapark-connector');
+  assert.equal(appInfo.productName, 'AI Bridge');
+  assert.equal(appInfo.sanitizedProductName, 'AI Bridge');
+  assert.equal(appInfo.productFilename, 'AI Bridge');
   assert.equal(metadata.productName, source.productName);
   assert.equal(appInfo.id, source.build.appId);
 });
@@ -74,15 +74,15 @@ test('actual Mac plist and Helper renaming preserve the display brand and a cohe
     await createMacApp(packager, owned, null, false);
     const installed = join(owned, `${appInfo.productFilename}.app`, 'Contents');
     const plist = await parsePlistFile(join(installed, 'Info.plist'));
-    assert.equal(plist.CFBundleName, 'hapark-connector');
+    assert.equal(plist.CFBundleName, 'AI Bridge');
     assert.equal(plist.CFBundleDisplayName, source.productName);
-    assert.equal(plist.CFBundleExecutable, 'hapark-connector');
+    assert.equal(plist.CFBundleExecutable, 'AI Bridge');
     const helperNames = await readdir(join(installed, 'Frameworks'));
-    assert.deepEqual(helperNames.sort(), suffixes.map(suffix => `hapark-connector${suffix}.app`).sort());
+    assert.deepEqual(helperNames.sort(), suffixes.map(suffix => `AI Bridge${suffix}.app`).sort());
     for (const suffix of suffixes) {
-      const helper = join(installed, 'Frameworks', `hapark-connector${suffix}.app`, 'Contents');
-      assert.equal((await parsePlistFile(join(helper, 'Info.plist'))).CFBundleExecutable, `hapark-connector${suffix}`);
-      assert.equal(await readFile(join(helper, 'MacOS', `hapark-connector${suffix}`), 'utf8'), 'synthetic fixture: never executed');
+      const helper = join(installed, 'Frameworks', `AI Bridge${suffix}.app`, 'Contents');
+      assert.equal((await parsePlistFile(join(helper, 'Info.plist'))).CFBundleExecutable, `AI Bridge${suffix}`);
+      assert.equal(await readFile(join(helper, 'MacOS', `AI Bridge${suffix}`), 'utf8'), 'synthetic fixture: never executed');
     }
   } finally { assertInside(owned, tmpdir()); await rm(owned, { recursive: true }); }
 });

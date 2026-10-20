@@ -7,9 +7,9 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const shaPattern = /^[a-f0-9]{40}$/;
+// Intel Macs are no longer built or released; only Apple Silicon Mac installers ship.
 const expectedJobs = ['web', 'postgres', 'connector (windows-latest, win, x64)',
-  'connector (macos-15, mac, arm64)', 'connector (macos-15-intel, mac, x64)',
-  'connector (ubuntu-24.04, linux, x64)'];
+  'connector (macos-15, mac, arm64)', 'connector (ubuntu-24.04, linux, x64)'];
 
 function requireValue(condition, code) {
   if (!condition) throw Object.assign(new Error(code), { code });
