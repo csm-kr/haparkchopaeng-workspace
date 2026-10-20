@@ -13,7 +13,7 @@ test('the product macOS package uses an ASCII bundle/executable while preserving
   // electron-builder names the Mac bundle after this value, so users see AI Bridge.app instead of the old hapark-connector.app.
   assert.equal(source.build.mac.executableName, 'AI Bridge');
   assert.equal(source.productName, 'AI 브릿지');
-  assert.equal(source.version, '0.1.9');
+  assert.equal(source.version, '0.1.10');
   assert.equal(source.stableProfileName, '하박조팽 연결기');
   assert.equal(source.build.appId, 'kr.hapark.connector');
   assert.deepEqual(source.build.protocols.flatMap(value => value.schemes), ['hapark-connect']);

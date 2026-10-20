@@ -2,14 +2,15 @@ import { EventEmitter } from 'node:events';
 import { ID_PATTERN } from './security.mjs';
 
 const MAX_RESPONSE = 80000;
+const LAPSED_MESSAGE = '웹 연결을 다시 확인하고 있어요.';
 const BRIDGE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/;
 export class ConnectorSession extends EventEmitter {
-  constructor({ api, identity, adapters, bridgeVersion, bridgeArchitecture, now = Date.now, setIntervalFn = setInterval, clearIntervalFn = clearInterval, maxJobMs = 600000 }) {
+  constructor({ api, identity, adapters, bridgeVersion, bridgeArchitecture, now = Date.now, setIntervalFn = setInterval, clearIntervalFn = clearInterval, maxJobMs = 600000, recoveryMs = 600000 }) {
     super(); this.api = api; this.identity = identity; this.adapters = adapters; this.now = now;
     if (bridgeVersion !== undefined && (typeof bridgeVersion !== 'string' || bridgeVersion.length > 64 || !BRIDGE_VERSION_PATTERN.test(bridgeVersion))) throw new Error('Invalid bridge version.');
     if (bridgeArchitecture !== undefined && !['arm64', 'x64'].includes(bridgeArchitecture)) throw new Error('Invalid bridge architecture.');
     this.bridgeMetadata = { ...(bridgeVersion !== undefined ? { bridgeVersion } : {}), ...(bridgeArchitecture !== undefined ? { bridgeArchitecture } : {}) };
-    this.setIntervalFn = setIntervalFn; this.clearIntervalFn = clearIntervalFn; this.maxJobMs = maxJobMs;
+    this.setIntervalFn = setIntervalFn; this.clearIntervalFn = clearIntervalFn; this.maxJobMs = maxJobMs; this.recoveryMs = recoveryMs; this.lapsedAt = null;
     this.state = { status: 'disconnected', providers: [], currentJobId: null, message: '' };
     this.leaseExpiresAt = 0; this.timer = null; this.busy = false; this.lastHeartbeat = -Infinity; this.lastClaim = -Infinity;
     this.activeJob = null; this.jobPromise = Promise.resolve(); this.controller = null;
@@ -20,8 +21,8 @@ export class ConnectorSession extends EventEmitter {
   start(leaseExpiresAt) {
     this.stop(); this.controller = new AbortController();
     if (!this.setLease(leaseExpiresAt)) { this.expire(); return; }
-    this.state.status = 'connected'; this.state.message = ''; this.lastHeartbeat = -Infinity; this.lastClaim = -Infinity;
-    this.timer = this.setIntervalFn(() => { if (!this.checkLease()) return; void this.tick(); }, 250);
+    this.state.status = 'connected'; this.state.message = ''; this.lastHeartbeat = -Infinity; this.lastClaim = -Infinity; this.lapsedAt = null;
+    this.timer = this.setIntervalFn(() => { void this.tick(); }, 250);
     this.timer?.unref?.(); this.emitState();
   }
   setLease(value) {
@@ -29,7 +30,20 @@ export class ConnectorSession extends EventEmitter {
     if (!Number.isFinite(expires) || expires <= this.now() || expires > this.now() + 60000) return false;
     this.leaseExpiresAt = expires; return true;
   }
-  checkLease() { if (this.state.status !== 'connected' && this.state.status !== 'recovering') return false; if (this.now() >= this.leaseExpiresAt) { this.expire(); return false; } return true; }
+  running() { return this.state.status === 'connected' || this.state.status === 'recovering'; }
+  checkLease() { if (!this.running()) return false; if (this.now() >= this.leaseExpiresAt) { this.lapse(); return false; } return true; }
+  // Hidden tabs and sleeping PCs renew late. Stop work now, keep asking the server, and resume on a fresh lease.
+  lapse() {
+    this.lapsedAt ??= this.now();
+    if (this.now() - this.lapsedAt >= this.recoveryMs) { this.expire(); return; }
+    this.activeJob?.controller.abort();
+    if (this.state.status !== 'recovering' || this.state.message !== LAPSED_MESSAGE) { this.state.status = 'recovering'; this.state.message = LAPSED_MESSAGE; this.emitState(); }
+  }
+  denied(error) {
+    if (error?.code === 'WEB_PERMISSION_EXPIRED') { this.leaseExpiresAt = 0; this.lapse(); return true; }
+    if ([401, 403, 410].includes(error?.status)) { this.expire(); return true; }
+    return false;
+  }
   expire() { this.stop('authorization_required', '웹에서 AI 연결을 눌러 다시 연결해 주세요.'); }
   stop(status = 'disconnected', message = '') {
     if (this.timer !== null) this.clearIntervalFn(this.timer); this.timer = null;
@@ -38,14 +52,17 @@ export class ConnectorSession extends EventEmitter {
     this.emitState();
   }
   async tick() {
-    if (!this.checkLease() || this.busy) return;
+    if (!this.running()) return;
+    this.checkLease();
+    if (!this.running() || this.busy) return;
     this.busy = true;
     try {
       if (this.now() - this.lastHeartbeat >= 5000) {
         this.lastHeartbeat = this.now();
         const heartbeat = await this.api.post('heartbeat', { providers: this.state.providers, ...this.bridgeMetadata }, this.identity, this.controller.signal);
-        if (!this.checkLease()) return;
+        if (!this.running()) return;
         if (!this.setLease(heartbeat?.leaseExpiresAt)) { this.expire(); return; }
+        this.lapsedAt = null;
         if (this.activeJob && Array.isArray(heartbeat?.cancelJobIds) && heartbeat.cancelJobIds.includes(this.activeJob.id)) this.activeJob.controller.abort();
         this.state.status = 'connected'; this.state.message = ''; this.emitState();
       }
@@ -59,8 +76,7 @@ export class ConnectorSession extends EventEmitter {
         this.jobPromise = this.execute(claim, current).finally(() => { if (this.activeJob === current) { this.activeJob = null; this.state.currentJobId = null; this.emitState(); } });
       }
     } catch (error) {
-      if ([401, 403, 410].includes(error.status)) this.expire();
-      else if (this.checkLease()) { this.state.status = 'recovering'; this.state.message = '연결을 복구하고 있어요.'; this.emitState(); }
+      if (!this.denied(error) && this.checkLease()) { this.state.status = 'recovering'; this.state.message = '연결을 복구하고 있어요.'; this.emitState(); }
     } finally { this.busy = false; }
   }
   validClaim(claim) {
@@ -79,7 +95,7 @@ export class ConnectorSession extends EventEmitter {
           if (signal.aborted || !this.checkLease()) return;
           try { return await this.api.post('result', input, this.identity, signal); }
           catch (error) {
-            if ([401, 403, 410].includes(error.status)) { this.expire(); throw error; }
+            if (this.denied(error)) throw error;
             if (error.status === 409) { active.controller.abort(); throw error; }
             if (retry === 2 || (error.status && error.status < 500 && error.status !== 429)) throw error;
             await new Promise(resolve => {
@@ -90,7 +106,7 @@ export class ConnectorSession extends EventEmitter {
           }
         }
       });
-      queue.catch(error => { if ([401, 403, 410].includes(error.status)) this.expire(); }); lastPostAt = this.now(); return queue;
+      queue.catch(error => { this.denied(error); }); lastPostAt = this.now(); return queue;
     };
     const timeout = setTimeout(() => active.controller.abort(), this.maxJobMs); timeout.unref?.();
     try {
@@ -105,12 +121,12 @@ export class ConnectorSession extends EventEmitter {
       }, onQuota: quota => { provider.quota = quota; provider.observedAt = new Date(this.now()).toISOString(); provider.quotaObservedAt = quota ? provider.observedAt : undefined; this.emitState(); } });
       if (!signal.aborted && this.checkLease()) await post('completed');
     } catch (error) {
-      if ([401, 403, 410].includes(error.status)) this.expire();
+      this.denied(error);
       if (!signal.aborted && this.checkLease()) {
         // Only adapter-defined, human-language errors leave the device. Never raw stderr or stack traces.
         const message = error.code === 'LOGIN_REQUIRED' ? 'PC에서 해당 CLI에 다시 로그인해 주세요.' : error.code === 'RATE_LIMITED' ? '구독 사용 한도에 도달했어요.' : error.code === 'BILLING_REQUIRED' ? 'CLI 계정의 이용 권한과 결제 상태를 확인해 주세요.' : 'AI 응답을 완료하지 못했어요. 다시 시도해 주세요.';
         if (error.code === 'LOGIN_REQUIRED') { const p = this.state.providers.find(p => p.provider === claim.job.provider); if (p) { p.status = 'login_required'; p.models = []; p.quota = null; p.quotaObservedAt = undefined; } }
-        try { await queue.catch(() => {}); await this.api.post('result', { jobId: claim.job.id, claimToken: claim.claimToken, sequence: ++sequence, status: 'failed', response, error: message }, this.identity, signal); } catch (failure) { if ([401, 403, 410].includes(failure.status)) this.expire(); }
+        try { await queue.catch(() => {}); await this.api.post('result', { jobId: claim.job.id, claimToken: claim.claimToken, sequence: ++sequence, status: 'failed', response, error: message }, this.identity, signal); } catch (failure) { this.denied(failure); }
       }
     } finally { clearTimeout(timeout); await queue.catch(() => {}); }
   }
