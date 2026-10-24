@@ -76,33 +76,55 @@ async function mockConnector(page: Page, connected = false, currentDevice: Local
   };
 }
 
-test("연결 전 설정에는 안내와 연결하기만 표시한다", async ({ page }) => {
+test("연결 전 설정에는 설치와 앱 열기 선택지를 표시한다", async ({ page }) => {
   await login(page);
   const connector = await mockConnector(page);
   await page.goto("/profile");
   const entry = page.getByRole("complementary").getByRole("button", { name: "AI 연결", exact: true });
   await entry.click();
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
-  await expect(dialog.getByText("이 컴퓨터의 AI를 연결해 주세요.", { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("button")).toHaveCount(2);
+  await expect(dialog.getByRole("heading", { name: "내 PC의 AI를 연결해요", exact: true })).toBeVisible();
+  await expect(dialog.getByText("처음 사용", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "설치 파일 받기", exact: true })).toBeEnabled();
+  await expect(dialog.getByText("이미 설치함", { exact: true })).toBeVisible();
+  const openBridge = dialog.getByRole("button", { name: "AI 브릿지 열기", exact: true });
+  await expect(openBridge).toBeEnabled();
   await expect(dialog.getByRole("tablist")).toHaveCount(0);
   await expect(dialog.getByRole("combobox")).toHaveCount(0);
   await expect(dialog.getByText("Effort", { exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("region", { name: "AI 브릿지 버전" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "완료", exact: true })).toHaveCount(0);
   expect(connector.attempts()).toBe(0);
+  expect(connector.downloadRequests()).toBe(0);
   await dialog.screenshot({ path: test.info().outputPath("connection-settings-simple.png") });
-  await page.setViewportSize({ width: 390, height: 844 });
-  const box = await dialog.boundingBox();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
-  expect(box!.height).toBeLessThan(260);
+  await expect(dialog.getByRole("button", { name: "연결창 닫기", exact: true })).toBeFocused();
+  for (const height of [844, 420]) {
+    await page.setViewportSize({ width: 390, height });
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) throw new Error("연결창의 화면 경계를 확인할 수 없어요.");
+    expect(box.x).toBeGreaterThanOrEqual(16);
+    expect(box.x + box.width).toBeLessThanOrEqual(374);
+    expect(box.y).toBeGreaterThanOrEqual(16);
+    expect(box.y + box.height).toBeLessThanOrEqual(height - 16);
+    expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "설치 파일 받기", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(openBridge).toBeFocused();
+    await expect(openBridge).toBeInViewport({ ratio: 0.99 });
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "연결창 닫기", exact: true })).toBeFocused();
+  }
   await dialog.screenshot({ path: test.info().outputPath("connection-settings-simple-mobile.png") });
-  await dialog.getByRole("button", { name: "연결하기", exact: true }).click();
-  await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toBeVisible();
+  expect(connector.attempts()).toBe(0);
+  expect(connector.downloadRequests()).toBe(0);
+  await openBridge.click();
+  await expect(dialog.getByRole("heading", { name: "AI 브릿지를 열고 있어요", exact: true })).toBeVisible();
   expect(connector.attempts()).toBe(1);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+  await expect(entry).toBeFocused();
 });
 
 test("사이드바 점·도구별 모델과 effort·실제 설치 버전 갱신을 함께 표시한다", async ({ page }) => {
