@@ -105,11 +105,11 @@ it("도구 탭은 해당 실제 모델만 보여 주며 탭 이동만으로 실�
   expect(within(model).getByRole("option", { name: "Claude Haiku" })).toBeInTheDocument();
   expect(within(model).queryByRole("option", { name: "Codex 첫 모델" })).toBeNull();
   expect(screen.getByLabelText("선택 대상")).toHaveTextContent(before!);
-  expect(within(dialog).getByRole("button", { name: "지원 정보 없음" })).toBeDisabled();
+  expect(within(dialog).queryByText("Effort")).toBeNull();
   fireEvent.change(model, { target: { value: "claude:haiku" } });
   expect(screen.getByLabelText("선택 대상")).toHaveTextContent('"explicit":{"provider":"claude","model":"haiku"}');
   expect(within(dialog).queryAllByRole("radio")).toHaveLength(0);
-  expect(within(dialog).getByText(/effort 지원 정보를 확인할 수 없어요/)).toBeInTheDocument();
+  expect(within(dialog).queryByText("Effort")).toBeNull();
   fireEvent.click(within(dialog).getByRole("button", { name: "완료" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.getByRole("button", { name: "AI 연결" })).toHaveFocus();
@@ -242,6 +242,16 @@ it.each([
   entry.focus();
   await act(async () => { fireEvent.click(entry); });
   const settings = screen.getByRole("dialog", { name: "AI 연결" });
+  if (!initial) {
+    expect(within(settings).getByText("이 컴퓨터의 AI를 연결해 주세요.")).toBeVisible();
+    expect(within(settings).getAllByRole("button").map(button => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["연결창 닫기", "연결하기"]);
+    expect(within(settings).queryByText("내 AI 연결")).toBeNull();
+    expect(within(settings).queryByRole("tablist")).toBeNull();
+    expect(within(settings).queryByRole("combobox", { name: "모델" })).toBeNull();
+    expect(within(settings).queryByText("Effort")).toBeNull();
+    expect(within(settings).queryByRole("region", { name: "AI 브릿지 버전" })).toBeNull();
+    expect(api.downloads).not.toHaveBeenCalled();
+  }
   const next = within(settings).getByRole("button", { name: action });
   next.focus();
   await act(async () => { fireEvent.click(next); });

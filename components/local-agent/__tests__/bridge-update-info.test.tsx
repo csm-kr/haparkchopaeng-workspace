@@ -58,7 +58,9 @@ describe("실제 설치 앱과 최신 파일의 업데이트 안내", () => {
   it("설치 버전을 보고하지 않는 구 앱을 최신으로 표시하지 않는다", async () => {
     setup(null);
     expect(await screen.findByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", win.url);
-    expect(screen.getByText("설치 버전 미확인")).toBeVisible();
+    expect(screen.queryByText("설치 버전 미확인")).toBeNull();
+    expect(screen.queryByText("최신 0.1.5")).toBeNull();
+    expect(screen.queryByText(/최신 설치 파일로 업데이트하면/)).toBeNull();
     expect(screen.queryByText("최신 버전이에요")).toBeNull();
   });
 
