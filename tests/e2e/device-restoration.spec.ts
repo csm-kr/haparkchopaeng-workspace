@@ -73,15 +73,19 @@ test("승인한 PC는 새 탭에서 복원되고 실제 storage 이벤트로 연
   await page.goto("/profile");
   await page.getByRole("group", { name: "테마 선택" }).getByRole("button", { name: /다크/ }).click();
   const firstCard = page.getByRole("region", { name: "AI 연결", exact: true });
-  const firstPicker = firstCard.getByRole("button", { name: "모델을 선택하세요", exact: true });
-  await expect(firstPicker).toBeDisabled(); // The other PC's ready catalogue is not a browser hint.
-  await firstCard.getByRole("button", { name: "AI 연결", exact: true }).click();
+  await expect(firstCard).not.toContainText(other.name);
+  await firstCard.getByRole("button", { name: "AI 연결 관리", exact: true }).click();
   const connection = page.getByRole("dialog", { name: "AI 연결", exact: true });
+  await expect(connection.getByRole("combobox", { name: "모델", exact: true })).toHaveCount(0);
+  await expect(connection.getByText("다른 PC 모델", { exact: true })).toHaveCount(0);
+  expect(attempts).toBe(0);
+  await connection.getByRole("button", { name: "AI 브릿지 열기", exact: true }).click();
   await expect(connection.getByText("이 웹에 연결됐어요", { exact: true })).toBeVisible();
-  await expect(connection.getByRole("button", { name: "모델을 선택하세요", exact: true })).toBeEnabled();
+  await expect(connection.getByRole("combobox", { name: "모델", exact: true })).toBeEnabled();
+  await expect(connection.getByRole("combobox", { name: "모델", exact: true }).locator("option")).toHaveText([modelName]);
   await connection.getByRole("button", { name: "완료", exact: true }).click();
   await expect(connection).toHaveCount(0);
-  await expect(firstPicker).toBeEnabled();
+  await expect(firstCard).toContainText(device.name);
   expect(attempts).toBe(1);
 
   // The active team ID is server-owned; discover only our approved, non-secret hint key.
@@ -100,8 +104,7 @@ test("승인한 PC는 새 탭에서 복원되고 실제 storage 이벤트로 연
   await second.goto("/profile");
   expect(await second.evaluate(() => Reflect.get(window, "__bridgeInitialDeviceHints"))).toEqual([]);
   const secondCard = second.getByRole("region", { name: "AI 연결", exact: true });
-  const secondPicker = secondCard.getByRole("button", { name: "모델을 선택하세요", exact: true });
-  await expect(secondPicker).toBeEnabled();
+  await expect(secondCard).toContainText(device.name);
   expect(secondStatusIds[0]).toBe(device.id);
   expect(await second.evaluate(key => window.sessionStorage.getItem(key), approvedKey)).toBe(device.id);
   expect(attempts).toBe(1);
@@ -123,18 +126,27 @@ test("승인한 PC는 새 탭에서 복원되고 실제 storage 이벤트로 연
   await second.keyboard.press("Escape");
   await expect(second.getByRole("tooltip")).toHaveCount(0);
 
+  await entry.click();
+  const secondConnection = second.getByRole("dialog", { name: "AI 연결", exact: true });
+  const secondModel = secondConnection.getByRole("combobox", { name: "모델", exact: true });
+  await expect(secondModel).toBeEnabled();
+  await expect(secondModel.locator("option")).toHaveText([modelName]);
+
   // No synthetic dispatchEvent: Chromium delivers a native StorageEvent to the second Page.
   await page.evaluate(key => window.localStorage.removeItem(key), approvedKey);
-  await expect(secondPicker).toBeDisabled();
+  await expect(secondModel).toHaveCount(0);
+  await expect(secondConnection.getByRole("button", { name: "AI 브릿지 열기", exact: true })).toBeEnabled();
   await expect(dot).toHaveAttribute("data-connection-state", "idle");
   await expect(quota).toHaveCount(0);
   expect(await second.evaluate(key => window.sessionStorage.getItem(key), approvedKey)).toBeNull();
   expect(await second.evaluate(key => window.localStorage.getItem(key), approvedKey)).toBeNull();
 
   // A fresh status response still lists both online PCs, but neither becomes an implicit target.
+  await second.keyboard.press("Escape");
   secondStatusIds.length = 0;
   await second.reload();
-  await expect(secondPicker).toBeDisabled();
+  await secondCard.getByRole("button", { name: "AI 연결 관리", exact: true }).click();
+  await expect(second.getByRole("dialog", { name: "AI 연결", exact: true }).getByRole("combobox", { name: "모델", exact: true })).toHaveCount(0);
   await expect(dot).toHaveAttribute("data-connection-state", "idle");
   expect(secondStatusIds[0]).toBeNull();
   expect(attempts).toBe(1);

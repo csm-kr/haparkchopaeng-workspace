@@ -17,6 +17,7 @@ async function login(page: Page) {
 
 async function mockConnector(page: Page, connected = false, currentDevice: LocalAgentDeviceView = device, releases: ConnectorRelease[] = []) {
   let attempts = 0;
+  let downloadRequests = 0;
   let cancelled = false;
   let acknowledged = false;
   let serverNow = Date.now();
@@ -34,7 +35,7 @@ async function mockConnector(page: Page, connected = false, currentDevice: Local
     let data: unknown;
     if (path.endsWith("/status")) data = { devices: connected ? [currentDevice] : [], device: connected ? currentDevice : null, leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 };
     else if (path.endsWith("/web-heartbeat")) data = { leaseExpiresAt: new Date(serverNow + 45000).toISOString() };
-    else if (path.endsWith("/downloads")) data = { releases };
+    else if (path.endsWith("/downloads")) { downloadRequests += 1; data = { releases }; }
     else if (path.endsWith("/attempts") && method === "POST") {
       attempts += 1;
       cancelled = false;
@@ -57,6 +58,8 @@ async function mockConnector(page: Page, connected = false, currentDevice: Local
   });
   return {
     attempts: () => attempts,
+    cancelled: () => cancelled,
+    downloadRequests: () => downloadRequests,
     updateDevice: (patch: Partial<LocalAgentDeviceView>) => { currentDevice = { ...currentDevice, ...patch }; },
     acknowledge: () => {
       if (!attempt) throw new Error("연결 시도를 만든 뒤 앱 ACK를 보내야 합니다.");
@@ -128,14 +131,14 @@ test("사이드바 점·도구별 모델과 effort·실제 설치 버전 갱신�
   await model.selectOption("claude:claude-fixture");
   await dialog.getByRole("radio", { name: "high", exact: true }).check();
   await expect(dialog.getByRole("radio", { name: "high", exact: true })).toBeChecked();
-  await expect(dialog.getByText("설치 버전 미확인", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText("연결된 PC의 최신 버전을 확인할 수 없어요", { exact: true })).toBeVisible();
   const update = dialog.getByRole("link", { name: "업데이트 받기", exact: true });
   await expect(update).toHaveAttribute("href", release.url);
   const downloaded = page.waitForEvent("download");
   await update.click();
   expect((await downloaded).suggestedFilename()).toBe(release.filename);
-  await expect(dialog.getByText(/다운로드한 설치 파일을 열면/)).toBeVisible();
-  await expect(dialog.getByText("설치 버전 미확인", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(/설치 파일을 요청했어요\. 브라우저의 다운로드 목록에서 파일을 열어 설치해 주세요/)).toBeVisible();
+  await expect(dialog.getByText("연결된 PC의 최신 버전을 확인할 수 없어요", { exact: true })).toBeVisible();
   connector.updateDevice({ bridgeVersion: "0.1.5", bridgeArchitecture: "x64" });
   // 설치 정보와 연결 상태는 기존 15초 heartbeat 주기에 따라 자동으로 갱신된다.
   await expect(dialog.getByText("설치 0.1.5", { exact: true })).toBeVisible({ timeout: 20_000 });
@@ -159,17 +162,27 @@ test("연결 한 곳에서 시작하고 웹 번호·설치 안내·취소가 이
   let downloaded = false;
   page.on("download", () => { downloaded = true; });
   await page.goto("/profile");
-  const entry = page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결", exact: true });
+  const entry = page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결 관리", exact: true });
   await entry.click();
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
+  await expect(dialog.getByRole("button", { name: "AI 브릿지 열기", exact: true })).toBeEnabled();
+  expect(connector.attempts()).toBe(0);
+  expect(connector.downloadRequests()).toBe(0);
+  await dialog.getByRole("button", { name: "설치 파일 받기", exact: true }).click();
+  await expect(dialog.getByRole("region", { name: "AI 브릿지 설치", exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "설치 파일 준비 중" })).toBeDisabled();
-  await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toHaveAttribute("href", /^hapark-connect:/);
+  expect(connector.downloadRequests()).toBeGreaterThan(0);
+  expect(connector.attempts()).toBe(0);
+  await dialog.getByRole("button", { name: "연결 방법으로 돌아가기" }).click();
+  await dialog.getByRole("button", { name: "AI 브릿지 열기", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "AI 브릿지를 열고 있어요", exact: true })).toBeVisible();
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveCount(0);
   await expect(dialog.getByRole("timer", { name: "연결 번호 남은 시간" })).toHaveCount(0);
   await expect(dialog.getByRole("progressbar", { name: "연결 가능 시간" })).toHaveCount(0);
   await expect(dialog.getByRole("textbox")).toHaveCount(0);
   expect(connector.attempts()).toBe(1);
   expect(downloaded).toBeFalsy();
+  await connector.advanceTime(120000);
   connector.acknowledge();
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveText("048 217");
   const timer = dialog.getByRole("timer", { name: "연결 번호 남은 시간" });
@@ -183,6 +196,7 @@ test("연결 한 곳에서 시작하고 웹 번호·설치 안내·취소가 이
   await expect(progress).toHaveAttribute("aria-valuenow", "240");
   await dialog.screenshot({ path: test.info().outputPath("web-connection.png") });
   await dialog.getByRole("button", { name: "연결 취소" }).click();
+  expect(connector.cancelled()).toBe(true);
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveCount(0);
   await expect(timer).toHaveCount(0);
   await expect(progress).toHaveCount(0);
@@ -196,28 +210,32 @@ test("실제 한도 창만 작은 링으로 표시하고 모델은 직접 고른
   await mockConnector(page, true);
   await page.goto("/profile");
   const card = page.getByRole("region", { name: "AI 연결", exact: true });
-  const picker = card.getByRole("button", { name: "모델을 선택하세요" });
-  await expect(picker).toBeEnabled();
   await card.screenshot({ path: test.info().outputPath("web-agent-card.png") });
-  await expect(card.getByRole("button", { name: "질문 보내기" })).toBeDisabled();
-  const ring = card.getByTestId("usage-ring");
+  await expect(card.getByRole("combobox")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "질문 보내기" })).toHaveCount(0);
+  await card.getByRole("button", { name: "AI 연결 관리", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
+  const ring = dialog.getByTestId("usage-ring");
   await expect(ring).toHaveCount(1);
   await expect(ring).toHaveAttribute("width", "20");
-  const quota = card.getByRole("button", { name: "사용량 상세" });
+  const quota = dialog.getByRole("button", { name: "사용량 상세" });
   await quota.hover();
   await expect(page.getByRole("tooltip")).toContainText("44% 남음");
   await expect(page.getByRole("tooltip")).not.toContainText("5시간");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("tooltip")).toHaveCount(0);
-  await picker.click();
-  const search = page.getByRole("searchbox", { name: "모델 검색" });
-  await expect(search).toBeFocused();
-  await page.getByRole("listbox", { name: "사용 가능한 모델" }).locator("..").screenshot({ path: test.info().outputPath("web-model-picker.png") });
-  await search.fill("감지된");
-  await search.press("ArrowDown");
-  await page.keyboard.press("Enter");
-  await expect(card.getByRole("button", { name: "Codex · 감지된 연구 모델" })).toBeFocused();
-  await expect(page.getByRole("listbox", { name: "사용 가능한 모델" })).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  const model = dialog.getByRole("combobox", { name: "모델", exact: true });
+  await expect(model.locator("option")).toHaveText(["감지된 연구 모델"]);
+  await dialog.getByRole("tab", { name: "Claude Code", exact: true }).click();
+  await expect(model).toBeDisabled();
+  await expect(model.locator("option")).toHaveText(["사용 가능한 모델이 없어요"]);
+  await dialog.getByRole("tab", { name: "Codex", exact: true }).click();
+  await model.selectOption("codex:detected-model");
+  await expect(dialog.getByText("다음 질문 · Codex · 감지된 연구 모델", { exact: true })).toBeVisible();
+  await dialog.screenshot({ path: test.info().outputPath("web-model-management.png") });
+  await dialog.getByRole("button", { name: "완료", exact: true }).click();
+  await expect(card.getByRole("button", { name: "AI 연결 관리", exact: true })).toBeFocused();
 });
 
 test("좁은 화면·다크 테마에서도 연결창이 화면 안에 있고 포커스가 순환한다", async ({ page }) => {
@@ -228,9 +246,10 @@ test("좁은 화면·다크 테마에서도 연결창이 화면 안에 있고 �
   await expect(page.getByRole("button", { name: "사이드바 펼치기" })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI 연결", exact: true })).toBeVisible();
   await page.getByRole("group", { name: "테마 선택" }).getByRole("button", { name: /다크/ }).click();
-  await page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결", exact: true }).click();
+  await page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결 관리", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
-  await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toBeVisible();
+  await dialog.getByRole("button", { name: "AI 브릿지 열기", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "AI 브릿지를 열고 있어요", exact: true })).toBeVisible();
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveCount(0);
   await expect(dialog.getByRole("timer", { name: "연결 번호 남은 시간" })).toHaveCount(0);
   await expect(dialog.getByRole("progressbar", { name: "연결 가능 시간" })).toHaveCount(0);
@@ -255,8 +274,8 @@ test("설치 앱의 웹 복귀는 한 번만 시작하고 만료 뒤 새 번호�
   const connector = await mockConnector(page);
   await page.goto("/profile?localAgentResume=1&keep=1");
   const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
-  await expect(dialog.getByRole("button", { name: "설치 파일 준비 중" })).toBeDisabled();
-  await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toHaveAttribute("href", /^hapark-connect:/);
+  await expect(dialog.getByRole("heading", { name: "AI 브릿지를 열고 있어요", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "연결 취소", exact: true })).toBeVisible();
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveCount(0);
   const timer = dialog.getByRole("timer", { name: "연결 번호 남은 시간" });
   const progress = dialog.getByRole("progressbar", { name: "연결 가능 시간" });
@@ -274,7 +293,7 @@ test("설치 앱의 웹 복귀는 한 번만 시작하고 만료 뒤 새 번호�
   await expect(dialog.getByRole("button", { name: "새 번호로 연결" })).toBeVisible();
   expect(connector.attempts()).toBe(1);
   await dialog.getByRole("button", { name: "새 번호로 연결" }).click();
-  await expect(dialog.getByRole("link", { name: "AI 브릿지 다시 열기" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "AI 브릿지를 열고 있어요", exact: true })).toBeVisible();
   expect(connector.attempts()).toBe(2);
   await expect(dialog.getByLabel("연결 확인 번호")).toHaveCount(0);
   await expect(timer).toHaveCount(0);
