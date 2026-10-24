@@ -105,6 +105,11 @@
       "dir": "21-ai-bridge-pet",
       "status": "in_progress",
       "summary": "Local Harness passed: Node 211 passed/1 skipped; pet native 9 checks and desktop flow passed. Exact-source multi-OS CI and 0.1.6 release pending."
+    },
+    {
+      "dir": "25-bri-stateful-companion",
+      "status": "pending",
+      "summary": "Bri source and local verification complete; user authorized 0.1.11 publication; exact-source CI and installer/web publication pending."
     }
   ]
 }

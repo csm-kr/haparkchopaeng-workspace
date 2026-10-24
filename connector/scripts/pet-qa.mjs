@@ -11,71 +11,6 @@ const script = fileURLToPath(import.meta.url), connector = dirname(dirname(scrip
 const execute = promisify(execFile), delay = ms => new Promise(done => setTimeout(done, ms));
 const taskTemporary = join(tmpdir(), 'hapark-ai-pet-20261018');
 
-// Two real backdrops separate opaque ink from antialiasing, glow and shadow.
-// Geometry and paint colors come from the rendered SVG, never a fixed RGB cutoff.
-function inspectAntennaRim(light, dark, tip, withoutOutline) {
-  assert.deepEqual(light.size, dark.size);
-  if (withoutOutline) for (const image of withoutOutline) assert.deepEqual(light.size, image.size);
-  assert.ok(light.backgroundRgb.every((value, index) => value - dark.backgroundRgb[index] > 200));
-  const limits = { minimumInkAlpha: .6, minimumGraphiteShare: .75, maximumColorResidual: 16 };
-  const rimPixels = { top: 0, left: 0, right: 0 }, examples = { top: [], left: [], right: [] };
-  const addedGraphiteArea = { top: 0, left: 0, right: 0 };
-  const delta = tip.accentRgb.map((value, index) => value - tip.graphiteRgb[index]);
-  const glowDelta = tip.glowRgb.map((value, index) => value - tip.graphiteRgb[index]);
-  const accentNorm = delta.reduce((sum, value) => sum + value * value, 0);
-  const glowNorm = glowDelta.reduce((sum, value) => sum + value * value, 0);
-  const cross = delta.reduce((sum, value, index) => sum + value * glowDelta[index], 0);
-  const determinant = accentNorm * glowNorm - cross * cross;
-  assert.ok(determinant > 10000);
-  const pixel = (image, x, y) => {
-    const offset = (y * image.size.width + x) * 4;
-    return [image.bitmap[offset + 2], image.bitmap[offset + 1], image.bitmap[offset], image.bitmap[offset + 3]];
-  };
-  const foreground = (pair, x, y) => {
-    const white = pixel(pair[0], x, y), graphite = pixel(pair[1], x, y);
-    if (white[3] !== 255 || graphite[3] !== 255) return null;
-    const uncovered = [0, 1, 2].map(index => (white[index] - graphite[index]) /
-      (pair[0].backgroundRgb[index] - pair[1].backgroundRgb[index])).sort((a, b) => a - b)[1];
-    const alpha = Math.max(0, Math.min(1, 1 - uncovered));
-    if (!alpha) return { alpha: 0, graphiteShare: 0, glowShare: 0, residual: 0, coverage: 0 };
-    const ink = [0, 1, 2].map(index => (white[index] - (1 - alpha) * pair[0].backgroundRgb[index]) / alpha);
-    const accentDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * delta[index], 0);
-    const glowDot = ink.reduce((sum, value, index) => sum + (value - tip.graphiteRgb[index]) * glowDelta[index], 0);
-    const accentShare = Math.max(0, Math.min(1, (accentDot * glowNorm - glowDot * cross) / determinant));
-    const glowShare = Math.max(0, Math.min(1, (glowDot * accentNorm - accentDot * cross) / determinant));
-    const graphiteShare = Math.max(0, 1 - accentShare - glowShare);
-    const residual = Math.hypot(...ink.map((value, index) => value - tip.graphiteRgb[index] - accentShare * delta[index] - glowShare * glowDelta[index]));
-    return { alpha, graphiteShare, glowShare, residual, coverage: residual <= limits.maximumColorResidual ? alpha * graphiteShare : 0 };
-  };
-  for (let y = Math.floor(tip.y - tip.radius - tip.rimWidth - 1); y <= Math.ceil(tip.y + tip.radius + tip.rimWidth + 1); y += 1) {
-    for (let x = Math.floor(tip.x - tip.radius - tip.rimWidth - 1); x <= Math.ceil(tip.x + tip.radius + tip.rimWidth + 1); x += 1) {
-      if (x < 0 || y < 0 || x >= light.size.width || y >= light.size.height) continue;
-      const dx = x + .5 - tip.x, dy = y + .5 - tip.y, radius = Math.hypot(dx, dy);
-      if (radius < tip.radius || radius > tip.radius + tip.rimWidth + .75) continue;
-      // The existing SVG filter also paints the --fg halo. Fit that real third paint separately.
-      const observed = foreground([light, dark], x, y);
-      if (!observed) continue;
-      const { alpha, graphiteShare, glowShare, residual } = observed;
-      const baseline = withoutOutline ? foreground(withoutOutline, x, y) : null;
-      for (const [sector, matches] of [['top', dy < -tip.radius * .5], ['left', dx < -tip.radius * .5 && Math.abs(dy) < tip.radius], ['right', dx > tip.radius * .5 && Math.abs(dy) < tip.radius]]) {
-        if (!matches) continue;
-        // Integrate premultiplied ink instead of requiring the thin AA curve to occupy
-        // one pixel. Subtract the same-geometry hidden-outline render, including its halo.
-        if (baseline) addedGraphiteArea[sector] += observed.coverage - baseline.coverage;
-        if (alpha < limits.minimumInkAlpha || graphiteShare < limits.minimumGraphiteShare || residual > limits.maximumColorResidual) continue;
-        rimPixels[sector] += 1;
-        if (examples[sector].length < 3) examples[sector].push({ x, y, inkAlpha: Number(alpha.toFixed(3)), graphiteShare: Number(graphiteShare.toFixed(3)), glowShare: Number(glowShare.toFixed(3)), colorResidual: Number(residual.toFixed(3)) });
-      }
-    }
-  }
-  const minimumAddedGraphiteArea = limits.minimumInkAlpha * limits.minimumGraphiteShare;
-  return { passed: withoutOutline ? Object.values(addedGraphiteArea).every(value => value >= minimumAddedGraphiteArea) : Object.values(rimPixels).every(value => value > 0),
-    rimPixels, limits, examples, ...(withoutOutline ? {
-      comparison: 'paired-foreground-coverage-minus-same-geometry-outline-hidden', minimumAddedGraphiteArea,
-      addedGraphiteArea: Object.fromEntries(Object.entries(addedGraphiteArea).map(([key, value]) => [key, Number(value.toFixed(4))])),
-    } : {}) };
-}
-
 function inside(value, parent) { const part = relative(parent, value); assert.ok(part && !part.startsWith('..') && !isAbsolute(part)); }
 async function safeDirectory(directory, parent) {
   inside(directory, parent);
@@ -145,34 +80,30 @@ export async function runPetRendererQa({ evidenceDirectory = join(connector, 'ar
 }
 
 async function nativePetQa() {
-  const { app, BrowserWindow, screen, nativeImage } = await import('electron');
+  const { app, BrowserWindow, screen } = await import('electron');
   const flagIndex = process.argv.indexOf('--pet-native-qa');
   assert.ok(flagIndex >= 0 && process.argv.length === flagIndex + 3, 'Expected exactly two native QA directories.');
   const owned = resolve(process.argv[flagIndex + 1]), evidenceDirectory = resolve(process.argv[flagIndex + 2]);
   inside(owned, await realpath(taskTemporary));
   app.setName('AI Bridge isolated pet renderer QA'); app.setPath('userData', join(owned, 'profile')); app.setPath('sessionData', join(owned, 'session'));
-  // Do not await ready at module top level: Electron waits for the ESM entry to finish.
   void app.whenReady().then(async () => {
     const receipt = { passed: false, mode: 'isolated-real-electron-pet-renderer', platform: process.platform,
       checks: [], screenshots: [], focusRequested: false, focusObserved: false, productMainLoaded: false,
       protocolRegistration: false, accountProfileRead: false, cliRequests: 0, rendererNetworkRequests: 0,
       nativePointer: { supported: process.platform === 'win32', observed: false, cursorRestored: false },
-      limits: ['No installed app, authenticated account, real desktop wallpaper or packaged installer is used.',
+      limits: ['Synthetic display modes, not authenticated execution or an installed app.',
         'Native cursor hover is observed on Windows; other platforms use explicit Chromium hover state.',
-        'Drag coverage is checked from native renderer CSS; physical OS dragging is not performed.'] };
+        'Physical OS dragging is not performed.'] };
     let win;
-    const check = async (name, callback) => { try { const details = await callback(); receipt.checks.push({ name, passed: true, details: details ?? null }); } catch (error) { receipt.checks.push({ name, passed: false, error: {
-      name: error?.name === 'AssertionError' ? 'AssertionError' : 'Error',
-      code: typeof error?.code === 'string' && /^ERR_[A-Z_]+$/.test(error.code) ? error.code : null,
-      actual: ['number', 'boolean'].includes(typeof error?.actual) ? error.actual : null,
-      expected: ['number', 'boolean'].includes(typeof error?.expected) ? error.expected : null,
-    } }); } };
+    const check = async (name, callback) => {
+      try { receipt.checks.push({ name, passed: true, details: await callback() ?? null }); }
+      catch (error) { receipt.checks.push({ name, passed: false, error: { name: error.name, message: error.message.slice(0, 320) } }); }
+    };
     try {
       const work = screen.getPrimaryDisplay().workArea;
       win = new BrowserWindow({ width: 104, height: 112, x: work.x + 32, y: work.y + 48,
         frame: false, transparent: true, show: false, focusable: false, alwaysOnTop: true, skipTaskbar: true,
-        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
-      receipt.qaWindowPlacement = { region: 'work-area-top-left', bounds: win.getBounds(), avoidsDefaultInstalledPetLocation: true };
+        webPreferences: { preload: join(connector, 'desktop/pet-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
       win.on('focus', () => { receipt.focusObserved = true; });
       win.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_request, done) => { receipt.rendererNetworkRequests += 1; done({ cancel: true }); });
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', event => event.preventDefault());
@@ -180,117 +111,74 @@ async function nativePetQa() {
       const js = expression => win.webContents.executeJavaScript(expression);
       const frame = () => js('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))');
       const pause = time => js(`Promise.all(document.getAnimations().map(async animation=>{animation.pause();await animation.ready;animation.currentTime=${time}}))`);
-      const screenshot = async name => { const image = await win.webContents.capturePage(); await writeFile(join(evidenceDirectory, name), image.toPNG()); receipt.screenshots.push(name); return image; };
+      const seek = async (name, time) => { await pause(0); await js(`document.getAnimations().find(a=>a.animationName===${JSON.stringify(name)}).currentTime=${time}`); await frame(); };
+      const setMode = async mode => {
+        win.webContents.send('connector:pet-state', mode);
+        for (let n = 0; n < 30; n++) { await frame(); if (await js(`document.body.dataset.mode===${JSON.stringify(mode)}`)) return; await delay(10); }
+        assert.fail(`Mode ${mode} did not arrive through the production preload.`);
+      };
+      const screenshot = async name => {
+        await frame(); const image = await win.webContents.capturePage();
+        await writeFile(join(evidenceDirectory, name), image.toPNG()); receipt.screenshots.push(name); return image;
+      };
+      const bitmap = image => ({ data: image.toBitmap({ scaleFactor: 1 }), size: image.getSize(1) });
+      const pixel = (image, x, y) => {
+        const { data, size } = bitmap(image);
+        const offset = (Math.floor(y * size.height / 112) * size.width + Math.floor(x * size.width / 104)) * 4;
+        return [...data.subarray(offset, offset + 4)];
+      };
+      const changed = (a, b) => {
+        const first = bitmap(a), second = bitmap(b); assert.deepEqual(first.size, second.size);
+        let count = 0;
+        for (let p = 0; p < first.data.length; p += 4) if ([0, 1, 2].reduce((sum, i) => sum + Math.abs(first.data[p + i] - second.data[p + i]), 0) > 40) count++;
+        return count;
+      };
       win.webContents.debugger.attach('1.3'); await win.webContents.debugger.sendCommand('DOM.enable'); await win.webContents.debugger.sendCommand('CSS.enable');
-      const document = await win.webContents.debugger.sendCommand('DOM.getDocument');
-      const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', { nodeId: document.root.nodeId, selector: '[role="img"]' });
+      const doc = await win.webContents.debugger.sendCommand('DOM.getDocument');
+      const { nodeId } = await win.webContents.debugger.sendCommand('DOM.querySelector', { nodeId: doc.root.nodeId, selector: '.bri' });
       const hover = value => win.webContents.debugger.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: value ? ['hover'] : [] });
-      const mouth = () => js(`(()=>{const smile=document.querySelector('.mouth-smile'),flat=document.querySelector('.mouth-flat');return {smile:smile?Number(getComputedStyle(smile).opacity):-1,flat:flat?Number(getComputedStyle(flat).opacity):-1}})()`);
-      const neutralMouth = async () => { const value = await mouth(); assert.ok(value.smile < .05 && value.flat > .95); };
+      const mouth = () => js(`({smile:Number(getComputedStyle(document.querySelector('.bri-greeting')).opacity),flat:1-Number(getComputedStyle(document.querySelector('.bri-greeting')).opacity)})`);
+      const neutralMouth = async () => assert.ok((await mouth()).smile < .05);
       receipt.motionEnvironment = { hostPrefersReducedMotion: await js('matchMedia("(prefers-reduced-motion: reduce)").matches') };
-      // Normal-motion samples must not inherit an accessibility preference from the CI host.
-      // The explicit reduce-mode check below still verifies that preference independently.
       await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
-      await frame();
-      await pause(0); await frame();
-      Object.assign(receipt.motionEnvironment, await js(`({normalPrefersReducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,normalAnimationCount:document.getAnimations().length,normalAnimationsPending:document.getAnimations().filter(animation=>animation.pending).length})`));
-      await check('PET_SECURITY_AND_DRAG_CONTRACT', async () => {
-        const observed = await js(`({node:typeof require,script:document.querySelectorAll('script').length,csp:document.querySelector('meta[http-equiv="Content-Security-Policy"]').content,drag:getComputedStyle(document.body).webkitAppRegion})`);
+      await setMode('idle'); await pause(0); await frame();
+      Object.assign(receipt.motionEnvironment, await js(`({normalPrefersReducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,normalAnimationCount:document.getAnimations().length,normalAnimationsPending:document.getAnimations().filter(a=>a.pending).length})`));
+      await check('PET_RECEIVE_ONLY_SANDBOX_AND_LOCAL_ASSETS', async () => {
+        const observed = await js(`({node:typeof require,connector:typeof window.connector,api:Object.keys(window.bri),scripts:[...document.scripts].map(s=>s.getAttribute('src')),csp:document.querySelector('meta[http-equiv="Content-Security-Policy"]').content,drag:getComputedStyle(document.body).webkitAppRegion,loaded:performance.getEntriesByType('resource').map(r=>r.name)})`);
         const prefs = win.webContents.getLastWebPreferences();
         assert.equal(prefs.sandbox, true); assert.equal(prefs.contextIsolation, true); assert.equal(prefs.nodeIntegration, false);
-        assert.equal(observed.node, 'undefined'); assert.equal(observed.script, 0); assert.equal(observed.drag, 'drag');
-        assert.equal(observed.csp, "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'");
+        assert.equal(observed.node, 'undefined'); assert.equal(observed.connector, 'undefined'); assert.deepEqual(observed.api, ['onState']);
+        assert.deepEqual(observed.scripts, ['pet.js']); assert.match(observed.csp, /connect-src 'none'/); assert.match(observed.csp, /script-src 'self'/);
+        assert.equal(observed.drag, 'drag'); assert.match(await js("getComputedStyle(document.querySelector('.sprite')).backgroundImage"), /sprites-v1\.webp/);
+        assert.equal(receipt.rendererNetworkRequests, 0);
+        return { readOnlyApi: observed.api, remoteRequests: 0 };
       });
-      await check('PET_OPAQUE_FACE_AND_PLUGS_ON_LIGHT_AND_DARK', async () => {
+      await check('PET_FACE_AND_SILHOUETTE_ON_LIGHT_AND_DARK_AT_NATIVE_SCALE', async () => {
         const samples = [];
         for (const [background, name] of [['#ffffff', 'light-neutral.png'], ['#101216', 'dark-neutral.png']]) {
           await js(`document.body.style.background=${JSON.stringify(background)}`); await frame();
-          const image = await screenshot(name), bitmap = image.toBitmap({ scaleFactor: 1 }), size = image.getSize(1);
-          assert.equal(bitmap.length, size.width * size.height * 4);
-          const pixel = (x, y) => [...bitmap.subarray((Math.round(y) * size.width + Math.round(x)) * 4, (Math.round(y) * size.width + Math.round(x)) * 4 + 4)];
-          const face = pixel(52, 48), leftPlug = pixel(25, 56), rightPlug = pixel(80, 56);
-          for (const value of [face, leftPlug, rightPlug]) assert.ok(Math.max(...value.slice(0, 3)) < 70 && value[3] === 255);
-          samples.push({ background, face, leftPlug, rightPlug, bitmapScaleFactor: 1, representations: image.getScaleFactors() });
+          const image = await screenshot(name), face = pixel(image, 52, 49), leftPlug = pixel(image, 25, 62), rightPlug = pixel(image, 78, 62);
+          assert.ok(Math.max(...face.slice(0, 3)) < 90 && face[3] === 255);
+          samples.push({ background, face, leftPlug, rightPlug, capturedSize: image.getSize(1), cssViewport: { width: 104, height: 112 } });
         }
-        for (const name of ['face', 'leftPlug', 'rightPlug']) assert.ok(samples[0][name].every((value, index) => Math.abs(value - samples[1][name][index]) <= 2), 'Opaque parts must not depend on the background.');
+        for (const part of ['face', 'leftPlug', 'rightPlug']) assert.ok(samples[0][part].every((value, i) => Math.abs(value - samples[1][part][i]) <= 10), `Character paint ${part} must retain contrast across backgrounds.`);
         return samples;
       });
-      await check('PET_ANTENNA_TIP_GRAPHITE_OUTLINE_ON_LIGHT_AND_DARK', async () => {
-        const observation = { pixelFormat: 'BGRA8 converted to RGB', samples: [], originalRed: { checked: false } };
-        receipt.antennaTipOutline = observation;
-        const geometry = () => js(`(()=>{const dot=document.querySelector('svg > g:not(.outline) > circle[cx="24"][cy="5.5"]'),rim=document.querySelector('.outline > circle[cx="24"][cy="5.5"]');if(!dot||!rim)return null;const r=dot.getBoundingClientRect(),rgb=value=>value.match(/[\\d.]+/g).slice(0,3).map(Number),probe=document.createElementNS(dot.namespaceURI,'rect');probe.style.fill='var(--fg)';dot.ownerSVGElement.append(probe);const glowRgb=rgb(getComputedStyle(probe).fill);probe.remove();return {x:r.x+r.width/2,y:r.y+r.height/2,radius:r.width/2,rimWidth:Number.parseFloat(getComputedStyle(rim).strokeWidth)*r.width/(Number(dot.getAttribute('r'))*4),graphiteRgb:rgb(getComputedStyle(rim).stroke),accentRgb:rgb(getComputedStyle(dot).fill),glowRgb}})()`);
-        const capturePair = async () => {
-          const pair = [];
-          for (const background of ['#ffffff', '#101216']) {
-            await js(`document.body.style.background=${JSON.stringify(background)}`); await frame();
-            const tip = await geometry(), image = await win.webContents.capturePage();
-            const value = { image, tip, bitmap: image.toBitmap({ scaleFactor: 1 }), size: image.getSize(1), backgroundRgb: await js(`getComputedStyle(document.body).backgroundColor.match(/[\\d.]+/g).slice(0,3).map(Number)`) };
-            assert.equal(value.bitmap.length, value.size.width * value.size.height * 4); pair.push(value);
-          }
-          assert.ok(pair[0].tip && pair[0].tip.radius > 3 && pair[0].tip.radius < 4);
-          for (const field of ['x', 'y', 'radius', 'rimWidth']) assert.ok(Math.abs(pair[0].tip[field] - pair[1].tip[field]) < .001, 'Both backdrops must use the same rendered geometry.');
-          return pair;
-        };
-        try {
-          for (const offset of [0, .25]) {
-            await js(`document.querySelector('.bri').style.translate='${offset}px ${offset}px'`); await frame();
-            const pair = await capturePair();
-            const sample = { offsetCssPx: offset, geometry: pair[0].tip, backgroundsRgb: pair.map(value => value.backgroundRgb) };
-            observation.samples.push(sample);
-            for (const [index, prefix] of ['light', 'dark'].entries()) {
-              const name = offset ? `${prefix}-tip-quarter.png` : `${prefix}-neutral.png`;
-              await writeFile(join(evidenceDirectory, name), pair[index].image.toPNG());
-              if (offset) receipt.screenshots.push(name);
-            }
-            // A real rendered negative control rejects glow/shadow and cannot pass a missing outline.
-            await js(`document.querySelector('.outline > circle').style.visibility='hidden'`); await frame();
-            const withoutRim = await capturePair();
-            const repeatedWithoutRim = await capturePair();
-            for (const field of ['x', 'y', 'radius', 'rimWidth']) assert.ok(Math.abs(pair[0].tip[field] - withoutRim[0].tip[field]) < .001 &&
-              Math.abs(pair[0].tip[field] - repeatedWithoutRim[0].tip[field]) < .001, 'Outline-hidden controls must use the exact positive geometry.');
-            const positive = inspectAntennaRim(pair[0], pair[1], pair[0].tip, withoutRim);
-            Object.assign(sample, positive);
-            sample.withoutOutline = inspectAntennaRim(repeatedWithoutRim[0], repeatedWithoutRim[1], pair[0].tip, withoutRim);
-            for (const [index, prefix] of ['light', 'dark'].entries()) {
-              const name = `${prefix}-tip-${offset ? 'quarter' : 'default'}-outline-hidden.png`;
-              await writeFile(join(evidenceDirectory, name), withoutRim[index].image.toPNG()); receipt.screenshots.push(name);
-            }
-            await js(`document.querySelector('.outline > circle').style.visibility=''`); await frame();
-            assert.equal(positive.passed, true, 'The painted tip must have graphite ink above and on both sides.');
-            assert.equal(sample.withoutOutline.passed, false, 'A renderer without the tip outline must not pass.');
-            if (!offset) {
-              const reference = join(taskTemporary, 'outline-red'), names = ['light-neutral.png', 'dark-neutral.png'];
-              try {
-                const images = [];
-                for (const [index, name] of names.entries()) {
-                  const file = join(reference, name), stat = await lstat(file);
-                  assert.ok(stat.isFile() && !stat.isSymbolicLink()); inside(await realpath(file), await realpath(taskTemporary));
-                  const image = nativeImage.createFromBuffer(await readFile(file)); assert.equal(image.isEmpty(), false);
-                  images.push({ bitmap: image.toBitmap({ scaleFactor: 1 }), size: image.getSize(1), backgroundRgb: pair[index].backgroundRgb });
-                }
-                assert.deepEqual(images[0].size, pair[0].size);
-                observation.originalRed = { checked: true, geometrySource: 'same 104x112 viewport and unshifted 88px SVG', ...inspectAntennaRim(images[0], images[1], pair[0].tip, withoutRim) };
-                assert.equal(observation.originalRed.passed, false, 'Original real RED captures must still fail.');
-              } catch (error) { if (error.code !== 'ENOENT') throw error; }
-            }
-          }
-        } finally {
-          await js(`document.querySelector('.outline > circle').style.visibility='';document.querySelector('.bri').style.translate=''`); await frame();
-        }
-        return observation;
+      await check('PET_RENDERED_BLINK_6000MS', async () => {
+        await pause(0); const open = await screenshot('eyes-open.png');
+        await seek('bri-blink', 3000); const closed = await screenshot('eyes-closed.png');
+        const x = await js(`parseFloat(getComputedStyle(document.querySelector('.sprite')).backgroundPositionX)`);
+        assert.ok(Math.abs(x - 33.333333) < .01); assert.ok(changed(open, closed) > 8);
+        await pause(0); return { periodMs: 6000, changedPixels: changed(open, closed) };
       });
-      await check('PET_REAL_EYE_CLOSURE_6000MS', async () => {
-        const observed = await js(`(()=>{const eye=document.querySelector('.eyes'),animation=document.getAnimations().find(item=>item.animationName==='bri-blink');if(!eye||!animation)return null;const duration=animation.effect.getTiming().duration;animation.pause();animation.currentTime=0;const open=eye.getBoundingClientRect().height;animation.currentTime=3000;const closed=eye.getBoundingClientRect().height;return {duration,open,closed}})()`);
-        assert.equal(observed?.duration, 6000); assert.ok(observed.open > 5 && observed.closed < observed.open * .2); await frame(); await screenshot('eyes-closed.png'); await pause(0);
-        return { periodMs: observed.duration, closedHeightRatio: Number((observed.closed / observed.open).toFixed(3)) };
+      await check('PET_SPONTANEOUS_GREETING_14000MS', async () => {
+        await pause(12320); await frame(); assert.ok((await mouth()).smile > .9); assert.ok(Number(await js("getComputedStyle(document.querySelector('.sprite')).opacity")) < .05); await screenshot('spontaneous-smile.png');
+        await pause(0); await neutralMouth(); return { periodMs: 14000 };
       });
-      await check('PET_SPONTANEOUS_SMILE_14000MS', async () => {
-        await pause(0); await frame(); await neutralMouth();
-        const observed = await js(`(()=>{const animation=document.getAnimations().find(item=>item.animationName==='bri-smile');if(!animation)return null;const duration=animation.effect.getTiming().duration;document.getAnimations().forEach(item=>{item.pause();item.currentTime=12320});return {duration}})()`);
-        const value = await mouth(); assert.equal(observed?.duration, 14000); assert.ok(value.smile > .9 && value.flat < .1); await frame(); await screenshot('spontaneous-smile.png'); await pause(0); await frame(); await neutralMouth();
-        return { periodMs: observed.duration, sampledAtMs: 12320, smileOpacity: value.smile };
+      await check('PET_RENDERER_HOVER_AND_RETURN', async () => {
+        await hover(true); await frame(); assert.ok((await mouth()).smile > .9); assert.ok(Number(await js("getComputedStyle(document.querySelector('.sprite')).opacity")) < .05); await screenshot('hover-smile.png');
+        await hover(false); await pause(0); await frame(); await neutralMouth(); return { chromiumHoverState: true, neutralRestored: true };
       });
-      await check('PET_RENDERER_HOVER_SMILE', async () => { await neutralMouth(); await hover(true); await frame(); const value = await mouth(); assert.ok(value.smile > .9 && value.flat < .1); await screenshot('hover-smile.png'); await hover(false); await pause(0); await frame(); await neutralMouth(); return { chromiumHoverState: true, neutralRestored: true }; });
       if (process.platform === 'win32') await check('PET_WINDOWS_NATIVE_CURSOR_HOVER', async () => {
         const nativeCursor = async point => { const source = `Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class PetQaCursor{[StructLayout(LayoutKind.Sequential)]public struct Point{public int X;public int Y;}[DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern bool GetCursorPos(out Point p);}'; ${point ? `if(-not [PetQaCursor]::SetCursorPos(${point.x},${point.y})){exit 1};` : ''}$p=New-Object PetQaCursor+Point;if(-not [PetQaCursor]::GetCursorPos([ref]$p)){exit 1};[Console]::Write(('{"x":'+$p.X+',"y":'+$p.Y+'}'))`; const result = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], { windowsHide: true, shell: false, timeout: 10_000 }); return JSON.parse(result.stdout); };
         const bounds = win.getBounds(), target = { x: bounds.x + 52, y: bounds.y + 56 };
@@ -307,27 +195,69 @@ async function nativePetQa() {
         }
         assert.equal(receipt.nativePointer.cursorRestored, true);
       });
-      await check('PET_REDUCED_MOTION_STATIC_HOVER', async () => {
-        await hover(false); await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }); await frame();
-        assert.equal(await js('document.getAnimations().filter(item=>item.playState==="running").length'), 0);
-        await neutralMouth(); await hover(true); await frame(); const value = await mouth(); assert.ok(value.smile > .9 && value.flat < .1); await screenshot('reduced-motion-hover.png'); await hover(false); await frame(); await neutralMouth();
-        return { repeatingAnimations: 0, staticHoverSmile: true };
+      await check('PET_WORKING_TWO_RENDERED_FRAMES_AND_PERSISTENT_LABEL', async () => {
+        await setMode('working'); await pause(0); const first = await screenshot('working-a.png');
+        await seek('bri-type', 450); const second = await screenshot('working-b.png');
+        assert.ok(changed(first, second) > 8);
+        const value = await js(`({label:document.querySelector('#pet-status').textContent,opacity:getComputedStyle(document.querySelector('#pet-status')).opacity,name:document.querySelector('.bri').getAttribute('aria-label')})`);
+        assert.equal(value.label, '일하는 중'); assert.equal(value.opacity, '1'); assert.match(value.name, /일하는 브리/);
+        await hover(true); await frame(); assert.ok((await mouth()).smile < .05); await hover(false);
+        return { ...value, changedPixels: changed(first, second), hoverKeepsWorkVisible: true };
       });
-      await check('PET_REAL_ELAPSED_BLINK_AND_SMILE_CYCLE', async () => {
-        await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); await frame();
-        const observed = await js(`new Promise(done=>{const started=performance.now(),result={blinkIterationMs:null,smileIterationMs:null,closedEyeHeight:null,smileOpacity:null};const finish=()=>{if(result.blinkIterationMs&&result.smileIterationMs){clearTimeout(timeout);document.removeEventListener('animationiteration',listener);done(result)}};const listener=event=>{if(event.animationName==='bri-blink'&&!result.blinkIterationMs)result.blinkIterationMs=performance.now()-started;if(event.animationName==='bri-smile'&&!result.smileIterationMs)result.smileIterationMs=performance.now()-started;finish()};document.addEventListener('animationiteration',listener);document.getAnimations().forEach(animation=>{animation.currentTime=0;animation.play()});setTimeout(()=>{result.closedEyeHeight=document.querySelector('.eyes')?.getBoundingClientRect().height??null},3000);setTimeout(()=>{const mouth=document.querySelector('.mouth-smile');result.smileOpacity=mouth?Number(getComputedStyle(mouth).opacity):null},12320);const timeout=setTimeout(()=>{document.removeEventListener('animationiteration',listener);done(result)},15500)})`);
-        assert.ok(observed.blinkIterationMs >= 5700 && observed.blinkIterationMs <= 6800);
-        assert.ok(observed.smileIterationMs >= 13700 && observed.smileIterationMs <= 14800);
-        assert.ok(observed.closedEyeHeight > 0 && observed.closedEyeHeight < 2 && observed.smileOpacity > .9);
-        return { ...observed, realElapsedCycleObserved: true };
+      await check('PET_ALL_MODES_AND_KOREAN_LABELS_FIT', async () => {
+        const samples = [];
+        for (const mode of ['idle', 'ready', 'connecting', 'working', 'recovering', 'disconnected', 'error']) {
+          await setMode(mode); await pause(0); await frame();
+          const value = await js(`(()=>{const text=document.querySelector('#pet-status'),r=text.getBoundingClientRect(),sprite=document.querySelector('.sprite'),s=getComputedStyle(sprite);return {mode:document.body.dataset.mode,label:text.textContent,pose:s.backgroundPosition,visible:Number(getComputedStyle(text).opacity),fits:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&text.scrollWidth<=text.clientWidth}})()`);
+          assert.equal(value.mode, mode); assert.equal(value.fits, true); if (!['idle', 'ready'].includes(mode)) assert.equal(value.visible, 1);
+          await screenshot(`state-${mode}.png`); samples.push(value);
+        }
+        return samples;
       });
-      await check('PET_DRAG_AREA_AND_FOCUS_PRESERVED', async () => {
-        const value = await js(`({drag:getComputedStyle(document.body).webkitAppRegion,area:[...document.querySelectorAll('*')].filter(item=>getComputedStyle(item).webkitAppRegion==='no-drag').map(item=>{const r=item.getBoundingClientRect();return r.width*r.height}).reduce((a,b)=>a+b,0)})`);
-        assert.equal(value.drag, 'drag'); assert.ok(value.area <= 104 * 112 * .12); assert.equal(receipt.focusObserved, false); assert.equal(win.isFocused(), false);
-        return { excludedDragAreaRatio: Number((value.area / (104 * 112)).toFixed(3)), physicalDragPerformed: false };
+      await check('PET_REDUCED_MOTION_PRESERVES_STATIC_STATE_AND_HOVER', async () => {
+        await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        for (const mode of ['idle', 'working', 'recovering', 'disconnected']) {
+          await setMode(mode); await frame();
+          assert.equal(await js('document.getAnimations().filter(a=>a.playState==="running").length'), 0);
+          await screenshot(`reduced-${mode}.png`);
+        }
+        await setMode('idle'); await hover(true); await frame(); assert.ok((await mouth()).smile > .9);
+        await screenshot('reduced-motion-hover.png'); await hover(false); await frame(); await neutralMouth();
+        return { repeatingAnimations: 0, staticWorkAndDisconnect: true, staticHover: true };
+      });
+      await check('PET_REAL_ELAPSED_BLINK_AND_GREETING_CYCLE', async () => {
+        await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+        await setMode('idle'); await pause(0); await frame();
+        const value = await js(`new Promise(done=>{const started=performance.now(),result={floatIterationMs:null,floatOffset:null,floatX:null,floatRotation:null,blinkIterationMs:null,smileIterationMs:null,blinkPosition:null,smileOpacity:null};const finish=()=>{if(result.blinkIterationMs&&result.smileIterationMs){clearTimeout(timeout);document.removeEventListener('animationiteration',listener);done(result)}};const listener=event=>{if(event.animationName==='bri-float'&&!result.floatIterationMs)result.floatIterationMs=performance.now()-started;if(event.animationName==='bri-blink'&&!result.blinkIterationMs)result.blinkIterationMs=performance.now()-started;if(event.animationName==='bri-smile'&&!result.smileIterationMs)result.smileIterationMs=performance.now()-started;finish()};document.addEventListener('animationiteration',listener);document.getAnimations().forEach(a=>{a.currentTime=0;a.play()});setTimeout(()=>{const m=new DOMMatrix(getComputedStyle(document.querySelector('.bri')).transform);result.floatOffset=Math.hypot(m.m41,m.m42);result.floatX=m.m41;result.floatRotation=Math.abs(m.m12)+Math.abs(m.m21)},3500);setTimeout(()=>{result.blinkPosition=parseFloat(getComputedStyle(document.querySelector('.sprite')).backgroundPositionX)},3000);setTimeout(()=>{result.smileOpacity=Number(getComputedStyle(document.querySelector('.bri-greeting')).opacity)},12320);const timeout=setTimeout(()=>{document.removeEventListener('animationiteration',listener);done(result)},15500)})`);
+        receipt.elapsedObservation = value;
+        assert.ok(value.floatIterationMs >= 5700 && value.floatIterationMs <= 6800);
+        assert.ok(value.floatOffset > 1 && value.floatOffset <= 3.1);
+        assert.ok(Math.abs(value.floatX) < .01 && value.floatRotation < .001);
+        assert.ok(value.blinkIterationMs >= 5700 && value.blinkIterationMs <= 6800);
+        assert.ok(value.smileIterationMs >= 13700 && value.smileIterationMs <= 14800);
+        assert.ok(Math.abs(value.blinkPosition - 33.333333) < .01 && value.smileOpacity > .9);
+        return { ...value, realElapsedCycleObserved: true };
+      });
+      await check('PET_MOTION_CONTINUITY_AND_LOOP_SEAM', async () => {
+        await setMode('idle'); await seek('bri-float', 1500);
+        const before = await js(`({phase:document.getAnimations().find(a=>a.animationName==='bri-float').currentTime,y:new DOMMatrix(getComputedStyle(document.querySelector('.bri')).transform).m42})`);
+        await setMode('working'); await frame();
+        const after = await js(`({phase:document.getAnimations().find(a=>a.animationName==='bri-float')?.currentTime,y:new DOMMatrix(getComputedStyle(document.querySelector('.bri')).transform).m42})`);
+        assert.ok(Math.abs(after.phase-before.phase)<1 && Math.abs(after.y-before.y)<.01, 'Changing mode must not restart or teleport the idle motion.');
+        await setMode('idle'); await pause(0); const start = await screenshot('loop-start.png');
+        await pause(6000); const end = await screenshot('loop-end.png');
+        assert.ok(changed(start, end) <= 8, 'The idle loop seam must return to the same rendered pose.');
+        return { phasePreserved: true, loopSeamChangedPixels: changed(start, end) };
+      });
+      await check('PET_DRAG_AREA_FOCUS_AND_TRANSPARENT_MARGIN', async () => {
+        await pause(0); await js("document.body.style.background='transparent'"); await frame(); const image = await screenshot('transparent-idle.png');
+        const value = await js(`({drag:getComputedStyle(document.body).webkitAppRegion,area:[...document.querySelectorAll('*')].filter(e=>getComputedStyle(e).webkitAppRegion==='no-drag').map(e=>e.offsetWidth*e.offsetHeight).reduce((a,b)=>a+b,0)})`);
+        assert.equal(value.drag, 'drag'); assert.ok(Math.abs(value.area - 728) < 1); assert.equal(receipt.focusObserved, false); assert.equal(win.isFocused(), false);
+        assert.ok(pixel(image, 2, 2)[3] < 10);
+        return { excludedDragAreaRatio: Number((value.area / (104 * 112)).toFixed(3)), physicalDragPerformed: false, transparentCorner: true };
       });
       receipt.passed = receipt.checks.every(item => item.passed);
-    } catch { receipt.bootstrapFailed = true; }
+    } catch (error) { receipt.bootstrapFailed = { message: error.message.slice(0, 320) }; }
     finally {
       if (win && !win.isDestroyed()) win.destroy();
       await writeFile(join(evidenceDirectory, 'result.json'), JSON.stringify(receipt, null, 2) + '\n');

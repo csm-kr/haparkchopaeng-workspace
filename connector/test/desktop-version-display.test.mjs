@@ -21,6 +21,10 @@ test('native settings show the current IPC version and update when the reported 
     assert.equal(elements.get('bridge-version').textContent, '버전 0.1.5');
     stateListener({ ...state, bridgeVersion: undefined });
     assert.equal(elements.get('bridge-version').textContent, '버전 정보 없음');
+    stateListener({ ...state, stage: 'connected', briMode: 'working' });
+    assert.equal(elements.get('status').textContent, '일하는 중');
+    stateListener({ ...state, stage: 'connected', briMode: 'recovering' });
+    assert.equal(elements.get('status').textContent, '연결 확인 중');
     await new Promise(resolve => queueMicrotask(resolve));
   } finally { globalThis.document = priorDocument; globalThis.window = priorWindow; }
 });

@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { promisify } from 'node:util';
 import { createConnectorTray, shouldHideWindowToTray, shutdownWithTray } from './tray.mjs';
 import { retireLegacyMacBundles } from './legacy-mac-bundle.mjs';
+import { selectBriMode } from './renderer/bri-state.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const pendingUrls = [];
@@ -109,7 +110,9 @@ function showWindow() {
 }
 
 function publish() {
-  const runtimeStatus = runtime?.getState().status;
+  const runtimeState = runtime?.getState();
+  const runtimeStatus = runtimeState?.status;
+  state.briMode = selectBriMode({ stage: state.stage, runtime: runtimeState });
   const previouslyAvailable = state.trayAvailable;
   tray?.updateStage(runtimeStatus === 'recovering' ? 'recovering' : state.stage);
   state.trayAvailable = !!tray?.available;
@@ -120,6 +123,7 @@ function publish() {
   state.closeToTray = shouldHideWindowToTray({ platform: process.platform,
     authorized: !!runtime && ['connected', 'recovering'].includes(runtimeStatus), trayAvailable: state.trayAvailable, quitting });
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:state', { ...state });
+  if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('connector:pet-state', state.briMode);
 }
 async function shutdown() {
   if (quitting) return;
@@ -215,7 +219,11 @@ function installIpc() {
 function showPet() {
   if (petWindow && !petWindow.isDestroyed()) return;
   const bounds = screen.getPrimaryDisplay().workArea;
-  petWindow = new BrowserWindow({ width: 104, height: 112, x: bounds.x + bounds.width - 130, y: bounds.y + bounds.height - 140, show: !quietQa, frame: false, transparent: true, resizable: false, skipTaskbar: true, alwaysOnTop: process.platform !== 'linux', webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
-  petWindow.setMenu(null); petWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); petWindow.webContents.on('will-navigate', event => event.preventDefault());
-  petWindow.loadFile(join(directory, 'renderer', 'pet.html')); petWindow.on('closed', () => { petWindow = null; });
+  const window = new BrowserWindow({ width: 104, height: 112, x: bounds.x + bounds.width - 130, y: bounds.y + bounds.height - 140, show: false, focusable: false, frame: false, transparent: true, resizable: false, skipTaskbar: true, alwaysOnTop: process.platform !== 'linux', webPreferences: { preload: join(directory, 'pet-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  petWindow = window;
+  window.setMenu(null); window.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); window.webContents.on('will-navigate', event => event.preventDefault());
+  window.webContents.on('did-finish-load', publish);
+  window.once('ready-to-show', () => { if (!quietQa && !window.isDestroyed()) window.showInactive(); });
+  window.on('closed', () => { if (petWindow === window) petWindow = null; });
+  window.loadFile(join(directory, 'renderer', 'pet.html'));
 }

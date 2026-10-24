@@ -4,7 +4,7 @@
 <body>
   <header><span class="mark" aria-hidden="true"><img src="../assets/character.svg" width="32" height="32" alt=""></span><div><strong id="app-name">AI 브릿지</strong><span id="site-name">하박조팽</span></div><span id="status" class="status" role="status" aria-live="polite">대기 중</span></header>
   <main>
-    <div id="companion" class="companion" aria-hidden="true"><img src="../assets/character.svg" width="80" height="80" alt=""></div>
+    <div id="companion" class="companion" aria-hidden="true"><img src="../assets/bri/idle-v1.png" width="80" height="80" alt=""></div>
     <p class="eyebrow">AI 연결</p><h1 id="title">웹에서 AI 연결을 눌러 주세요</h1><p id="description" class="description">한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.</p>
     <section id="target" class="target" hidden><div><span>웹앱</span><strong id="target-site"></strong></div><div><span>계정 · 팀</span><strong id="target-account"></strong></div><div><span>이 PC</span><strong id="target-device"></strong></div><p>선택한 논문의 질문과 연구 보조에만 사용해요.</p></section>
     <form id="pairing" hidden><label for="code">웹의 6자리 번호</label><input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-describedby="code-help code-error"><p id="code-help" class="helper">웹에 보이는 번호를 여기에 직접 입력해 주세요.</p><p id="code-error" class="error" role="alert"></p><button id="pair-button" type="submit" class="primary" disabled>번호 확인하고 연결</button></form>

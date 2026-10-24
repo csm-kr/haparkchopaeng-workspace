@@ -1,4 +1,5 @@
 import { presentQuota, formatResetTime } from './quota.mjs';
+import { BRI_PRESENTATIONS } from './bri-state.mjs';
 const $ = id => document.getElementById(id);
 let state, submission = false, providerKey = '';
 const statusNames = { ready: '사용 가능', not_installed: '설치 필요', login_required: '로그인 필요', limited: '한도 도달', error: '확인 필요' };
@@ -14,7 +15,8 @@ function render(value) {
   if (state.appName) { document.title = state.appName; $('app-name').textContent = state.appName; }
   $('site-name').textContent = state.siteName;
   $('title').textContent = state.title; $('description').textContent = state.description;
-  $('status').textContent = stageNames[state.stage] ?? '확인 중'; $('status').dataset.ready = String(state.stage === 'connected'); $('status').dataset.stage = state.stage;
+  $('status').textContent = ['working', 'recovering'].includes(state.briMode) ? BRI_PRESENTATIONS[state.briMode].label : stageNames[state.stage] ?? '확인 중';
+  $('status').dataset.ready = String(state.stage === 'connected' && state.briMode !== 'recovering'); $('status').dataset.stage = state.stage; $('status').dataset.mode = state.briMode ?? 'idle';
   $('target').hidden = !['pairing', 'connected'].includes(state.stage);
   $('target-site').textContent = state.siteName; $('target-account').textContent = [state.memberName, state.teamName].filter(Boolean).join(' · '); $('target-device').textContent = state.deviceName;
   $('pairing').hidden = state.stage !== 'pairing'; $('providers').hidden = state.stage !== 'connected';

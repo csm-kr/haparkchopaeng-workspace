@@ -57,3 +57,39 @@
 ## 검증 범위
 
 트레이의 메뉴 콜백·상태·폐기·실패 복구·종료 순서를 Node에서 먼저 검증하고, Electron 부트스트랩 회귀와 OS별 기존 네이티브 QA·설치 파일 빌드를 이어서 수행한다. 그림 시안과 fixture 화면은 실제 계정 페어링·CLI 추론 성공의 근거로 쓰지 않는다.
+
+## 2026-10-24: ImageGen 상태별 브리
+
+사용자가 기존 브리를 더 귀엽게 만들고, 대기·연결 끊김·작업 상태에 맞는 행동을 요청했다. 이어 ImageGen 사용을 명시했다. 이번 구현에는 이 절이 앞의 SVG 전용·스크립트 없음·표정은 상태와 무관하다는 설계보다 우선한다. 설치 아이콘·트레이·앱 ID는 이번 변경 대상에 포함하지 않는다.
+
+ImageGen 원본은 [상태별 스프라이트](assets/bri-imagegen-v1.png), 생성 조건은 [프롬프트](../../connector/desktop/assets/bri/generation.md)에 보관한다. 제품에는 같은 원본의 704×352px WebP atlas(176px 정사각 셀 8개)를 사용한다. 각 상태의 글자는 이미지에 넣지 않고 시스템 글꼴로 렌더한다. 88px 표시에서 대기·눈 감음·인사·연결·타이핑 두 장·복구·연결 끊김을 표현한다.
+
+| 표시 상태 | 시각적 행동 | 문구 |
+| --- | --- | --- |
+| idle / ready | 6초 주기의 3px 수직 부유, 6초 깜빡임, 14초마다 짧은 인사 | 쉬는 중 / 준비됐어요 — 호버 중에 표시 |
+| connecting | 위를 보는 눈과 귀 기울이는 기울기 | 연결 중 |
+| working | 집중 표정, 작은 키보드, 0.9초 두 프레임 타이핑 | 일하는 중 — 항상 표시 |
+| recovering | 옆을 살피는 눈과 6초 주기 작은 기울기 | 연결 확인 중 |
+| disconnected | 처진 안테나와 걱정스러운 입, 정지 | 다시 연결 |
+| error | 같은 걱정스러운 표정, 정지 | 연결 확인 |
+
+`selectBriMode()`가 앱 stage와 런타임 status/currentJobId로 표시 상태 하나를 파생한다. 새 연결·오류·권한 종료와 복구는 작업 표시보다 우선한다. 작업이 끝나도 성공·실패·취소를 따로 알 수 없으므로 축하를 추정하지 않는다. 메인 창에도 같은 mode를 보내 작업·복구 배지를 표시한다.
+
+펫 전용 `pet-preload.cjs`는 `onState` 하나만 공개한다. 펫은 mode 문자열만 단방향으로 받으며 질문·답변·작업 ID·계정·기기 키는 받지 않는다. 초기 구독 이전 값은 preload가 보관하고, `did-finish-load` 때 메인이 최신 상태를 다시 발행한다. `script-src 'self'`와 `connect-src 'none'`, sandbox·contextIsolation·Node 차단을 사용한다. 읽기 IPC 요청이나 설정·페어링·종료 API를 펫에 노출하지 않는다.
+
+104×112px 투명 창, 기본 꺼짐과 중앙 28×26px no-drag 영역을 유지한다. 창은 자동으로 돌아다니지 않으며, 처음 보일 때 `showInactive`와 `focusable: false`를 사용한다. 작업 중 호버는 키보드를 가리지 않는다. 동작 줄이기에서는 프레임 재생과 반복 동작을 모두 멈추지만 작업 소품과 상태 문구가 유지된다.
+
+실제 격리 macOS Electron에서 11개 검사를 통과했다. 2× Retina 캡처를 CSS 좌표와 맞춰 흰색·어두운 배경의 얼굴·플러그 대비, 타이핑 두 프레임 차이, 7개 mode의 한글 문구, 호버 복귀, 동작 줄이기와 6초·14초 실제 경과를 확인했다. 포커스 획득·원격 요청·CLI 추론은 0회다. 물리 드래그와 Mac 네이티브 포인터 호버, Windows·Linux와 설치본 배포는 이 검사로 확인하지 않았다.
+
+### 움직임 문법과 품질 검토
+
+사용자가 idle의 수직 움직임과 어색한 동작의 독립 검토를 추가로 요청했다. [MDN의 easing/steps](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/animation-timing-function), [Godot의 sprite sheet 재생](https://docs.godotengine.org/en/stable/tutorials/2d/2d_sprite_animation.html), [Rive의 state machine](https://rive.app/docs/editor/state-machine/state-machine)을 참고해 기존 Electron/CSS에서 다음을 적용했다. 숫자와 브리에 대한 선택은 이번 구현의 디자인 판단이다.
+
+- **Idle bobbing:** `translateY(0) → translateY(-3px) → translateY(0)`을 6초 `ease-in-out`으로 반복한다. 좌우 이동·회전·크기 변화는 없다. 위아래 끝에서 속도를 줄이고 시작·끝 자세를 같게 한다.
+- **분리된 동작 트랙:** 바깥 캐릭터가 부유를 소유하고, 안쪽 이미지가 표정·타이핑·고개 기울기를 소유한다. idle에서 작업 상태로 전환해도 바깥 트랙의 현재 phase를 유지한다. 끊김·오류는 현재 부유 위치에서 정지하고 복귀하면 이어 간다.
+- **표정 중복 제거:** 인사 이미지를 보일 때 기본 이미지는 같은 타이밍에 숨긴다. 호버와 자발 인사 모두 몸체가 겹쳐 남는 현상을 실제 렌더에서 재현한 뒤 고쳤다.
+- **상태의 즉시성:** 일하는 중·복구 중·연결 끊김 문구를 전환 즉시 표시한다. 움직임의 phase를 유지하는 것과 상태 변경을 지연하는 것을 구분한다.
+
+검사에는 수평 이동 0·회전 0, 6초 실제 float 반복, 상태 전환 전후 phase 유지와 루프 양 끝의 같은 렌더를 추가했다. 타이핑은 손이 바뀌는 두 프레임을 실제 크기로 비교했다. 인사 이미지가 기본 몸체와 동시에 보이지 않는지 별도로 검사했다.
+
+검토용 움직임은 `connector/artifacts/bri-motion-preview-20261024/`에 실제 격리 Electron renderer를 24fps의 정확한 CSS 시각으로 샘플링해 저장한다. 이 미리보기는 같은 스프라이트·스타일·preload를 사용하며, 작업 상태는 모의 입력이다. 영상의 화면 배율과 타임라인은 manifest에 기록한다.

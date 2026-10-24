@@ -3,3 +3,4 @@
 .quota-ring[data-stale=true] .arc{stroke:var(--faint)}
 
 .companion{margin:0 0 18px;line-height:0}.companion img{display:block}.status[data-stage="error"]{color:var(--danger)}.status[data-stage="authorization_required"]{color:var(--warning)}body{word-break:keep-all;overflow-wrap:break-word}
+.status[data-mode="working"]{color:var(--accent);background:var(--accent-bg);padding:4px 7px;border-radius:var(--r-sm);font-weight:600}.status[data-mode="recovering"]{color:var(--warning)}

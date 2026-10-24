@@ -1,0 +1,35 @@
+{
+  "project": "hapark",
+  "phase": "25-bri-stateful-companion",
+  "execution": "manual AC execution in the active Codex session",
+  "steps": [
+    {
+      "step": 0,
+      "name": "display-state",
+      "status": "completed",
+      "summary": "Main-derived mode, receive-only preload, default-off and reload tests pass."
+    },
+    {
+      "step": 1,
+      "name": "imagegen-sprites",
+      "status": "completed",
+      "summary": "ImageGen 8-cell transparent atlas, slow idle, typing loop, recovery/disconnect expressions and visible work badge implemented."
+    },
+    {
+      "step": 2,
+      "name": "native-verification",
+      "status": "completed",
+      "summary": "Connector Node 227 pass/6 skip; isolated macOS Electron 11 checks pass; source scope reviewed."
+    },
+    {
+      "step": 3,
+      "name": "release-publication",
+      "status": "pending"
+    }
+  ],
+  "sourceImplementationComplete": true,
+  "installedUpgradeVerified": false,
+  "targetReleasePublished": false,
+  "releaseVersion": "0.1.11",
+  "releaseTag": "ai-bridge-v0.1.11-preview.1"
+}

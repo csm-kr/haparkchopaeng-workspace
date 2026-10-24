@@ -15,7 +15,7 @@ import { registerHooks } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const fixture = JSON.parse(process.env.CONNECTOR_TRAY_FIXTURE);
-const windows = [], trays = [], states = [], external = [], events = [], requests = [], handlers = new Map();
+const windows = [], trays = [], states = [], petStates = [], external = [], events = [], requests = [], handlers = new Map();
 let protocolCalls = 0;
 const app = Object.assign(new EventEmitter(), {
   isPackaged: fixture.packaged === true, getVersion: () => fixture.version ?? '0.1.5', setName() {}, setPath(_key, value) { this.userData = value; },
@@ -25,11 +25,13 @@ const app = Object.assign(new EventEmitter(), {
 });
 class BrowserWindow extends EventEmitter {
   constructor(options) { super(); this.options = options; this.visible = false; this.focusCalls = 0; this.inactiveCalls = 0; windows.push(this);
-    this.webContents = Object.assign(new EventEmitter(), { mainFrame: {}, send(_channel, state) { states.push(state); }, setWindowOpenHandler() {} }); }
-  isDestroyed() { return false; } isVisible() { return this.visible; }
+    this.webContents = Object.assign(new EventEmitter(), { mainFrame: {}, send(channel, state) { if (channel === 'connector:pet-state') petStates.push(state); else states.push(state); }, setWindowOpenHandler() {} }); }
+  isDestroyed() { return this.closed === true; } isVisible() { return this.visible; }
   show() { this.visible = true; } hide() { this.visible = false; } focus() { this.focusCalls += 1; }
   showInactive() { this.visible = true; this.inactiveCalls += 1; }
-  loadFile() { queueMicrotask(() => this.emit('ready-to-show')); }
+  setMenu() {}
+  close() { this.closed = true; this.emit('closed'); }
+  loadFile() { queueMicrotask(() => { this.webContents.emit('did-finish-load'); this.emit('ready-to-show'); }); }
 }
 class Tray extends EventEmitter {
   constructor() { super(); this.destroyed = false; this.destroyCalls = 0; trays.push(this); }
@@ -54,8 +56,20 @@ globalThis.__versionApi = { async post(route, body) {
   if (route === 'claim') return null;
   throw new Error('Unexpected fixture route');
 } };
+class PetSession extends EventEmitter {
+  constructor(options) { super(); this.options = options; this.state = { status: 'disconnected', currentJobId: null, providers: [] }; globalThis.__briSession = this; }
+  getState() { return this.state; }
+  set(value) { Object.assign(this.state, value); this.emit('state', this.state); }
+  start() { this.set({ status: 'connected' }); }
+  tick() { void globalThis.__versionApi.post('heartbeat', { bridgeVersion: this.options.bridgeVersion, bridgeArchitecture: this.options.bridgeArchitecture }); }
+  setProviders(providers) { this.set({ providers }); }
+  stop() { this.set({ status: 'disconnected', currentJobId: null }); }
+  async whenIdle() {}
+}
+globalThis.__PetSession = PetSession;
 registerHooks({ resolve(specifier, context, next) {
   const text = specifier === 'electron' ? moduleText
+    : fixture.pet && /\/core\/runtime\.mjs$/.test(specifier) ? 'export const ConnectorSession = globalThis.__PetSession;'
     : fixture.version && /\/core\/api\.mjs$/.test(specifier) ? 'export const createApiClient = () => globalThis.__versionApi;'
     : fixture.version && /\/core\/adapters\.mjs$/.test(specifier) ? 'export const createProviderAdapter = () => ({detect:async()=>({provider:"codex",status:"ready",models:[],quota:null,observedAt:new Date().toISOString()})});'
     : null;
@@ -96,6 +110,34 @@ try {
     assert.equal(heartbeat.bridgeVersion, fixture.version, 'HEARTBEAT_MUST_USE_ACTUAL_APP_VERSION');
     assert.equal(heartbeat.bridgeArchitecture, ['x64', 'arm64'].includes(process.arch) ? process.arch : undefined);
   }
+  if (fixture.pet) {
+    const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+    const toggle = handlers.get('connector:pet');
+    assert.equal((await toggle({ sender: {}, senderFrame: {} }, true)).ok, false);
+    assert.equal(windows.length, 1, 'PET_DEFAULT_OFF');
+    await toggle(event, true);
+    await until(() => petStates.length > 0);
+    const pet = windows[1];
+    assert.match(pet.options.webPreferences.preload, /pet-preload\.cjs$/);
+    assert.equal(pet.options.webPreferences.sandbox, true);
+    assert.equal(pet.options.webPreferences.contextIsolation, true);
+    assert.equal(pet.options.webPreferences.nodeIntegration, false);
+    assert.equal(pet.options.focusable, false); assert.equal(pet.options.show, false);
+    assert.equal(pet.inactiveCalls, quiet ? 0 : 1);
+    assert.equal(pet.focusCalls, 0);
+    assert.equal(petStates.at(-1), 'ready');
+    const session = globalThis.__briSession;
+    session.set({ currentJobId: 'sensitive-job-id' });
+    assert.equal(petStates.at(-1), 'working'); assert.equal(states.at(-1).briMode, 'working');
+    session.set({ status: 'recovering' });
+    assert.equal(petStates.at(-1), 'recovering');
+    session.set({ status: 'authorization_required' });
+    assert.equal(petStates.at(-1), 'disconnected');
+    pet.webContents.emit('did-finish-load');
+    assert.equal(petStates.at(-1), 'disconnected', 'RELOAD_MUST_USE_CURRENT_STATE');
+    assert.ok(petStates.every(value => typeof value === 'string' && !value.includes('sensitive')));
+    await toggle(event, false); assert.equal(pet.closed, true);
+  }
   assert.equal(window.inactiveCalls, 0, 'Normal status changes must not restore a window.');
   if (fixture.breakTray) {
     const focused = window.focusCalls;
@@ -117,7 +159,7 @@ try {
   assert.equal(prevented, true);
   if (tray) assert.equal(tray.destroyCalls, 1);
   assert.deepEqual(events, tray ? ['tray-destroy', 'exit'] : ['exit']);
-  assert.equal(app.exitCode, 0); assert.equal(windows.length, 1);
+  assert.equal(app.exitCode, 0); assert.equal(windows.length, fixture.pet ? 2 : 1);
   console.log(JSON.stringify({ passed: true, actualElectron: false, cliInference: false, protocolRegistration: false }));
 } catch (error) {
   const marker = ['NATIVE_TRAY_COUNT', 'TRAY_FAILURE_NOT_RECOVERED'].find(value => error.message.includes(value));
@@ -165,4 +207,9 @@ test('quiet QA tray failure publishes unavailable state without showing its offs
 
 test('native state and heartbeat use Electron app.getVersion rather than the development package version', async () => {
   await runMainFixture({ qa: true, version: '9.8.7-native.2+fixture' });
+});
+
+test('main sends only the current Bri mode to an opt-in pet and rehydrates after reload without focus', async () => {
+  await runMainFixture({ qa: true, version: '9.8.7-native.2+fixture', pet: true });
+  await runMainFixture({ version: '9.8.7-native.2+fixture', pet: true });
 });
