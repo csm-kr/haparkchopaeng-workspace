@@ -71,3 +71,40 @@ test('actual hidden Node child is gone after cancellation completes', { timeout:
     try { process.kill(handle.pid, 0); if(process.platform==='win32')execFileSync('taskkill.exe',['/PID',String(handle.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else process.kill(handle.pid,'SIGKILL'); } catch {}
   }
 });
+
+test('lifecycle reports actual spawn and one terminal close without leaking child data', async () => {
+  for (const mode of ['close', 'error', 'throw']) {
+    const events = [];
+    const child = new EventEmitter();
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    const handle = startJsonProcess({ command: 'private-path', prefix: [] }, ['private-argument'], {
+      spawnImpl() { if (mode === 'throw') throw new Error('private-error'); return child; },
+      onLifecycle(event) { events.push(event); if (event.kind === 'closed') throw new Error('Observer failure'); },
+    });
+    assert.deepEqual(events, mode === 'throw' ? [{ kind: 'closed' }] : []);
+    if (mode === 'close') { child.emit('spawn'); child.emit('close', 0, null); await handle.done; }
+    else { if (mode === 'error') child.emit('error', Object.assign(new Error('private-error'), { code: 'ENOENT' })); await assert.rejects(handle.done); }
+    child.emit('close', 1, null); child.emit('spawn');
+    assert.deepEqual(events, mode === 'close' ? [{ kind: 'spawned' }, { kind: 'closed' }] : [{ kind: 'closed' }]);
+  }
+});
+
+test('actual child lifecycle begins at spawn and closes before its completion settles', async () => {
+  const events = [];
+  const handle = startJsonProcess({ command: process.execPath, prefix: [] }, ['-e', 'console.log("{}")'], { onLifecycle: event => events.push(event.kind) });
+  assert.deepEqual(events, []);
+  await handle.done;
+  assert.deepEqual(events, ['spawned', 'closed']);
+});
+
+test('an error after spawn retains process ownership until the actual close event', async () => {
+  const child = new EventEmitter(), events = []; let killed = false, settled = false;
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const handle = startJsonProcess({ command: 'agent' }, [], { spawnImpl: () => child, onLifecycle: event => events.push(event.kind), killTree: () => { killed = true; } });
+  handle.done.catch(() => { settled = true; });
+  child.emit('spawn'); child.emit('error', new Error('owned process failure'));
+  await new Promise(resolve => queueMicrotask(resolve));
+  assert.equal(killed, true); assert.equal(settled, false); assert.deepEqual(events, ['spawned']);
+  child.emit('close', 1, null); await assert.rejects(handle.done);
+  assert.deepEqual(events, ['spawned', 'closed']);
+});

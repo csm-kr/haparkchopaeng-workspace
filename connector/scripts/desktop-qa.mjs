@@ -19,7 +19,7 @@ const click = async selector => { const box = await js(`(()=>{const r=document.q
 const typeCode = async value => { await js(`document.querySelector('#code').focus();document.querySelector('#code').select()`); await cdp('Input.insertText', { text: value }); };
 try {
   // A CDP target exists before its stylesheet and character images finish loading.
-  await waitFor(`document.readyState === 'complete' && [...document.images].every(image => image.complete && image.naturalWidth > 0)`);
+  await waitFor(`document.readyState === 'complete' && typeof window.connector?.state === 'function' && document.querySelector('#code') && document.querySelector('#activity-label') && [...document.images].every(image => image.complete && image.naturalWidth > 0)`);
   const checks = await js(`(async()=>({ stage:(await window.connector.state()).stage, background:getComputedStyle(document.body).backgroundColor, codeEmpty:document.querySelector('#code').value==='', codeDisabled:document.querySelector('#pair-button').disabled, autoStart:document.querySelector('#auto-start').checked, pet:document.querySelector('#pet').checked, nodeExposed:typeof window.require!=='undefined', focused:document.hasFocus(), overflow:document.documentElement.scrollWidth>innerWidth }))()`);
   if (checks.background !== 'rgb(14, 15, 12)' || !checks.codeEmpty || !checks.codeDisabled || checks.autoStart || checks.pet || checks.nodeExposed || checks.overflow || checks.focused) throw new Error(`Desktop baseline failed: ${JSON.stringify(checks)}`);
   await capture(`desktop-${checks.stage}`);

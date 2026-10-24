@@ -30,8 +30,9 @@ export function terminateProcessTree(child, { platform = process.platform, spawn
   }
 }
 
-export function startJsonProcess(spec, args, { cwd, env = process.env, signal, onMessage = () => {}, timeoutMs = 10 * 60 * 1000, spawnImpl = spawn, platform = process.platform, killTree = child => terminateProcessTree(child, { platform, spawnImpl }), maxLineBytes } = {}) {
-  let child, finished = false, failure = null, killed = false, timer;
+export function startJsonProcess(spec, args, { cwd, env = process.env, signal, onMessage = () => {}, onLifecycle = () => {}, timeoutMs = 10 * 60 * 1000, spawnImpl = spawn, platform = process.platform, killTree = child => terminateProcessTree(child, { platform, spawnImpl }), maxLineBytes } = {}) {
+  let child, finished = false, spawned = false, failure = null, killed = false, timer;
+  const lifecycle = kind => { try { onLifecycle({ kind }); } catch {} };
   const listeners = new Set([onMessage]);
   const kill = () => { if (!killed && child && !finished) { killed = true; killTree(child); } };
   const onAbort = () => { failure ??= Object.assign(new Error('CLI 실행을 취소했어요.'), { name: 'AbortError' }); kill(); };
@@ -42,21 +43,23 @@ export function startJsonProcess(spec, args, { cwd, env = process.env, signal, o
   const decoder = new JsonLineDecoder(message => { for (const listener of listeners) listener(message); }, maxLineBytes);
   try {
     child = spawnImpl(spec.command, [...(spec.prefix ?? []), ...args], { cwd, env: { ...env, ...(spec.env ?? {}) }, windowsHide: true, shell: false, detached: platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
+    child.once('spawn', () => { if (!finished) { spawned = true; lifecycle('spawned'); } });
     child.stdout.on('data', data => { try { decoder.push(data); } catch { failure ??= new Error('CLI 응답 형식을 확인하지 못했어요.'); kill(); } });
     // Drain stderr without reflecting paths, email addresses, credentials or prompts to the web.
     child.stderr.on('data', () => {});
     child.stdin.on('error', () => {});
-    child.on('error', error => { failure ??= Object.assign(new Error('CLI를 실행하지 못했어요.'), { code: error.code }); finished = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); rejectDone(failure); });
+    child.on('error', error => { if (finished) return; failure ??= Object.assign(new Error('CLI를 실행하지 못했어요.'), { code: error.code }); if (spawned) { kill(); return; } finished = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); lifecycle('closed'); rejectDone(failure); });
     child.on('close', (code, exitSignal) => {
       if (finished) return;
       finished = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort);
+      lifecycle('closed');
       try { decoder.finish(); } catch { failure ??= new Error('CLI 응답 형식을 확인하지 못했어요.'); }
       if (failure) rejectDone(failure); else resolveDone({ code, signal: exitSignal });
     });
     timer = setTimeout(() => { failure ??= new Error('CLI 응답 시간이 초과됐어요.'); kill(); }, timeoutMs);
     timer.unref?.();
     if (signal?.aborted) onAbort(); else signal?.addEventListener('abort', onAbort, { once: true });
-  } catch { finished = true; rejectDone(new Error('CLI를 실행하지 못했어요.')); }
+  } catch { finished = true; lifecycle('closed'); rejectDone(new Error('CLI를 실행하지 못했어요.')); }
   return {
     done,
     get pid() { return child?.pid; },

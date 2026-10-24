@@ -202,3 +202,46 @@ test('Claude metadata refresh does not relabel previously observed quota as newl
     assert.equal(next.observedAt, new Date(31000).toISOString());
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('runs capture the validated executable and catalogue before discovery or workspace awaits', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hapark-atomic-launch-'));
+  let command = 'validated-old', releaseVersion, holdVersion = false;
+  const launches = [], lifecycle = [];
+  const adapter = createProviderAdapter('claude', { workspaceRoot: root,
+    resolve: () => ({ command, prefix: [], env: { ELECTRON_RUN_AS_NODE: '1' } }),
+    execute: async (_command, args) => {
+      if (args.includes('--version')) { if (holdVersion) await new Promise(resolve => { releaseVersion = resolve; }); return { stdout: '2.1.301' }; }
+      return { stdout: '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty"}' };
+    },
+    processFactory(spec, args, options) {
+      const listeners = new Set([options.onMessage ?? (() => {})]); let finish;
+      const done = new Promise(resolve => { finish = resolve; });
+      const emit = value => { for (const listener of [...listeners]) listener(value); };
+      if (args.includes('--model')) launches.push(structuredClone(spec));
+      const close = () => { options.onLifecycle?.({ kind: 'closed' }); finish({ code: 0, signal: null }); };
+      queueMicrotask(() => options.onLifecycle?.({ kind: 'spawned' }));
+      return { done, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+        send(message) {
+          if (message.type === 'control_request') queueMicrotask(() => emit({ type: 'control_response', response: { request_id: message.request_id, subtype: 'success', response: { models: [{ value: 'haiku', displayName: 'Haiku' }] } } }));
+          if (message.type === 'user') queueMicrotask(() => { emit({ type: 'result', subtype: 'success', result: '4' }); close(); });
+        }, close, end() {},
+      };
+    },
+  });
+  const run = () => adapter.run({ model: 'haiku', prompt: 'question', onText() {}, onLifecycle: event => lifecycle.push(event) });
+  try {
+    await adapter.detect();
+    command = 'unvalidated-new'; holdVersion = true;
+    const detecting = adapter.detect();
+    await run();
+    assert.equal(launches.at(-1).command, 'validated-old');
+    holdVersion = false; releaseVersion(); await detecting;
+    const running = run();
+    command = 'replacement-during-workspace'; const replacing = adapter.detect();
+    await running; await replacing;
+    assert.equal(launches.at(-1).command, 'unvalidated-new');
+    await run(); assert.equal(launches.at(-1).command, 'replacement-during-workspace');
+    assert.ok(lifecycle.some(value => value.kind === 'spawned'));
+    assert.ok(lifecycle.every(value => Object.keys(value).join() === 'kind'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

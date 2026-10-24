@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('connector', Object.freeze({
   quit: () => ipcRenderer.invoke('connector:quit'),
   autoStart: enabled => ipcRenderer.invoke('connector:auto-start', enabled === true),
   pet: enabled => ipcRenderer.invoke('connector:pet', enabled === true),
+  terminal: provider => ipcRenderer.invoke('connector:terminal', ['codex', 'claude'].includes(provider) ? provider : ''),
   help: provider => ipcRenderer.invoke('connector:help', provider),
   onState: listener => {
     if (typeof listener !== 'function') return () => {};
