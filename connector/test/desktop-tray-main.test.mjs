@@ -10,10 +10,19 @@ import { assertInside } from '../scripts/installed-smoke-support.mjs';
 const bootstrap = String.raw`
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { registerHooks } from 'node:module';
+import fs from 'node:fs/promises';
+import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const fixture = JSON.parse(process.env.CONNECTOR_TRAY_FIXTURE);
+const packagedConfig = { version: 1, development: false, applications: [{
+  id: 'hapark', name: 'Tray fixture', scheme: 'hapark-connect',
+  origin: 'https://tray-fixture.example', allowedOrigins: ['https://tray-fixture.example'],
+}] };
+const configPath = join(fixture.root, 'connector/desktop/apps.generated.json');
+const readFile = fs.readFile;
+fs.readFile = (path, ...options) => path === configPath ? Promise.resolve(JSON.stringify(packagedConfig)) : readFile(path, ...options);
+syncBuiltinESMExports();
 const windows = [], trays = [], states = [], petStates = [], external = [], events = [], requests = [], handlers = new Map();
 let protocolCalls = 0;
 const app = Object.assign(new EventEmitter(), {
@@ -92,7 +101,11 @@ async function until(predicate, label) {
 try {
   await import(pathToFileURL(join(fixture.root, 'connector/desktop/main.mjs')).href);
   await until(() => windows.length && states.length, 'initial window state');
-  if (fixture.packaged) await until(() => external.length === 1, 'packaged first-launch browser handoff');
+  if (fixture.packaged) {
+    await until(() => external.length === 1, 'packaged first-launch browser handoff');
+    assert.deepEqual(external, ['https://tray-fixture.example/profile?localAgentResume=1']);
+    assert.equal(windows[0].visible, true);
+  }
   const quiet = fixture.qa === true && fixture.packaged !== true;
   const expectedTray = !quiet || fixture.qaTray === true;
   assert.equal(trays.length, expectedTray ? 1 : 0, 'NATIVE_TRAY_COUNT');
