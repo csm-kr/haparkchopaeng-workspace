@@ -1,0 +1,26 @@
+[
+  {
+    "platform": "linux",
+    "url": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/download/ai-bridge-v0.1.11-preview.1/AI-Bridge-0.1.11-linux-x64.deb",
+    "version": "0.1.11",
+    "filename": "AI-Bridge-0.1.11-linux-x64.deb",
+    "architecture": "x64",
+    "unsigned": true
+  },
+  {
+    "platform": "macos",
+    "url": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/download/ai-bridge-v0.1.11-preview.1/AI-Bridge-0.1.11-mac-arm64.dmg",
+    "version": "0.1.11",
+    "filename": "AI-Bridge-0.1.11-mac-arm64.dmg",
+    "architecture": "arm64",
+    "unsigned": true
+  },
+  {
+    "platform": "windows",
+    "url": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/download/ai-bridge-v0.1.11-preview.1/AI-Bridge-0.1.11-win-x64.exe",
+    "version": "0.1.11",
+    "filename": "AI-Bridge-0.1.11-win-x64.exe",
+    "architecture": "x64",
+    "unsigned": true
+  }
+]

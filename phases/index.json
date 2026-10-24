@@ -108,8 +108,8 @@
     },
     {
       "dir": "25-bri-stateful-companion",
-      "status": "pending",
-      "summary": "Bri source and local verification complete; user authorized 0.1.11 publication; exact-source CI and installer/web publication pending."
+      "status": "completed",
+      "summary": "0.1.11 stateful ImageGen Bri published for Windows x64, Mac arm64 and Ubuntu x64; exact-source CI and native publication passed; production download API verified."
     }
   ]
 }

@@ -10,6 +10,10 @@ Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치�
 
 테스트 파일 게시를 Windows 게시자 서명·Mac Developer ID/공증·Gatekeeper 승인이나 실사용자의 전체 페어링·추론 검증으로 보고하지 않는다. 현재 실제 게시 결과와 URL·소스·검증 영수증은 HTML 배포 보고서에 별도로 기록한다.
 
+## 2026-10-24 브리 0.1.11 게시
+
+상태별 ImageGen 브리를 포함한 [0.1.11 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.11-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 동일 소스 태그의 5개 CI job과 게시 workflow 3개 job이 모두 성공했고, 각 파일 SHA256·크기·공개 HTTP 200을 확인했다. Production 다운로드 설정을 갱신한 뒤 운영 API에서 세 OS 모두 0.1.11을 다시 확인했다. 정확한 소스·파일 해시·배포 영수증과 검증 범위는 [배포 기록](../../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. 기존 unsigned prerelease 채널이며 사용자 컴퓨터의 기존 설치 앱은 자동으로 교체하지 않는다.
+
 ## 2026-10-18 운영 반영 기록
 
 사용자의 운영 배포 요청에 따라 Supabase `ocprfnjuakugiraimeoo`의 `postgres/public`을 확인하고 두 20261017 SQL을 한 트랜잭션으로 반영했다. 반영 전 실제 Prisma schema diff는 예정한 6테이블·7컬럼 추가와 일치했고, 반영 후 `prisma migrate diff --exit-code`는 **0 / No difference detected**다. 새 PK 6개·FK 12개·PK 포함 인덱스 19개와 기존 논문 11개·분석 22개·Figure 63개·멤버 12명·팀 4개를 확인했다.

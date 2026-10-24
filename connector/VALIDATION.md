@@ -253,3 +253,8 @@ Node **139개**, 실제 Mac builder 구현 회귀 **5개**, 각 Mac의 installed
 직전 제품 `86b98d8f`/CI 39043732926의 5 jobs와 공통 `2fad9a9a`/CI 39043744517의 3 jobs도 당시 성공 기록이다. 이전 `c808e926`/`1e309c3f`·`9eeccee`/`e5e6a612`와 각 실행의 설치본 해시는 보존하며 새 산출물의 해시로 재사용하지 않는다.
 
 서명·공증·Gatekeeper 승인, 실제 브라우저 승인·운영 인증/추론·기존 기기 키 이전·재부팅/업데이트·Wayland는 미검증이다. 설치 smoke는 invalid URI를 자격 정보 저장·API ACK·CLI adapter 구성 전에 거절하며 실제 추론은 0회다. 독립 네트워크 실측이 아니고 unpackaged 암호화·재개·손상 복구 13조건과 별도다. Ubuntu는 GUI·키링·CJK 글꼴·X11·정상 sandbox 전제이며 원래 argv·cold renderer 상태를 증명하지 않는다. `overallGoalComplete=false`·운영 외부 gate 3개는 유지한다. 9eeccee 로컬 QA exe는 과거 정적 검사본으로 파일명·링크·SHA를 유지한다.
+
+
+## 2026-10-24 · 0.1.11 상태별 ImageGen 브리 배포
+
+제품 소스 `c65c73c846fbeadb6aa8899e494bb242a11b7fca`의 동일 태그 CI 40066225682는 최종 5개 job 모두 성공했고, 게시 workflow 40067055378도 3개 job 모두 성공했다. Windows·Mac arm64·Ubuntu의 검증된 설치 파일을 공개하고 Production 다운로드 목록의 0.1.11을 운영 API에서 재확인했다. 파일별 SHA256·크기·실행 링크와 첫 Mac cleanup 실패/재실행의 구분은 [배포 기록](../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. CI 설치·정리와 신규 격리 프로필 범위이며 실제 계정 추론·기존 사용자 업그레이드·정식 게시자 서명은 포함하지 않는다.

@@ -24,12 +24,19 @@
     {
       "step": 3,
       "name": "release-publication",
-      "status": "pending"
+      "status": "completed",
+      "summary": "0.1.11 three-OS prerelease published; exact-source CI five jobs and publisher three jobs passed; production download API read back all three 0.1.11 URLs."
     }
   ],
   "sourceImplementationComplete": true,
   "installedUpgradeVerified": false,
-  "targetReleasePublished": false,
+  "targetReleasePublished": true,
   "releaseVersion": "0.1.11",
-  "releaseTag": "ai-bridge-v0.1.11-preview.1"
+  "releaseTag": "ai-bridge-v0.1.11-preview.1",
+  "releaseUrl": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.11-preview.1",
+  "releaseSource": "c65c73c846fbeadb6aa8899e494bb242a11b7fca",
+  "validationRunId": 40066225682,
+  "assetWorkflowRunId": 40067055378,
+  "productionCatalogVerified": true,
+  "productionDeployment": "dpl_AjR3pRQwnohfSUxEZFsMFtxhPzwy"
 }
