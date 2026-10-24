@@ -1,120 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@/components/ui";
-import type { LocalAgentProvider as ProviderName } from "@/types/local-agent";
-import { ConnectionDialog } from "./connection-dialog";
 import { useLocalAgent } from "./provider";
-import { chatSelection, EFFORT_LABELS, modelEfforts } from "./chat-selection";
-import { phaseLabel, providerName, providerStatus, quotaWindows } from "./presentation";
+import { chatSelection } from "./chat-selection";
+import { phaseLabel, providerName, quotaWindows } from "./presentation";
 import { QuotaBadge } from "./quota-badge";
-import { BridgeUpdateInfo } from "./bridge-update";
-
-const PROVIDERS: ProviderName[] = ["codex", "claude"];
 
 export function ConnectionSettings({ collapsed = false }: { collapsed?: boolean }) {
   const agent = useLocalAgent();
-  const [open, setOpen] = React.useState(false);
-  const [view, setView] = React.useState<{ deviceId: string | null; provider: ProviderName } | null>(null);
-  const tabs = React.useRef<Partial<Record<ProviderName, HTMLButtonElement | null>>>({});
-  const pendingConnection = React.useRef(false);
   const id = React.useId();
-  React.useEffect(() => {
-    // 기존 창이 포커스를 복원한 뒤 다음 창이 복원 대상을 저장하게 한다.
-    if (!open && pendingConnection.current && agent) {
-      pendingConnection.current = false;
-      agent.open();
-    }
-  }, [open, agent]);
   if (!agent) return null;
   const connected = agent.phase === "connected";
   const status = connected ? "연결됨" : phaseLabel[agent.phase];
   const target = agent.chatTarget ?? agent.selectedModel;
-  const selection = chatSelection(agent.device, agent.chatTarget ?? agent.selectedModel, agent.effort);
-  const targetProvider = agent.device?.providers.find(item => item.provider === (selection?.provider ?? target?.provider));
-  const targetModel = selection && targetProvider?.models.find(model => model.id === selection.model);
-  const modelLabel = targetModel?.name ?? (target ? "모델 선택 필요" : "모델 미선택");
-  const modelDescription = targetModel && targetProvider ? `${providerName[targetProvider.provider]} · ${targetModel.name}` : modelLabel;
-  const deviceId = agent.device?.id ?? null;
-  const firstProvider = target?.provider ?? PROVIDERS.find(name => agent.device?.providers.some(provider => provider.provider === name && provider.status === "ready")) ?? "codex";
-  const active = view?.deviceId === deviceId ? view.provider : firstProvider;
-  const provider = agent.device?.providers.find(item => item.provider === active);
-  const models = provider?.status === "ready" ? provider.models : [];
-  const current = selection?.provider === active ? selection : null;
-  const selected = models.find(model => model.id === current?.model);
-  const efforts = modelEfforts(selected);
-  const canSelect = connected && models.length > 0;
-  const close = () => { setOpen(false); setView(null); };
-  const openConnection = () => { pendingConnection.current = true; close(); };
-  const showProvider = (name: ProviderName) => setView({ deviceId, provider: name });
-  const unavailable = !provider ? null
-    : provider.status === "not_installed" ? `AI 브릿지에서 ${providerName[active]} 설치 안내를 확인해 주세요.`
-    : provider.status === "login_required" ? `AI 브릿지에서 ${providerName[active]} 로그인을 확인해 주세요.`
-    : provider.status === "limited" ? "사용 한도에 도달했어요. 한도를 확인한 뒤 다시 시도해 주세요."
-    : provider.status === "error" ? "CLI 상태를 확인하지 못했어요. AI 브릿지에서 다시 확인해 주세요."
-    : models.length === 0 ? "이 도구가 제공한 모델이 아직 없어요." : null;
+  const selection = connected ? chatSelection(agent.device, target, agent.effort) : null;
+  const provider = connected ? agent.device?.providers.find(item => item.provider === (selection?.provider ?? target?.provider)) : null;
+  const model = selection && provider?.models.find(item => item.id === selection.model);
+  const modelLabel = model?.name ?? (connected ? "모델 선택 필요" : status);
+  const description = model && provider ? `${providerName[provider.provider]} · ${model.name}` : modelLabel;
   return <>
     <div role="group" aria-label="AI 연결 상태" className="flex min-w-0 items-center">
-      <button type="button" aria-label="AI 연결" aria-describedby={`${id}-status`} aria-haspopup="dialog" aria-expanded={open}
-        title={`AI 연결 · ${status} · ${modelDescription}`} onClick={() => setOpen(true)} className={`flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${collapsed ? "justify-center" : "px-2.5 py-2"}`}>
+      <button type="button" aria-label="AI 연결" aria-describedby={`${id}-status`} aria-haspopup="dialog"
+        title={`AI 연결 · ${status} · ${description}`} onClick={agent.open} className={`flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${collapsed ? "justify-center" : "px-2.5 py-2"}`}>
         <span className="grid size-4 shrink-0 place-items-center"><span aria-hidden="true" data-connection-state={agent.phase} className={`size-2 rounded-full ${connected ? "bg-online" : "bg-fg-faint"}`} /></span>
-        {!collapsed && <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
-          <span className="text-[13px] font-medium">AI 연결</span>
-          <span className="w-full truncate text-[11px] text-fg-subtle">{modelLabel}</span>
-        </span>}
+        {!collapsed && <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left"><span className="text-[13px] font-medium">AI 연결</span><span className="w-full truncate text-[11px] text-fg-subtle">{model ? description : modelLabel}</span></span>}
       </button>
-      {!collapsed && connected && targetProvider && <QuotaBadge key={targetProvider.provider} windows={quotaWindows(targetProvider)} compact label="현재 모델 사용량 상세" />}
+      {!collapsed && connected && provider && <QuotaBadge key={provider.provider} windows={quotaWindows(provider)} compact label="현재 모델 사용량 상세" />}
     </div>
-    <span id={`${id}-status`} className="sr-only">{status} · {modelDescription}</span>
-    {open && <ConnectionDialog title="AI 연결" onClose={close}>
-      {connected ? <>
-      <div className="flex items-center justify-between gap-3 rounded-md bg-bg-subtle p-3">
-        <div className="min-w-0"><p className="truncate text-[13px] font-medium text-fg">{agent.device?.name}</p><p className="mt-1 text-[12px] text-fg-muted">{status}</p></div>
-        <Button variant="secondary" size="sm" onClick={openConnection}>연결 관리</Button>
-      </div>
-      <div role="tablist" aria-label="AI 도구" className="flex gap-1 rounded-md bg-bg-subtle p-1">
-        {PROVIDERS.map(name => <button key={name} ref={node => { tabs.current[name] = node; }} type="button" role="tab"
-          id={`${id}-tab-${name}`} aria-selected={active === name} aria-controls={`${id}-panel`} tabIndex={active === name ? 0 : -1}
-          onClick={() => showProvider(name)} onKeyDown={event => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-            event.preventDefault();
-            const index = event.key === "Home" ? 0 : event.key === "End" ? PROVIDERS.length - 1
-              : (PROVIDERS.indexOf(name) + (event.key === "ArrowRight" ? 1 : -1) + PROVIDERS.length) % PROVIDERS.length;
-            showProvider(PROVIDERS[index]); tabs.current[PROVIDERS[index]]?.focus();
-          }} className={`min-h-11 flex-1 rounded-sm px-3 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${active === name ? "bg-bg-elevated text-fg shadow-[var(--shadow-xs)]" : "text-fg-muted hover:text-fg"}`}>
-          {providerName[name]}
-        </button>)}
-      </div>
-      <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${active}`} className="flex flex-col gap-3">
-        {provider && <div className="flex min-h-10 items-center justify-between gap-3">
-          <p role="status" className="text-[12px] text-fg-muted">{providerStatus[provider.status]}</p>
-          <QuotaBadge windows={quotaWindows(provider)} />
-        </div>}
-        {unavailable && <p className="text-[12px] leading-relaxed text-fg-muted">{unavailable}</p>}
-        <label className="flex flex-col gap-2 text-[12px] font-medium text-fg-muted">모델
-          <select aria-label="모델" value={current ? `${active}:${current.model}` : ""} disabled={!canSelect} onChange={event => {
-            const model = models.find(item => `${active}:${item.id}` === event.target.value);
-            if (model) agent.selectModel({ provider: active, model: model.id });
-          }} className="min-h-11 w-full rounded-sm border border-border-strong bg-bg-elevated px-3 text-[13px] text-fg outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft disabled:opacity-50">
-            {!current && <option value="">{models.length ? "모델을 선택해 주세요" : "사용 가능한 모델이 없어요"}</option>}
-            {models.map(model => <option key={model.id} value={`${active}:${model.id}`}>{model.name}</option>)}
-          </select>
-        </label>
-        {connected && agent.chatTarget && !selection && <p className="text-[12px] leading-relaxed text-busy">사용하던 모델을 사용할 수 없어요. 새 모델을 직접 선택해 주세요.</p>}
-        {efforts.length > 0 && <fieldset disabled={!current || !connected} className="flex flex-col gap-2 disabled:opacity-50">
-          <legend className="mb-2 text-[12px] font-medium text-fg-muted">Effort</legend>
-          <div className="flex flex-wrap gap-1 rounded-md bg-bg-subtle p-1">{efforts.map(value => <label key={value} className={`relative flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-sm px-2 text-[12px] ${current?.effort === value ? "bg-bg-elevated text-fg shadow-[var(--shadow-xs)]" : "text-fg-muted hover:text-fg"}`}>
-            <input type="radio" name="ai-effort" value={value} checked={current?.effort === value} onChange={() => agent.setEffort(value)} className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0" />
-            <span className="pointer-events-none whitespace-nowrap rounded-sm peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-accent">{EFFORT_LABELS[value]}</span>
-          </label>)}</div>
-        </fieldset>}
-      </div>
-      <BridgeUpdateInfo />
-      <Button onClick={close}>완료</Button>
-      </> : <>
-        <p className="text-[13px] leading-relaxed text-fg-muted">이 컴퓨터의 AI를 연결해 주세요.</p>
-        <Button onClick={openConnection}>연결하기</Button>
-      </>}
-    </ConnectionDialog>}
+    <span id={`${id}-status`} className="sr-only">{status} · {description}</span>
   </>;
 }

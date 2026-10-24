@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalAgentAttemptCreated, LocalAgentDeviceView, LocalAgentJobView, LocalAgentStatus } from "@/types/local-agent";
 import { LocalAgentApiError, type LocalAgentApi } from "../client";
-import { LocalAgentProvider } from "../provider";
+import { LocalAgentProvider, useLocalAgent } from "../provider";
+import { LocalAgentModelPicker } from "../model-picker";
 import { LocalAgentEntry } from "../entry";
 import { LocalAgentSettingsCard } from "../settings-card";
 
@@ -32,8 +33,32 @@ function makeApi(): LocalAgentApi {
 function View({ api, teamId = "team-a", launch = vi.fn(() => true) }: { api: LocalAgentApi; teamId?: string; launch?: (url: string) => boolean }) {
   return <LocalAgentProvider teamId={teamId} api={api} launchConnector={launch}>
     <LocalAgentEntry />
-    <LocalAgentSettingsCard papers={[{ id: "paper-a", title: "우리 논문" }]} />
+    <LocalAgentSettingsCard /><SessionHarness />
   </LocalAgentProvider>;
+}
+function SessionHarness() {
+  const agent = useLocalAgent();
+  const [paper, setPaper] = React.useState("");
+  const [prompt, setPrompt] = React.useState("");
+  if (!agent) return null;
+  const working = agent.jobBusy || agent.job?.status === "queued" || agent.job?.status === "running";
+  const canSubmit = agent.phase === "connected" && !!agent.selectedModel && !!paper && !!prompt.trim() && !working;
+  const job = agent.job;
+  return <div>
+    <LocalAgentModelPicker />
+    <form onSubmit={event => { event.preventDefault(); if (canSubmit) void agent.submitJob(paper, prompt); }}>
+      <select aria-label="질문할 논문" value={paper} onChange={event => setPaper(event.target.value)}><option value="">선택</option><option value="paper-a">우리 논문</option></select>
+      <textarea aria-label="논문 질문" value={prompt} onChange={event => setPrompt(event.target.value)} />
+      <button disabled={!canSubmit} type="submit">질문 보내기</button>
+    </form>
+    <button onClick={() => void agent.refresh()}>테스트 상태 다시 확인</button>
+    {agent.message && <p>{agent.message}</p>}
+    {job && <section aria-label="AI 답변"><p role="status">{job.status === "queued" ? "이 PC의 AI가 질문을 기다리고 있어요" : job.error?.trim() || (job.status === "cancelled" ? "질문을 취소했어요" : "답변을 완료하지 못했어요. 연결과 공급자 상태를 확인해 주세요.")}</p></section>}
+  </div>;
+}
+async function begin() {
+  await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "AI 브릿지 열기" })); });
 }
 beforeEach(() => { window.sessionStorage.clear(); window.localStorage.clear(); window.history.replaceState(null, "", "/profile"); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -46,7 +71,7 @@ describe("로컬 AI 연결 흐름", () => {
     vi.mocked(api.getAttempt).mockResolvedValue({ ...created, status: "awaiting_code", version: 2,
       expiresAt: new Date(Date.now() + 301000).toISOString() });
     await act(async () => { render(<View api={api} launch={launch} />); });
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await begin();
     const dialog = screen.getByRole("dialog", { name: "AI 연결" });
     expect(launch).toHaveBeenCalledWith(created.deepLink);
     expect(within(dialog).queryByLabelText("연결 확인 번호")).toBeNull();
@@ -64,7 +89,7 @@ describe("로컬 AI 연결 흐름", () => {
     const api = makeApi();
     vi.mocked(api.getAttempt).mockResolvedValue(created);
     await act(async () => { render(<View api={api} />); });
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await begin();
     await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
     expect(screen.getByLabelText("운영체제")).toBeInTheDocument();
     expect(screen.queryByLabelText("연결 확인 번호")).toBeNull();
@@ -80,7 +105,7 @@ describe("로컬 AI 연결 흐름", () => {
       .mockResolvedValueOnce({ ...created, version: 2, status: "awaiting_code", expiresAt })
       .mockImplementation(() => new Promise(done => { reply = done; }));
     await act(async () => { render(<View api={api} />); });
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await begin();
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(screen.getByRole("timer")).toHaveTextContent("05:00 남음");
     await act(async () => { await vi.advanceTimersByTimeAsync(61000); });
@@ -104,7 +129,7 @@ describe("로컬 AI 연결 흐름", () => {
     ] });
     render(<View api={api} />);
     await screen.findAllByRole("button", { name: "AI 연결" });
-    fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
+    await begin();
     fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     await waitFor(() => expect(api.downloads).toHaveBeenCalled());
     fireEvent.change(screen.getByLabelText("운영체제"), { target: { value: "macos" } });
@@ -120,7 +145,7 @@ describe("로컬 AI 연결 흐름", () => {
     const launch = vi.fn(() => true);
     render(<View api={api} launch={launch} />);
     await screen.findAllByRole("button", { name: "AI 연결" });
-    fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
+    await begin();
     fireEvent.click(await screen.findByRole("button", { name: "연결 취소" }));
     await act(async () => { resolve(created); });
     expect(launch).not.toHaveBeenCalled();
@@ -187,7 +212,7 @@ describe("로컬 AI 연결 흐름", () => {
     const launch = vi.fn(() => true);
     const { rerender } = render(<View api={api} teamId="team-a" launch={launch} />);
     await screen.findAllByRole("button", { name: "AI 연결" });
-    fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
+    await begin();
     rerender(<View api={api} teamId="team-b" launch={launch} />);
     await act(async () => { resolve(created); });
     expect(launch).not.toHaveBeenCalled();
@@ -208,10 +233,10 @@ describe("로컬 AI 연결 흐름", () => {
     const api = makeApi();
     render(<View api={api} />);
     await screen.findAllByRole("button", { name: "AI 연결" });
-    fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]);
+    await begin();
     fireEvent.click(await screen.findByRole("button", { name: "AI 브릿지가 열리지 않아요" }));
     expect(await screen.findByRole("button", { name: /설치 파일 준비 중/ })).toBeDisabled();
-    expect(screen.getByText(/처음이라면 AI 브릿지를 설치해 주세요/)).toBeInTheDocument();
+    expect(screen.getByText(/설치 파일을 받는 것만으로 웹에 연결되지는 않아요/)).toBeInTheDocument();
     expect(document.querySelector('a[download]')).toBeNull();
   });
 
@@ -238,7 +263,7 @@ describe("로컬 AI 연결 흐름", () => {
     let resolve!: (value: typeof created) => void;
     vi.mocked(api.getAttempt).mockImplementation(() => new Promise((done) => { resolve = done; }));
     await act(async () => { render(<View api={api} />); });
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await begin();
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     fireEvent.click(screen.getByRole("button", { name: "연결 취소" }));
     await act(async () => { resolve({ ...created, version: 3, status: "connected", device }); });
@@ -256,7 +281,7 @@ describe("로컬 AI 연결 흐름", () => {
       .mockResolvedValueOnce({ ...created, version: 3, status: "connected", device });
     vi.mocked(api.status).mockResolvedValueOnce(idle).mockResolvedValue({ ...idle, device, devices: [device] });
     await act(async () => { render(<View api={api} />); });
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "AI 연결" })[0]); });
+    await begin();
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(screen.queryByRole("button", { name: "내 PC 연결됨" })).toBeNull();
@@ -279,7 +304,7 @@ describe("로컬 AI 연결 흐름", () => {
     fireEvent.click(screen.getByRole("option", { name: /실제 감지된 모델/ }));
     const loggedOut = { ...device, providers: [{ ...device.providers[0], status: "login_required" as const, models: [], quota: null }] };
     vi.mocked(api.status).mockResolvedValue({ ...idle, device: loggedOut, devices: [loggedOut] });
-    fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+    fireEvent.click(screen.getByRole("button", { name: "테스트 상태 다시 확인" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "모델을 선택하세요" })).toBeDisabled());
     expect(screen.queryByRole("button", { name: /실제 감지된 모델/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "사용량 상세" })).toBeNull();
@@ -309,7 +334,7 @@ describe("로컬 AI 연결 흐름", () => {
     await waitFor(() => expect(launch).toHaveBeenCalledTimes(1));
     expect(window.location.search).toBe("?keep=1");
     expect(window.location.hash).toBe("#ai");
-    expect(await screen.findByRole("link", { name: "AI 브릿지 다시 열기" })).toHaveAttribute("href", created.deepLink);
+    expect(await screen.findByRole("button", { name: "설치 후 연결하기" })).toBeEnabled();
   });
 
   it("같은 이벤트 배치에서 질문을 두 번 제출해도 한 번만 적재한다", async () => {

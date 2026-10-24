@@ -53,7 +53,7 @@ it("사이드바는 현재 실제 모델과 20px 링을 보여 주고 한도 상
   setup(false, initial);
   const entry = screen.getByRole("button", { name: "AI 연결" });
   await waitFor(() => expect(entry).toHaveAccessibleDescription(/연결됨/));
-  expect(within(entry).getByText("Codex 첫 모델")).toBeVisible();
+  expect(within(entry).getByText("Codex · Codex 첫 모델")).toBeVisible();
   expect(entry).toHaveAccessibleDescription(/Codex · Codex 첫 모델/);
   expect(entry.querySelector("button")).toBeNull();
   const quota = screen.getByRole("button", { name: "현재 모델 사용량 상세" });
@@ -120,7 +120,7 @@ it("다른 도구 탭을 조회해도 사이드바의 실제 모델과 사용량
   const sidebar = screen.getByRole("group", { name: "AI 연결 상태" });
   const dialog = await open();
   fireEvent.click(within(dialog).getByRole("tab", { name: "Claude Code" }));
-  expect(within(sidebar).getByText("Codex 첫 모델")).toBeVisible();
+  expect(within(sidebar).getByText("Codex · Codex 첫 모델")).toBeVisible();
   expect(within(sidebar).queryByText("Claude Haiku")).toBeNull();
   fireEvent.click(within(dialog).getByRole("button", { name: "완료" }));
   const quota = within(sidebar).getByRole("button", { name: "현재 모델 사용량 상세" });
@@ -131,7 +131,7 @@ it("다른 도구 탭을 조회해도 사이드바의 실제 모델과 사용량
   fireEvent.click(within(reopened).getByRole("tab", { name: "Claude Code" }));
   fireEvent.change(within(reopened).getByRole("combobox", { name: "모델" }), { target: { value: "claude:haiku" } });
   fireEvent.click(within(reopened).getByRole("button", { name: "완료" }));
-  expect(within(sidebar).getByText("Claude Haiku")).toBeVisible();
+  expect(within(sidebar).getByText("Claude Code · Claude Haiku")).toBeVisible();
   expect(within(sidebar).queryByText("Codex 첫 모델")).toBeNull();
   const changedQuota = within(sidebar).getByRole("button", { name: "현재 모델 사용량 상세" });
   expect(within(changedQuota).getByTestId("usage-ring")).toHaveAttribute("data-state", "unknown");
@@ -217,7 +217,7 @@ it("갱신 순서가 바뀌어도 현재 도구를 유지하고 모델 삭제 �
   expect(model).toBeEnabled();
   fireEvent.change(model, { target: { value: "codex:codex-other" } });
   expect(model).toHaveValue("codex:codex-other");
-  expect(within(sidebar).getByText("Codex 다른 모델")).toBeVisible();
+  expect(within(sidebar).getByText("Codex · Codex 다른 모델")).toBeVisible();
 });
 
 it("미설치 도구를 조회해도 가짜 모델이나 effort를 추가하지 않는다", async () => {
@@ -232,37 +232,28 @@ it("미설치 도구를 조회해도 가짜 모델이나 effort를 추가하지 
   expect(within(dialog).queryByTestId("usage-ring")).toBeNull();
 });
 
-it.each([
-  { action: "연결하기", initial: null },
-  { action: "연결 관리", initial: device() },
-])("설정에서 $action 창으로 전환한 뒤 닫으면 사이드바에 포커스를 돌린다", async ({ action, initial }) => {
+it.each([null, device()])("하나의 연결창은 작업을 옮기지 않고 닫은 뒤 사이드바에 포커스를 돌린다", async initial => {
   const api = setup(false, initial);
   const entry = screen.getByRole("button", { name: "AI 연결" });
   await waitFor(() => expect(entry).toHaveAccessibleDescription(initial ? /^연결됨/ : /^AI 연결/));
   entry.focus();
   await act(async () => { fireEvent.click(entry); });
-  const settings = screen.getByRole("dialog", { name: "AI 연결" });
-  if (!initial) {
-    expect(within(settings).getByText("이 컴퓨터의 AI를 연결해 주세요.")).toBeVisible();
-    expect(within(settings).getAllByRole("button").map(button => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["연결창 닫기", "연결하기"]);
-    expect(within(settings).queryByText("내 AI 연결")).toBeNull();
-    expect(within(settings).queryByRole("tablist")).toBeNull();
-    expect(within(settings).queryByRole("combobox", { name: "모델" })).toBeNull();
-    expect(within(settings).queryByText("Effort")).toBeNull();
-    expect(within(settings).queryByRole("region", { name: "AI 브릿지 버전" })).toBeNull();
-    expect(api.downloads).not.toHaveBeenCalled();
-  }
-  const next = within(settings).getByRole("button", { name: action });
-  next.focus();
-  await act(async () => { fireEvent.click(next); });
-  expect(settings.isConnected).toBe(false);
-  const connection = screen.getByRole("dialog", { name: "AI 연결" });
+  const dialog = screen.getByRole("dialog", { name: "AI 연결" });
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
-  const close = within(connection).getByRole("button", { name: "연결창 닫기" });
-  close.focus();
-  fireEvent.click(close);
+  if (!initial) {
+    expect(within(dialog).queryByRole("tablist")).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "모델" })).toBeNull();
+    expect(within(dialog).queryByText("Effort")).toBeNull();
+    expect(within(dialog).queryByRole("region", { name: "AI 브릿지 버전" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "설치 파일 받기" })).toBeEnabled();
+    expect(api.downloads).not.toHaveBeenCalled();
+    expect(api.createAttempt).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "AI 브릿지 열기" }));
+    expect(dialog.isConnected).toBe(true);
+    expect(api.createAttempt).toHaveBeenCalledOnce();
+  }
+  fireEvent.click(within(dialog).getByRole("button", { name: "연결창 닫기" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(entry).toHaveFocus();
   expect(document.body.style.overflow).not.toBe("hidden");
-  if (!initial) expect(api.createAttempt).toHaveBeenCalledOnce();
 });

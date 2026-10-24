@@ -34,10 +34,10 @@ describe("설치 전에 확인하는 배포 상태", () => {
     expect(download).toHaveAttribute("href", "https://downloads.example/connector.exe");
     expect(screen.getByText("Windows용 · 0.1.0")).toBeVisible();
     expect(screen.getAllByRole("link")).toEqual([download]);
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "설치 후 연결하기" })).toBeEnabled();
     expect(screen.getByLabelText("운영체제")).not.toBeVisible();
-    expect(screen.getByText("AI 브릿지가 열리지 않았나요?")).toBeVisible();
-    expect(screen.getByText(/설치 후 AI 브릿지가 응답하면/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "AI 브릿지 설치" })).toBeVisible();
+    expect(screen.getByText(/설치 파일을 받는 것만으로 웹에 연결되지는 않아요/)).toBeVisible();
   });
 
   it("운영체제를 모르면 선택지를 펼쳐 두고 고른 뒤에 버튼을 준다", async () => {

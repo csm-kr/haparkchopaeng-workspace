@@ -53,6 +53,10 @@ export function safeBridgeDownloadUrl(value: string | undefined, origin: string)
   } catch { return null; }
 }
 
+export function bridgeArtifactKey(release: ConnectorRelease, url: string): string {
+  return JSON.stringify([url, release.version, release.platform, release.architecture ?? null]);
+}
+
 export type BridgeChip = "arm64" | "x64";
 
 /** Only Chromium reports the CPU family; other browsers resolve to null. */

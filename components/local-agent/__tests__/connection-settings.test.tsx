@@ -44,7 +44,7 @@ it("접힌 사이드바의 설정 버튼에서도 연결과 모델을 설정할 
   render(<LocalAgentProvider teamId="team" api={connection}><ConnectionSettings collapsed /></LocalAgentProvider>);
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "AI 연결" })); });
   expect(await screen.findByRole("dialog", { name: "AI 연결" })).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByRole("button", { name: "연결 관리" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "모델" })).toBeEnabled());
   expect(screen.getByText("연구용 PC")).toBeInTheDocument();
 });
 
@@ -147,4 +147,46 @@ it("같은 팀·기기의 재마운트는 실패한 대상을 유지하고 새 �
   await waitFor(() => expect(screen.getByRole("combobox", { name: "모델" })).toHaveValue("claude:haiku"));
   fireEvent.keyDown(screen.getByRole("dialog", { name: "AI 연결" }), { key: "Escape" });
   expect(screen.getByRole("button", { name: "모델을 선택하세요" })).toBeInTheDocument();
+});
+
+it("연결창에서 다음 모델을 바꿔도 대화 초안과 첨부 자료와 실행 중인 질문은 유지한다", async () => {
+  const { connection, chat } = fixture();
+  const device = catalogue();
+  device.providers[1].models[0].reasoningEfforts = ["low", "high", "max"];
+  connection.status.mockResolvedValue({ device, devices: [device] });
+  const now = new Date().toISOString();
+  const paper = { id: "paper", title: "첨부할 논문", sourceReady: true };
+  const conversation = { id: "existing", title: "진행 중인 연구", paperIds: [], createdAt: now, updatedAt: now };
+  const turn = { id: "running", conversationId: "existing", conversationTurn: 1, version: 1, status: "running" as const,
+    provider: "codex" as const, model: "codex-first", prompt: "이미 보낸 질문", response: "기존 답변", canCancel: true,
+    error: null, contextTruncated: false, paperId: "", createdAt: now, updatedAt: now };
+  render(<LocalAgentProvider teamId="team" api={connection}><ConnectionSettings /><ResearchChat teamId="team" initialPapers={[paper]} initialConversations={[conversation]} initialDetail={{ conversation, papers: [], turns: [turn], hasEarlierTurns: false }} api={chat} /></LocalAgentProvider>);
+  const input = screen.getByRole("textbox", { name: "연구 질문" });
+  fireEvent.change(input, { target: { value: "@첨부" } });
+  fireEvent.click(screen.getByRole("option", { name: /첨부할 논문/ }));
+  fireEvent.change(input, { target: { value: "지우면 안 되는 다음 질문" } });
+  const entry = screen.getByRole("button", { name: "AI 연결" });
+  entry.focus();
+  await act(async () => { fireEvent.click(entry); });
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  const dialog = screen.getByRole("dialog", { name: "AI 연결" });
+  const claude = within(dialog).getByRole("tab", { name: "Claude Code" });
+  fireEvent.click(claude);
+  expect(within(dialog).getByText("다음 질문 · Codex · Codex 모델")).toBeVisible();
+  fireEvent.change(within(dialog).getByRole("combobox", { name: "모델" }), { target: { value: "claude:haiku" } });
+  fireEvent.click(within(dialog).getByRole("radio", { name: "max" }));
+  const calls = connection.status.mock.calls.length;
+  claude.focus();
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await waitFor(() => expect(connection.status.mock.calls.length).toBeGreaterThan(calls));
+  expect(claude).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(entry).toHaveFocus();
+  expect(screen.getByRole("textbox", { name: "연구 질문" })).toBe(input);
+  expect(input).toHaveValue("지우면 안 되는 다음 질문");
+  expect(screen.getByRole("button", { name: "첨부할 논문 선택 해제" })).toBeInTheDocument();
+  expect(within(screen.getByRole("article", { name: "질문 1" })).getByText("codex-first")).toBeVisible();
+  expect(screen.getByText("기존 답변")).toBeInTheDocument();
+  expect(chat.create).not.toHaveBeenCalled();
+  expect(window.location.pathname).toBe("/ai-chat");
 });
