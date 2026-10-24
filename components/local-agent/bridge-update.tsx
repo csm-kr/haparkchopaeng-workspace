@@ -39,15 +39,16 @@ export function BridgeUpdateInfo({ onReconnect }: { onReconnect?: () => void }) 
   const installed = agent.phase === "connected" ? device?.bridgeVersion : null;
   const comparison = compareBridgeVersions(installed, release?.version);
   const outdated = state === "ready" && !(comparison !== null && comparison >= 0);
+  const status = state === "loading" ? "최신 버전 확인 중…" : state === "error" ? "최신 버전을 확인하지 못했어요" : !release || !url ? "이 환경의 설치 파일을 준비 중이에요" : comparison === 0 ? "최신 버전이에요" : comparison !== null && comparison > 0 ? "설치 버전이 더 최신이에요" : installed ? "새 버전으로 업데이트할 수 있어요" : null;
   return <section aria-label="AI 브릿지 버전" className="flex flex-col gap-2 border-t border-border-token pt-3">
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
       <span className="text-[12px] font-medium text-fg">AI 브릿지</span>
-      <div className="flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-fg-subtle">
-        <span>{installed ? `설치 ${installed}` : "설치 버전 미확인"}</span>
+      {installed && <div className="flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-fg-subtle">
+        <span>설치 {installed}</span>
         {state === "ready" && release && <span>최신 {release.version}</span>}
-      </div>
+      </div>}
     </div>
-    <p role="status" className="text-[12px] text-fg-muted">{state === "loading" ? "최신 버전 확인 중…" : state === "error" ? "최신 버전을 확인하지 못했어요" : !release || !url ? "이 환경의 설치 파일을 준비 중이에요" : comparison === 0 ? "최신 버전이에요" : comparison !== null && comparison > 0 ? "설치 버전이 더 최신이에요" : installed ? "새 버전으로 업데이트할 수 있어요" : "최신 설치 파일로 업데이트하면 앱 버전도 확인할 수 있어요"}</p>
+    {status && <p role="status" className="text-[12px] text-fg-muted">{status}</p>}
     {outdated && (downloaded && onReconnect && url ? <>
       <p className="text-[12px] leading-relaxed text-fg-muted">다운로드한 파일로 설치를 마친 뒤 눌러 주세요. 승인했던 기기라면 바로 이어져요.</p>
       <Button onClick={onReconnect}>설치 후 다시 연결</Button>

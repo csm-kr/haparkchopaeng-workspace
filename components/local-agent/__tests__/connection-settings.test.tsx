@@ -54,7 +54,7 @@ it("effort 지원 정보를 보내지 않는 기존 앱도 자유 대화는 하�
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "AI 연결" })); });
   await waitFor(() => expect(screen.getByRole("combobox", { name: "모델" })).toBeEnabled());
   expect(screen.queryAllByRole("radio")).toHaveLength(0);
-  expect(screen.getByText(/effort 지원 정보를 확인할 수 없어요/)).toBeInTheDocument();
+  expect(screen.queryByText("Effort")).toBeNull();
   fireEvent.keyDown(screen.getByRole("dialog", { name: "AI 연결" }), { key: "Escape" });
   fireEvent.change(screen.getByRole("textbox", { name: "연구 질문" }), { target: { value: "기존 앱으로 함께 생각해보자" } });
   fireEvent.click(screen.getByRole("button", { name: "보내기" }));
