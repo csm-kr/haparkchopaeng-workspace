@@ -221,7 +221,9 @@ export function windowsSmokeUris(layout) {
 
 export function assertWindowsRejectedState(state, description) {
   assert.equal(state.stage, 'error'); assert.equal(state.description, description);
-  assert.equal(state.attemptId, null); assert.deepEqual(state.providers, []);
+  assert.equal(state.attemptId, null); assert.ok(Array.isArray(state.providers));
+  assert.equal(state.connectionStatus, 'disconnected'); assert.equal(state.webReady, false);
+  assert.deepEqual(state.activity, { kind: 'idle' });
   assert.equal(state.autoStart, false); assert.equal(state.pet, false);
 }
 

@@ -7,7 +7,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertInside } from '../scripts/installed-smoke-support.mjs';
 
-// Run the real entry with Electron fully replaced. The only URI is rejected before API/storage/CLI work.
 const bootstrap = String.raw`
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -79,19 +78,27 @@ process.argv.push('--connector-dev', '--no-auto-open');
 Object.defineProperty(process, 'resourcesPath', { value: join(fixture.root, 'connector'), configurable: true });
 if (fixture.qa) process.argv.push('--connector-qa');
 if (fixture.qaTray) process.argv.push('--connector-qa-tray');
-async function until(predicate) {
+async function until(predicate, label) {
   const deadline = Date.now() + 1500;
-  while (!predicate()) { if (Date.now() > deadline) throw new Error('SYNTHETIC_WAIT_TIMEOUT'); await new Promise(resolve => setTimeout(resolve, 5)); }
+  while (!predicate()) {
+    if (Date.now() > deadline) throw Object.assign(new Error('Main fixture condition not reached'), {
+      code: 'MAIN_FIXTURE_WAIT_TIMEOUT', condition: label,
+      observed: { windows: windows.length, states: states.length, stage: states.at(-1)?.stage,
+        providers: states.at(-1)?.providers.length, browserActions: external.length, requests: requests.length, events: events.length },
+    });
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
 }
 try {
   await import(pathToFileURL(join(fixture.root, 'connector/desktop/main.mjs')).href);
-  await until(() => windows.length && states.length);
+  await until(() => windows.length && states.length, 'initial window state');
+  if (fixture.packaged) await until(() => external.length === 1, 'packaged first-launch browser handoff');
   const quiet = fixture.qa === true && fixture.packaged !== true;
   const expectedTray = !quiet || fixture.qaTray === true;
   assert.equal(trays.length, expectedTray ? 1 : 0, 'NATIVE_TRAY_COUNT');
   assert.equal(states.at(-1).trayAvailable, expectedTray); assert.equal(states.at(-1).closeToTray, false);
   if (!fixture.packaged) {
-    await until(() => states.at(-1).providers.length > 0);
+    await until(() => states.at(-1).providers.length > 0, 'local provider metadata');
     assert.equal(requests.length, 0, 'LOCAL_DISCOVERY_MUST_NOT_REQUIRE_A_WEB_GRANT');
   }
   const window = windows[0], tray = trays[0];
@@ -105,7 +112,10 @@ try {
     assert.equal(window.visible, !quiet); assert.equal(window.focusCalls, quiet ? 0 : 1);
   }
   window.hide(); app.emit('second-instance', {}, ['hapark-connect://invalid']);
-  await until(() => states.at(-1).stage === 'error');
+  await until(() => states.at(-1).stage === 'error', 'invalid URI error');
+  assert.equal(requests.length, 0, 'INVALID_URI_MUST_NOT_REACH_API');
+  assert.equal(states.at(-1).connectionStatus, 'disconnected'); assert.equal(states.at(-1).webReady, false);
+  assert.deepEqual(states.at(-1).activity, { kind: 'idle' });
   assert.equal(window.visible, !quiet);
   if (tray) assert.equal(tray.tooltip, 'AI 브릿지 · 연결 오류');
   if (fixture.navigation) {
@@ -117,7 +127,7 @@ try {
     assert.equal(states.at(-1).bridgeVersion, fixture.version, 'STATE_MUST_USE_ACTUAL_APP_VERSION');
     assert.equal(states.at(-1).bridgeArchitecture, ['x64', 'arm64'].includes(process.arch) ? process.arch : undefined);
     app.emit('second-instance', {}, ['hapark-connect://connect?attemptId=version-attempt&launchToken=' + 't'.repeat(43)]);
-    await until(() => requests.some(value => value.route === 'heartbeat'));
+    await until(() => requests.some(value => value.route === 'heartbeat'), 'version heartbeat');
     const heartbeat = requests.find(value => value.route === 'heartbeat').body;
     assert.equal(heartbeat.bridgeVersion, fixture.version, 'HEARTBEAT_MUST_USE_ACTUAL_APP_VERSION');
     assert.equal(heartbeat.bridgeArchitecture, ['x64', 'arm64'].includes(process.arch) ? process.arch : undefined);
@@ -128,7 +138,7 @@ try {
     assert.equal((await toggle({ sender: {}, senderFrame: {} }, true)).ok, false);
     assert.equal(windows.length, 1, 'PET_DEFAULT_OFF');
     await toggle(event, true);
-    await until(() => petStates.length > 0);
+    await until(() => petStates.length > 0, 'pet state');
     const pet = windows[1];
     assert.match(pet.options.webPreferences.preload, /pet-preload\.cjs$/);
     assert.equal(pet.options.webPreferences.sandbox, true);
@@ -168,11 +178,11 @@ try {
   if (fixture.cleanup) {
     const ackCount = requests.filter(value => value.route === 'ack').length;
     app.emit('second-instance', {}, ['hapark-connect://connect?attemptId=version-attempt&launchToken=' + 't'.repeat(43)]);
-    await until(() => states.at(-1).stage === 'opening' && globalThis.__releaseCleanup);
+    await until(() => states.at(-1).stage === 'opening' && globalThis.__releaseCleanup, 'retired runtime cleanup');
     assert.equal(requests.filter(value => value.route === 'ack').length, ackCount, 'NEW_SESSION_MUST_WAIT_FOR_OWNED_PROCESS_CLEANUP');
     assert.deepEqual(states.at(-1).activity, { kind: 'idle' });
     globalThis.__releaseCleanup();
-    await until(() => requests.filter(value => value.route === 'ack').length === ackCount + 1 && states.at(-1).stage === 'connected');
+    await until(() => requests.filter(value => value.route === 'ack').length === ackCount + 1 && states.at(-1).stage === 'connected', 'new session after cleanup');
   }
   assert.equal(window.inactiveCalls, 0, 'Normal status changes must not restore a window.');
   if (fixture.breakTray) {
@@ -191,7 +201,7 @@ try {
   if (!fixture.packaged && !fixture.navigation) assert.deepEqual(external, []);
   let prevented = false;
   app.emit('before-quit', { preventDefault() { prevented = true; } });
-  await until(() => events.includes('exit'));
+  await until(() => events.includes('exit'), 'graceful exit');
   assert.equal(prevented, true);
   if (tray) assert.equal(tray.destroyCalls, 1);
   assert.deepEqual(events, tray ? ['tray-destroy', 'exit'] : ['exit']);
@@ -199,7 +209,7 @@ try {
   console.log(JSON.stringify({ passed: true, actualElectron: false, cliInference: false, protocolRegistration: false }));
 } catch (error) {
   const marker = ['NATIVE_TRAY_COUNT', 'TRAY_FAILURE_NOT_RECOVERED'].find(value => error.message.includes(value));
-  console.log(JSON.stringify({ passed: false, reason: marker ?? error.code ?? error.name }));
+  console.log(JSON.stringify({ passed: false, reason: marker ?? error.code ?? error.name, ...(error.code === 'MAIN_FIXTURE_WAIT_TIMEOUT' ? { condition: error.condition, observed: error.observed } : {}) }));
   process.exitCode = 1;
 }
 `;

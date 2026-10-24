@@ -10,7 +10,7 @@ import { terminalScript, openProviderTerminal } from '../desktop/terminal.mjs';
 
 const execute = promisify(execFile);
 
-test('macOS launcher quotes the trusted executable, prefix and environment as literal arguments', async () => {
+test('macOS launcher quotes the trusted executable, prefix and environment as literal arguments', { skip: process.platform === 'win32' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'bridge-terminal-'));
   try {
     const cli = join(root, "CLI ' $(touch injected) ; &.mjs"), output = join(root, 'observed.json');
@@ -43,6 +43,21 @@ test('Windows launcher disables delayed expansion and escapes percent expansion 
   assert.ok(script.includes('setlocal DisableDelayedExpansion'));
   assert.ok(script.includes('"C:\\Program Files\\CLI & 100%%\\node.exe" "C:\\a!b\\cli.js"'));
   for (const value of ['bad" & command', 'bad\ncommand']) assert.throws(() => terminalScript({ command: value }, 'win32'));
+});
+
+test('Windows launcher executes literal paths, arguments and environment through cmd.exe', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'bridge-terminal-'));
+  try {
+    const cli = join(root, 'CLI 100% ! &.mjs'), output = join(root, 'observed.json');
+    await writeFile(cli, 'import {writeFileSync} from "node:fs"; writeFileSync(process.argv[2], JSON.stringify({args:process.argv.slice(3), mode:process.env.ELECTRON_RUN_AS_NODE}));');
+    let opened;
+    const result = await openProviderTerminal('codex', { directory: root, platform: 'win32',
+      resolve: () => ({ command: process.execPath, prefix: [cli, output, "a'b 100% ! &"], env: { ELECTRON_RUN_AS_NODE: '1' } }),
+      openPath: async path => { opened = path; await execute(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `""${path}""`], { windowsVerbatimArguments: true, windowsHide: true }); return ''; },
+    });
+    assert.deepEqual(result, { ok: true }); assert.equal(opened, join(root, 'codex.cmd'));
+    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { args: ["a'b 100% ! &"], mode: '1' });
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('Linux starts a separate terminal with fixed argv and no shell or runtime process ownership', async () => {

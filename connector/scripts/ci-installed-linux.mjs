@@ -105,9 +105,11 @@ async function stopProcesses(installation) {
   }
 }
 
-function assertRejected(state, description) {
+export function assertLinuxRejectedState(state, description) {
   assert.equal(state.stage, 'error'); assert.equal(state.description, description);
-  assert.equal(state.attemptId, null); assert.deepEqual(state.providers, []);
+  assert.equal(state.attemptId, null); assert.ok(Array.isArray(state.providers));
+  assert.equal(state.connectionStatus, 'disconnected'); assert.equal(state.webReady, false);
+  assert.deepEqual(state.activity, { kind: 'idle' });
   assert.equal(state.autoStart, false); assert.equal(state.pet, false);
 }
 
@@ -149,7 +151,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
   evidence.limits ??= [];
   evidence.limits.push('Linux cold URI: installed PID, exact synthetic URI cmdline field/title token, window and screenshot are observed; mutable process titles do not prove original argv, and cold renderer state is not inspected by CDP.',
     'Process observations cover matched installed executables/UIDs and the readable /proc scope, not every sandbox descendant; loss of access to a previously confirmed owned PID defers cleanup to runner disposal.',
-    'Production API and CLI inference are excluded by invalid-URI parser control flow before credentials/ACK/adapters; independent network-wire measurement is not performed.',
+    'Production API and CLI inference are excluded by invalid-URI parser control flow before credentials/ACK; local CLI metadata discovery is allowed. Independent network-wire measurement is not performed.',
     'Packaged URI tests do not verify real pairing, credential encryption, AI inference or Wayland.');
   try {
     evidence.phase = 'linux_archive';
@@ -275,7 +277,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     client = await connectInstalledApp(port, join(resources, 'app.asar', 'renderer', 'index.html'));
     const rejected = '연결 링크에 허용되지 않은 정보가 있어요.';
     await until(async () => { const state = await client.state(); return state.stage === 'error' && state.description === rejected; }, 'packaged cold URI rejection');
-    assertRejected(await client.state(), rejected);
+    assertLinuxRejectedState(await client.state(), rejected);
     evidence.phase = 'linux_packaged_cdp_native_processes';
     const nativeProcesses = await getInstalledBrowserProcesses(port);
     const directEntries = await processes(installation);
@@ -296,7 +298,7 @@ export async function verifyLinuxInstallation({ configuration, context, qaRoot, 
     warmOpener = start('xdg-open', [`${scheme}://invalid`]); openers.push(warmOpener);
     const warmRejected = '등록된 앱의 연결 링크를 사용해 주세요.';
     await until(async () => { const state = await client.state(); return state.stage === 'error' && state.description === warmRejected; }, 'warm URI to reach the existing packaged instance');
-    assertRejected(await client.state(), warmRejected);
+    assertLinuxRejectedState(await client.state(), warmRejected);
     await until(async () => {
       const entries = mainProcesses(await processes(installation), executable);
       return entries.length === 1 && entries[0].pid === launched.pid;

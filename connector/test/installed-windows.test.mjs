@@ -316,9 +316,10 @@ test('both synthetic URI cases are rejected by the shipping parser before identi
   const applications = [{ id: 'research-notebook', scheme: layout().scheme, origin: 'https://research.example', allowedOrigins: ['https://research.example'] }];
   assert.throws(() => parseLaunchUrl(cold, applications), error => error.message === WINDOWS_COLD_ERROR);
   assert.throws(() => parseLaunchUrl(warm, applications), error => error.message === WINDOWS_WARM_ERROR);
-  const state = { stage: 'error', description: WINDOWS_WARM_ERROR, attemptId: null, providers: [], autoStart: false, pet: false };
+  const state = { stage: 'error', description: WINDOWS_WARM_ERROR, attemptId: null, providers: [], connectionStatus: 'disconnected', webReady: false, activity: { kind: 'idle' }, autoStart: false, pet: false };
   assert.doesNotThrow(() => assertWindowsRejectedState(state, WINDOWS_WARM_ERROR));
-  for (const override of [{ stage: 'connected' }, { attemptId: 'unexpected' }, { providers: [{ provider: 'codex' }] }, { autoStart: true }, { pet: true }]) assert.throws(() => assertWindowsRejectedState({ ...state, ...override }, WINDOWS_WARM_ERROR));
+  assert.doesNotThrow(() => assertWindowsRejectedState({ ...state, providers: [{ provider: 'codex', status: 'ready' }] }, WINDOWS_WARM_ERROR));
+  for (const override of [{ stage: 'connected' }, { attemptId: 'unexpected' }, { connectionStatus: 'connected' }, { webReady: true }, { activity: { kind: 'running', provider: 'codex' } }, { autoStart: true }, { pet: true }]) assert.throws(() => assertWindowsRejectedState({ ...state, ...override }, WINDOWS_WARM_ERROR));
 });
 
 test('profile cleanup refuses prior, foreign, redirected and stale directories', () => {
