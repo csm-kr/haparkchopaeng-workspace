@@ -54,7 +54,15 @@ for (const width of [1280, 390]) test(`${width}px 논문 선택과 브릿지 업
   await expect(start).toBeDisabled();
   await expect(start).toHaveAccessibleDescription("논문 읽기를 시작하려면 AI 브릿지를 먼저 업데이트해주세요.");
   await expect(page.getByText("연결된 AI 브릿지에 업데이트가 필요해요.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "업데이트 받기" })).toHaveAttribute("href", "https://downloads.example/bridge-0.1.8.exe");
+  await expect(page.getByRole("link", { name: "업데이트 받기" })).toHaveCount(0);
+  const manage = page.getByRole("button", { name: "AI 연결 관리", exact: true });
+  await manage.click();
+  const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
+  await expect(dialog).toHaveCount(1);
+  await expect(dialog.getByRole("link", { name: "업데이트 받기", exact: true })).toHaveAttribute("href", "https://downloads.example/bridge-0.1.8.exe");
+  await dialog.getByRole("button", { name: "완료", exact: true }).click();
+  await expect(manage).toBeFocused();
+  await expect(paper).toHaveValue("local-agent-paper");
   expect(fixture.created()).toBe(0);
   fixture.allowAgentTasks();
   await expect(page.getByRole("button", { name: "업데이트 후 연결 확인" })).toHaveCount(0);

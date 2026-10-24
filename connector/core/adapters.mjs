@@ -165,7 +165,7 @@ async function claudeInitialize(handle, systemPrompt = '') {
 
 export function createProviderAdapter(provider, { workspaceRoot, environment = process.env, resolve = resolveExecutable, processFactory = startJsonProcess, execute = executeFile, now = Date.now, onDiagnostic = () => {} } = {}) {
   let snapshot = { provider, status: 'not_installed', models: [], quota: null, observedAt: new Date(now()).toISOString() };
-  let spec;
+  let validatedLaunch = null;
   async function workspace(callback) {
     await mkdir(workspaceRoot, { recursive: true, mode: 0o700 });
     const cwd = await mkdtemp(join(workspaceRoot, `${provider}-`));
@@ -173,42 +173,48 @@ export function createProviderAdapter(provider, { workspaceRoot, environment = p
   }
   const env = () => providerEnvironment(environment);
   async function detect(signal) {
-    spec = resolve(provider, { env: environment });
+    const candidate = resolve(provider, { env: environment });
+    const commit = next => {
+      if (signal?.aborted) throw Object.assign(new Error('취소했어요.'), { name: 'AbortError' });
+      validatedLaunch = next.status === 'ready' ? { spec: structuredClone(candidate), snapshot: next } : null;
+      return snapshot = next;
+    };
     const observedAt = new Date(now()).toISOString();
-    if (!spec) return snapshot = { provider, status: 'not_installed', models: [], quota: null, observedAt, message: 'PC에 해당 CLI를 설치해 주세요.' };
+    if (!candidate) return commit({ provider, status: 'not_installed', models: [], quota: null, observedAt, message: 'PC에 해당 CLI를 설치해 주세요.' });
     try {
-      const version = await execute(spec.command, [...(spec.prefix ?? []), '--version'], { env: { ...env(), ...(spec.env ?? {}) }, windowsHide: true, timeout: 10000, maxBuffer: 65536, signal });
-      if (!versionSupported(provider, version.stdout)) return snapshot = { provider, status: 'error', models: [], quota: null, observedAt, message: 'CLI를 최신 버전으로 업데이트해 주세요.' };
+      const version = await execute(candidate.command, [...(candidate.prefix ?? []), '--version'], { env: { ...env(), ...(candidate.env ?? {}) }, windowsHide: true, timeout: 10000, maxBuffer: 65536, signal });
+      if (!versionSupported(provider, version.stdout)) return commit({ provider, status: 'error', models: [], quota: null, observedAt, message: 'CLI를 최신 버전으로 업데이트해 주세요.' });
       return await workspace(async cwd => {
         if (provider === 'codex') {
-          const handle = processFactory(spec, codexMetadataArguments(), { cwd, env: env(), signal, timeoutMs: 25000 });
+          const handle = processFactory(candidate, codexMetadataArguments(), { cwd, env: env(), signal, timeoutMs: 25000 });
           const rpc = rpcClient(handle);
           try {
             await rpc('initialize', { clientInfo: { name: 'hapark_connector', version: '0.1.0' }, capabilities: {} });
             handle.send({ method: 'initialized' });
             const account = await rpc('account/read', { refreshToken: false });
-            if (!account?.account || account.account.type !== 'chatgpt') return snapshot = { provider, status: 'login_required', models: [], quota: null, observedAt, message: 'Codex CLI에서 ChatGPT 계정으로 로그인해 주세요.' };
+            if (!account?.account || account.account.type !== 'chatgpt') return commit({ provider, status: 'login_required', models: [], quota: null, observedAt, message: 'Codex CLI에서 ChatGPT 계정으로 로그인해 주세요.' });
             const listed = await rpc('model/list', { limit: 100, includeHidden: false });
             let quota = null; try { quota = normalizeCodexQuota(await rpc('account/rateLimits/read')); } catch {}
-            return snapshot = { provider, status: 'ready', capabilities: ['agent_step_v1'], models: normalizeModels(provider, listed?.data), quota, observedAt, ...(quota ? { quotaObservedAt: new Date(now()).toISOString() } : {}) };
+            return commit({ provider, status: 'ready', capabilities: ['agent_step_v1'], models: normalizeModels(provider, listed?.data), quota, observedAt, ...(quota ? { quotaObservedAt: new Date(now()).toISOString() } : {}) });
           } finally { handle.close(); await handle.done.catch(() => {}); }
         }
         let authenticated = false;
-        try { const result = await execute(spec.command, [...(spec.prefix ?? []), 'auth', 'status', '--json'], { env: { ...env(), ...(spec.env ?? {}) }, windowsHide: true, timeout: 10000, maxBuffer: 65536, signal }); const auth = JSON.parse(result.stdout); authenticated = auth.loggedIn === true && auth.authMethod === 'claude.ai' && auth.apiProvider === 'firstParty'; } catch {}
-        if (!authenticated) return snapshot = { provider, status: 'login_required', models: [], quota: null, observedAt, message: 'Claude Code에서 구독한 Claude 계정으로 로그인해 주세요.' };
-        const handle = processFactory(spec, claudeArguments(), { cwd, env: env(), signal, timeoutMs: 25000 });
+        try { const result = await execute(candidate.command, [...(candidate.prefix ?? []), 'auth', 'status', '--json'], { env: { ...env(), ...(candidate.env ?? {}) }, windowsHide: true, timeout: 10000, maxBuffer: 65536, signal }); const auth = JSON.parse(result.stdout); authenticated = auth.loggedIn === true && auth.authMethod === 'claude.ai' && auth.apiProvider === 'firstParty'; } catch {}
+        if (!authenticated) return commit({ provider, status: 'login_required', models: [], quota: null, observedAt, message: 'Claude Code에서 구독한 Claude 계정으로 로그인해 주세요.' });
+        const handle = processFactory(candidate, claudeArguments(), { cwd, env: env(), signal, timeoutMs: 25000 });
         try {
           const initialized = await claudeInitialize(handle);
-          return snapshot = { provider, status: 'ready', capabilities: ['agent_step_v1'], models: normalizeModels(provider, initialized?.models), quota: snapshot.quota, observedAt, ...(snapshot.quota && snapshot.quotaObservedAt ? { quotaObservedAt: snapshot.quotaObservedAt } : {}) };
+          return commit({ provider, status: 'ready', capabilities: ['agent_step_v1'], models: normalizeModels(provider, initialized?.models), quota: snapshot.quota, observedAt, ...(snapshot.quota && snapshot.quotaObservedAt ? { quotaObservedAt: snapshot.quotaObservedAt } : {}) });
         } finally { handle.close(); await handle.done.catch(() => {}); }
       });
     } catch (error) {
       if (signal?.aborted) throw error;
-      return snapshot = { provider, status: 'error', models: [], quota: null, observedAt, message: 'PC의 CLI 상태를 확인하지 못했어요. 앱에서 다시 확인해 주세요.' };
+      return commit({ provider, status: 'error', models: [], quota: null, observedAt, message: 'PC의 CLI 상태를 확인하지 못했어요. 앱에서 다시 확인해 주세요.' });
     }
   }
-  async function run({ model, prompt, context = '', signal, onText, onQuota = () => {} }) {
-    if (!spec || snapshot.status !== 'ready' || !snapshot.models.some(item => item.id === model)) throw new Error('사용 가능한 모델을 다시 선택해 주세요.');
+  async function run({ model, prompt, context = '', signal, onText, onQuota = () => {}, onLifecycle = () => {} }) {
+    const launch = validatedLaunch;
+    if (!launch || snapshot.status !== 'ready' || !launch.snapshot.models.some(item => item.id === model)) throw new Error('사용 가능한 모델을 다시 선택해 주세요.');
     if (typeof prompt !== 'string' || typeof context !== 'string' || prompt.length > 12000 || context.length > 250000) throw new Error('논문과 질문의 길이를 확인해 주세요.');
     if (signal?.aborted) throw Object.assign(new Error('취소했어요.'), { name: 'AbortError' });
     const contract = inferenceContract(context);
@@ -217,7 +223,7 @@ export function createProviderAdapter(provider, { workspaceRoot, environment = p
     const text = contract.kind === 'agent_task' ? `<task_context>\n${context}\n</task_context>\n\n<goal>\n${prompt}\n</goal>` : `<paper_context>\n${context}\n</paper_context>\n\n<question>\n${prompt}\n</question>`;
     return workspace(async cwd => {
       let completed = false, error = null, emitted = false;
-      const handle = processFactory(spec, provider === 'claude' ? claudeArguments(model, effort) : codexArguments(model, effort, contract.instructions), { cwd, env: env(), signal, onMessage: message => {
+      const handle = processFactory(launch.spec, provider === 'claude' ? claudeArguments(model, effort) : codexArguments(model, effort, contract.instructions), { cwd, env: env(), signal, onLifecycle, onMessage: message => {
         const delta = providerText(provider, message);
         if (delta && !signal?.aborted) { onText(delta); emitted = true; }
         if (provider === 'claude') {

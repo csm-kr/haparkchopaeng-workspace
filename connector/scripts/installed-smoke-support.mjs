@@ -290,7 +290,7 @@ export async function connectInstalledApp(port, rendererFile, { diagnostics = {}
     return result.result.value;
   };
   return { evaluate, close: client.close,
-    state: () => evaluate(`(async()=>{const s=await window.connector.state();return {stage:s.stage,title:s.title,description:s.description,attemptId:s.attemptId,providers:s.providers.map(p=>({provider:p.provider,status:p.status})),autoStart:s.autoStart,pet:s.pet}})()`),
+    state: () => evaluate(`(async()=>{const s=await window.connector.state();return {stage:s.stage,title:s.title,description:s.description,attemptId:s.attemptId,providers:s.providers.map(p=>({provider:p.provider,status:p.status})),connectionStatus:s.connectionStatus,webReady:s.webReady,activity:s.activity&&{kind:s.activity.kind},autoStart:s.autoStart,pet:s.pet}})()`),
     async quit() { try { await evaluate('void window.connector.quit(); true'); } catch (error) { if (error.code !== 'APP_CLOSED') throw error; } },
   };
 }

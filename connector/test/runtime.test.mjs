@@ -186,3 +186,84 @@ test('401 result response cancels active CLI before next heartbeat', async () =>
   session.setProviders(providers); session.start(new Date(46000).toISOString()); await session.tick(); await session.whenIdle();
   assert.equal(aborted, true); assert.equal(session.getState().status, 'authorization_required');
 });
+
+const deferred = () => { let resolve; const promise = new Promise(value => { resolve = value; }); return { promise, resolve }; };
+
+test('activity distinguishes claim, real spawn, close and network result drain', async () => {
+  const finished = deferred(), drain = deferred(); let hooks, resultStarted = false;
+  const api = { post: async (path) => {
+    if (path === 'heartbeat') return { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [] };
+    if (path === 'claim') return claim;
+    if (path === 'result') { resultStarted = true; await drain.promise; }
+    return {};
+  } };
+  const session = new ConnectorSession({ api, identity, now: () => 1000, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: { codex: { run: async options => { hooks = options; await finished.promise; } } } });
+  session.setProviders(providers); session.start(new Date(46000).toISOString());
+  try {
+    await session.tick();
+    assert.deepEqual(session.getState().activity, { kind: 'preparing' });
+    hooks.onLifecycle({ kind: 'spawned' });
+    assert.deepEqual(session.getState().activity, { kind: 'running', provider: 'codex', requestedModel: 'model' });
+    const copy = session.getState(); copy.activity.requestedModel = 'mutated';
+    assert.equal(session.getState().activity.requestedModel, 'model');
+    hooks.onText('answer'); await new Promise(resolve => setImmediate(resolve)); assert.equal(resultStarted, true);
+    hooks.onLifecycle({ kind: 'closed' });
+    assert.deepEqual(session.getState().activity, { kind: 'finalizing' });
+    hooks.onLifecycle({ kind: 'spawned' });
+    assert.deepEqual(session.getState().activity, { kind: 'finalizing' });
+    finished.resolve(); await new Promise(resolve => setImmediate(resolve));
+    assert.ok(session.activeJob); assert.deepEqual(session.getState().activity, { kind: 'finalizing' });
+    drain.resolve(); await session.whenIdle();
+    assert.deepEqual(session.getState().activity, { kind: 'idle' });
+  } finally { finished.resolve(); drain.resolve(); session.stop(); await session.whenIdle(); }
+});
+
+test('abort, timeout, permission loss and restart never restore execution identity or release cleanup early', async () => {
+  for (const action of ['cancel', 'timeout', 'lapse', 'denied', 'stop', 'restart']) {
+    let now = 1000, hooks, cancel = false, denied = false, renewed = false, claims = 0;
+    const finished = deferred();
+    const api = { post: async path => {
+      if (path === 'heartbeat') {
+        if (denied) throw Object.assign(new Error('denied'), { status: 401 });
+        if (!renewed && now >= 46000) throw Object.assign(new Error('expired'), { status: 403, code: 'WEB_PERMISSION_EXPIRED' });
+        return { leaseExpiresAt: new Date(renewed ? now + 45000 : 46000).toISOString(), cancelJobIds: cancel ? [claim.job.id] : [] };
+      }
+      if (path === 'claim') { claims += 1; return claim; }
+      return {};
+    } };
+    const session = new ConnectorSession({ api, identity, now: () => now, maxJobMs: action === 'timeout' ? 10 : 600000, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: { codex: { run: async options => { hooks = options; await finished.promise; } } } });
+    session.setProviders(providers); session.start(new Date(46000).toISOString()); await session.tick(); hooks.onLifecycle({ kind: 'spawned' });
+    try {
+      if (action === 'timeout') await new Promise(resolve => setTimeout(resolve, 20));
+      else if (action === 'stop') session.stop();
+      else if (action === 'restart') session.start(new Date(46000).toISOString());
+      else { now = action === 'lapse' ? 47000 : 7000; cancel = action === 'cancel'; denied = action === 'denied'; await session.tick(); }
+      assert.equal(hooks.signal.aborted, true, action);
+      assert.deepEqual(session.getState().activity, { kind: ['cancel', 'timeout'].includes(action) ? 'stopping' : 'idle' }, action);
+      hooks.onLifecycle({ kind: 'spawned' }); hooks.onLifecycle({ kind: 'closed' });
+      assert.equal('provider' in session.getState().activity, false, action);
+      assert.ok(session.activeJob, action);
+      if (action === 'lapse') { now = 52000; renewed = true; await session.tick(); assert.equal(session.getState().status, 'connected'); assert.equal(session.getState().activity.kind, 'stopping'); }
+      await session.tick(); assert.equal(claims, 1, action);
+      finished.resolve(); await session.whenIdle(); assert.deepEqual(session.getState().activity, { kind: 'idle' }, action);
+    } finally { finished.resolve(); session.stop(); await session.whenIdle(); }
+  }
+});
+
+test('callbacks from a completed old run cannot change a newer job activity or heartbeat fields', async () => {
+  let now = 1000, hooks, count = 0; const requests = [], runs = [];
+  const api = { post: async (path, body) => {
+    requests.push({ path, body });
+    if (path === 'heartbeat') return { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [] };
+    if (path === 'claim') return { ...claim, job: { ...claim.job, id: `job-${++count}` } };
+    return {};
+  } };
+  const session = new ConnectorSession({ api, identity, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {}, adapters: { codex: { run: async options => { hooks = options; const finish = deferred(); runs.push(finish); await finish.promise; } } } });
+  session.setProviders(providers); session.start(new Date(46000).toISOString()); await session.tick();
+  const old = hooks; old.onLifecycle({ kind: 'spawned' }); old.onLifecycle({ kind: 'closed' }); runs[0].resolve(); await session.whenIdle();
+  now = 7000; await session.tick(); hooks.onLifecycle({ kind: 'spawned' });
+  old.onLifecycle({ kind: 'closed' }); old.onLifecycle({ kind: 'spawned' });
+  assert.deepEqual(session.getState().activity, { kind: 'running', provider: 'codex', requestedModel: 'model' });
+  assert.ok(requests.filter(value => value.path === 'heartbeat').every(value => Object.keys(value.body).join() === 'providers'));
+  session.stop(); runs[1].resolve(); await session.whenIdle();
+});

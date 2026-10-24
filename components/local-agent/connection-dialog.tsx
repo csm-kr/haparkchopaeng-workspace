@@ -89,7 +89,7 @@ export function ConnectionDialog({ title, onClose, children }: {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[min(85dvh,720px)] w-full max-w-lg flex-col"
+        className="flex min-w-0 max-h-[min(85dvh,720px)] w-full max-w-lg flex-col"
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border-token px-5 py-4">
           <h2 id={titleId} className="text-[20px] font-semibold text-fg">{title}</h2>
@@ -98,7 +98,7 @@ export function ConnectionDialog({ title, onClose, children }: {
             <X size={17} aria-hidden="true" />
           </button>
         </div>
-        <div className="flex flex-col gap-4 overflow-y-auto p-5">{children}</div>
+        <div className="flex min-w-0 flex-col gap-4 overflow-y-auto p-5">{children}</div>
       </Card>
     </div>, document.body,
   );

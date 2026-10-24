@@ -10,6 +10,26 @@ import {
   matchesInstalledRendererUrl, selectInstalledProcessInfo,
 } from '../scripts/installed-smoke-support.mjs';
 import * as support from '../scripts/installed-smoke-support.mjs';
+import { assertLinuxRejectedState } from '../scripts/ci-installed-linux.mjs';
+import { assertMacRejectedState } from '../scripts/ci-installed-macos.mjs';
+import { assertWindowsRejectedState } from '../scripts/installed-windows-support.mjs';
+
+test('installed URI rejection allows local CLI discovery without an execution grant on every OS', () => {
+  const description = '등록된 앱의 연결 링크를 사용해 주세요.';
+  const state = { stage: 'error', description, attemptId: null, providers: [], connectionStatus: 'disconnected',
+    webReady: false, activity: { kind: 'idle' }, autoStart: false, pet: false };
+  for (const reject of [assertLinuxRejectedState, assertMacRejectedState, assertWindowsRejectedState]) {
+    for (const providers of [[], [{ provider: 'codex', status: 'ready' }, { provider: 'claude', status: 'not_installed' }]]) {
+      const discovered = { ...state, providers };
+      assert.doesNotThrow(() => reject(discovered, description));
+      for (const override of [{ stage: 'connected' }, { description: 'another error' }, { attemptId: 'unexpected' },
+        { providers: null }, { connectionStatus: 'connected' }, { connectionStatus: 'recovering' }, { webReady: true },
+        { activity: { kind: 'running', provider: 'codex' } }, { activity: { kind: 'preparing' } }, { autoStart: true }, { pet: true }]) {
+        assert.throws(() => reject({ ...discovered, ...override }, description));
+      }
+    }
+  }
+});
 
 const runner = { CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux', LOCAL_AGENT_INSTALL_QA: '1', GITHUB_WORKSPACE: '/work/repo', RUNNER_TEMP: '/work/_temp' };
 const options = { platform: 'linux', uid: 1001, workspace: '/work/repo' };

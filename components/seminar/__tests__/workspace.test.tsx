@@ -30,14 +30,10 @@ describe("전용 논문 PT 제작 공간", () => {
     expect(screen.getByText("연결된 AI 브릿지에 업데이트가 필요해요.")).toBeVisible();
     fireEvent.click(start);
     expect(mock.create).not.toHaveBeenCalled();
-    const download = await screen.findByRole("link", { name: "업데이트 받기" });
-    expect(download).toHaveAttribute("href", "https://downloads.example/bridge-0.1.8.exe");
-    expect(screen.queryByRole("button", { name: "업데이트 후 연결 확인" })).toBeNull();
-    download.addEventListener("click", event => event.preventDefault(), { once: true });
-    fireEvent.click(download);
-    expect(screen.queryByRole("link", { name: "업데이트 받기" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "설치 후 다시 연결" }));
-    expect(mock.start).toHaveBeenCalledTimes(1);
+    expect(mock.downloads).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "AI 연결 관리" }));
+    expect(mock.open).toHaveBeenCalledTimes(1);
+    expect(mock.start).not.toHaveBeenCalled();
     mock.capable = true;
     rerender(<SeminarWorkspace teamId="team" papers={papers} />);
     expect(screen.getByRole("combobox", { name: "발표할 논문" })).toHaveValue("paper");
@@ -50,7 +46,7 @@ describe("전용 논문 PT 제작 공간", () => {
     const start = screen.getByRole("button", { name: "논문 읽고 시작하기" });
     expect(start).toBeDisabled();
     expect(start).toHaveAccessibleDescription("AI 브릿지를 연결하면 논문 읽기를 시작할 수 있어요.");
-    fireEvent.click(screen.getByRole("button", { name: "AI 연결하기", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: /^AI 연결하기$/ }));
     expect(mock.open).toHaveBeenCalledOnce();
     expect(mock.create).not.toHaveBeenCalled();
   });

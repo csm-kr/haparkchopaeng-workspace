@@ -4,6 +4,7 @@ import * as React from "react";
 import type { LocalAgentAttemptView, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobView, LocalAgentProvider as ProviderName } from "@/types/local-agent";
 import { errorMessage, launchConnector as browserLaunch, localAgentApi, LocalAgentApiError, type LocalAgentApi } from "./client";
 import { ConnectionModal } from "./connection-modal";
+import { LocalAgentClientResume } from "./client-resume";
 import { rememberChatTarget, restoreChatTarget, type ChatTarget } from "./chat-selection";
 
 export type ConnectionPhase = "loading" | "idle" | "creating" | "opening" | "awaiting_code" | "connected" | "offline" | "cancelled" | "expired" | "error" | "login_required";
@@ -302,9 +303,9 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     };
   }, [phase, attempt?.id, attempt?.expiresAt, attemptKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function start(force = false) {
+  async function start() {
     setModalOpen(true);
-    if (!teamId || starting.current || (!force && (phase === "opening" || phase === "awaiting_code"))) return;
+    if (!teamId || starting.current) return;
     starting.current = true;
     const revision = ++epoch.current;
     const hint = sharedDeviceHint(deviceKey);
@@ -388,10 +389,10 @@ function LocalAgentSession({ teamId, api, launch, children }: { teamId: string |
     ? Math.max(0, Math.min(300, Math.ceil((Date.parse(attempt.expiresAt) - pairingNow) / 1000))) : null;
   const value: ConnectionValue = { api, phase, device, attempt, deepLink, message, selectedModel, chatTarget, effort,
     setEffort: (next) => { setEffort(next); storagePut(effortKey, next); }, job, jobBusy, fallback, pairingSecondsLeft,
-    open: () => { setModalOpen(true); if (!["connected", "opening", "awaiting_code", "creating", "login_required"].includes(phase)) void start(); },
-    resumeFromInstall: () => { setModalOpen(true); if (phase !== "connected" && phase !== "login_required") void start(true); },
-    start: () => start(), cancel, refresh, disconnect, showFallback: () => setFallback(true), selectModel, submitJob, cancelJob };
-  return <Context.Provider value={value}>{children}{modalOpen && <ConnectionModal onClose={() => setModalOpen(false)} />}</Context.Provider>;
+    open: () => setModalOpen(true),
+    resumeFromInstall: () => { setModalOpen(true); if (phase !== "connected" && phase !== "login_required") void start(); },
+    start, cancel, refresh, disconnect, showFallback: () => setFallback(true), selectModel, submitJob, cancelJob };
+  return <Context.Provider value={value}>{children}<LocalAgentClientResume />{modalOpen && <ConnectionModal onClose={() => setModalOpen(false)} />}</Context.Provider>;
 }
 
 export function useLocalAgent() { return React.useContext(Context); }

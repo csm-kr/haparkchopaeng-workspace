@@ -398,6 +398,13 @@ async function attach(record) {
     await command('Input.insertText', { text });
   };
   const click = async selector => {
+    await js(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center',inline:'center',behavior:'instant'})`);
+    await until(() => js(`(()=>{
+      const target=document.querySelector(${JSON.stringify(selector)}), r=target.getBoundingClientRect();
+      const x=r.x+r.width/2, y=r.y+r.height/2, hit=document.elementFromPoint(x,y);
+      return !target.disabled && r.width>0 && r.height>0 && x>=0 && x<innerWidth && y>=0 && y<innerHeight
+        && (hit===target || target.contains(hit));
+    })()`), 'visible enabled click target');
     const box = await js(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
     await command('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...box });
     await command('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...box });
@@ -417,7 +424,7 @@ async function attach(record) {
     }
     return value.stage === expected;
   }, `app stage ${expected}`);
-  await until(() => js("!!window.connector && document.readyState === 'complete'"), 'isolated preload bridge');
+  await until(() => js("typeof window.connector?.state === 'function' && document.readyState === 'complete' && document.querySelector('#code') && document.querySelector('#activity-label') && [...document.images].every(image => image.complete && image.naturalWidth > 0)"), 'isolated preload bridge');
   return { js, screenshot, typeCode, click, stage, close: () => { socket.close(); rejectPending(); } };
 }
 async function encryptedEnvelope() {

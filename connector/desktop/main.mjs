@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { promisify } from 'node:util';
 import { createConnectorTray, shouldHideWindowToTray, shutdownWithTray } from './tray.mjs';
+import { openProviderTerminal } from './terminal.mjs';
 import { retireLegacyMacBundles } from './legacy-mac-bundle.mjs';
 import { selectBriMode } from './renderer/bri-state.mjs';
 
@@ -26,7 +27,7 @@ const userDataDirectory = configuredDataDirectory || join(app.getPath('appData')
 mkdirSync(userDataDirectory, { recursive: true, mode: 0o700 });
 app.setPath('userData', userDataDirectory);
 const coreRoot = app.isPackaged ? join(process.resourcesPath, 'core') : join(directory, '..', 'core');
-const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiClient }, { createCredentialStore }, { createProviderAdapter }, { ConnectorSession }, { desktopAckInput, desktopPairInput }, { shouldExitWithoutWeb, shouldOpenFirstWeb, stopBeforeExit }] = await Promise.all(['security', 'api', 'storage', 'adapters', 'runtime', 'protocol', 'lifetime'].map(name => import(pathToFileURL(join(coreRoot, `${name}.mjs`)).href)));
+const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiClient }, { createCredentialStore }, { createProviderAdapter }, { resolveExecutable }, { ConnectorSession }, { desktopAckInput, desktopPairInput }, { shouldExitWithoutWeb, shouldOpenFirstWeb, stopBeforeExit }] = await Promise.all(['security', 'api', 'storage', 'adapters', 'discovery', 'runtime', 'protocol', 'lifetime'].map(name => import(pathToFileURL(join(coreRoot, `${name}.mjs`)).href)));
 const development = !app.isPackaged && process.argv.includes('--connector-dev');
 const suppressAutoOpen = !app.isPackaged && process.argv.includes('--no-auto-open');
 const quietQa = !app.isPackaged && process.argv.includes('--connector-qa');
@@ -34,7 +35,8 @@ const qaTray = !app.isPackaged && process.argv.includes('--connector-qa-tray');
 let applications = [], mainWindow, petWindow, selectedApp, store, attempt = null, identity = null, runtime = null, adapters = {}, revision = 0, requestController = null, monitoringController = null, monitorTimer = null, refreshPromise = null;
 let preferences = { autoStart: false, pet: false, firstBrowserOpened: false };
 let quitting = false, qaWindowHidden = false, tray;
-let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '한 번 연결하면 다음부터 웹 버튼으로 이 앱을 바로 열 수 있어요.', message: '', providers: [], appName: productName, siteName: '하박조팽', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform, trayAvailable: false, closeToTray: false, ...bridgeMetadata };
+let runtimeCleanup = Promise.resolve();
+let state = { stage: 'idle', title: '웹에서 AI 연결을 눌러 주세요', description: '웹의 연결 요청을 승인하면 이 PC의 CLI로 AI 요청을 실행해요.', message: '', providers: [], appName: productName, siteName: '', teamName: '', memberName: '', deviceName: '', attemptId: null, expiresAt: null, autoStart: false, pet: false, platform: process.platform, trayAvailable: false, closeToTray: false, ...bridgeMetadata };
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, argv) => { const urls = argv.filter(value => /^[a-z][a-z0-9+.-]*:\/\//i.test(value)); launchRequested ||= urls.length > 0; pendingUrls.push(...urls); showWindow(); if (store) void consumeLaunches(); });
@@ -71,7 +73,11 @@ else {
     for (const application of applications) {
       if (!quietQa) app.setAsDefaultProtocolClient(application.scheme, ...(app.isPackaged ? [] : [process.execPath, [directory, '--connector-dev', '--no-auto-open']]));
     }
+    const workspaceRoot = join(app.getPath('userData'), 'workspaces');
+    adapters = Object.fromEntries(['codex', 'claude'].map(provider => [provider, createProviderAdapter(provider, { workspaceRoot })]));
+    monitoringController = new AbortController();
     installIpc(); showWindow(); readyForLaunches = true;
+    void refreshProviders(); monitorTimer = setInterval(() => { void refreshProviders(); }, 30000); monitorTimer.unref();
     const commandLineUrls = process.argv.filter(value => applications.some(application => value.startsWith(`${application.scheme}://`)));
     launchRequested ||= commandLineUrls.length > 0;
     pendingUrls.push(...commandLineUrls);
@@ -122,21 +128,36 @@ function publish() {
   }
   state.closeToTray = shouldHideWindowToTray({ platform: process.platform,
     authorized: !!runtime && ['connected', 'recovering'].includes(runtimeStatus), trayAvailable: state.trayAvailable, quitting });
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:state', { ...state });
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:state', currentState(runtimeState));
   if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('connector:pet-state', state.briMode);
+}
+function currentState(runtimeState = runtime?.getState()) {
+  const activity = runtimeState?.status === 'connected' ? runtimeState.activity : null;
+  const execution = activity?.kind === 'running'
+    ? { kind: 'running', provider: activity.provider, requestedModel: activity.requestedModel }
+    : { kind: ['preparing', 'finalizing', 'stopping'].includes(activity?.kind) ? activity.kind : 'idle' };
+  return { ...state, activity: execution, connectionStatus: runtimeState?.status ?? 'disconnected',
+    detectingProviders: !!refreshPromise,
+    webReady: runtimeState?.status === 'connected' };
 }
 async function shutdown() {
   if (quitting) return;
   quitting = true;
   tray?.updateStage('quitting');
   await shutdownWithTray({ tray, cleanup: () => stopBeforeExit({ runtime,
-    stopMonitoring: () => { monitoringController?.abort(); requestController?.abort(); if (monitorTimer) clearInterval(monitorTimer); return refreshPromise; },
+    stopMonitoring: () => { monitoringController?.abort(); requestController?.abort(); if (monitorTimer) clearInterval(monitorTimer); return Promise.all([refreshPromise, runtimeCleanup]); },
     exit() {} }), exit: () => app.exit(0) });
 }
 async function savePreferences() { await mkdir(app.getPath('userData'), { recursive: true }); await writeFile(join(app.getPath('userData'), 'preferences.json'), JSON.stringify(preferences)); }
 async function openWeb() {
   if (!selectedApp) return { ok: false };
-  await shell.openExternal(`${selectedApp.origin}/profile?localAgentResume=1`); return { ok: true };
+  const destination = runtime?.getState().status === 'connected' ? '/ai-chat' : '/profile?localAgentResume=1';
+  await shell.openExternal(`${selectedApp.origin}${destination}`); return { ok: true };
+}
+function retireRuntime() {
+  const previous = runtime; previous?.stop(); runtime = null;
+  if (previous) runtimeCleanup = Promise.all([runtimeCleanup, previous.whenIdle()]).then(() => {});
+  return runtimeCleanup;
 }
 function api(application = selectedApp) { return createApiClient({ origin: application.origin, allowedOrigins: application.allowedOrigins, development }); }
 
@@ -146,9 +167,11 @@ async function consumeLaunches() {
 async function beginLaunch(url) {
   if (quitting) return;
   const currentRevision = ++revision; requestController?.abort(); requestController = new AbortController();
-  runtime?.stop(); monitoringController?.abort(); if (monitorTimer) clearInterval(monitorTimer); runtime = null;
-  state = { ...state, stage: 'opening', title: '웹의 연결 요청을 확인하고 있어요', description: '연결할 사이트와 계정을 확인해요.', message: '', providers: [], attemptId: null }; publish(); showWindow();
+  const cleanup = retireRuntime();
+  state = { ...state, stage: 'opening', title: '웹의 연결 요청을 확인하고 있어요', description: '연결할 사이트와 계정을 확인해요.', message: '', attemptId: null }; publish(); showWindow();
   try {
+    await cleanup;
+    if (revision !== currentRevision) return;
     const launch = parseLaunchUrl(url, applications), application = launch.application;
     const localIdentity = await store.load(application.id) ?? createDeviceIdentity();
     if (revision !== currentRevision) return;
@@ -177,42 +200,43 @@ async function connected(response, currentRevision) {
   if (currentRevision !== revision || !response.deviceId || !response.leaseExpiresAt) throw new Error('웹 연결 권한을 확인해 주세요.');
   identity = { ...identity, deviceId: response.deviceId }; await store.save(selectedApp.id, identity);
   if (currentRevision !== revision) return;
-  state = { ...state, stage: 'connected', title: '이 PC가 연결됐어요', description: '웹에서 사용할 AI와 모델을 직접 선택해 주세요.', message: '', expiresAt: null }; publish();
-  const workspaceRoot = join(app.getPath('userData'), 'workspaces');
-  adapters = Object.fromEntries(['codex', 'claude'].map(provider => [provider, createProviderAdapter(provider, { workspaceRoot })]));
+  state = { ...state, stage: 'connected', title: '웹과 이 PC가 연결됐어요', description: '웹에서 선택한 CLI와 모델로 요청을 자동 실행해요.', message: '', expiresAt: null }; publish();
   runtime = new ConnectorSession({ api: api(), identity, adapters, ...bridgeMetadata });
   runtime.on('state', update => {
     if (currentRevision !== revision) return;
     state.providers = update.providers;
-    if (update.status === 'authorization_required') { state.stage = 'authorization_required'; state.title = '웹에서 다시 연결해 주세요'; state.description = '로그아웃되었거나 웹 연결 권한이 만료됐어요.'; monitoringController?.abort(); }
+    if (update.status === 'authorization_required') { state.stage = 'authorization_required'; state.title = '웹에서 다시 연결해 주세요'; state.description = '로그아웃되었거나 웹 연결 권한이 만료됐어요.'; }
     if (update.status === 'recovering') state.message = update.message;
     else if (update.status === 'connected') state.message = update.currentJobId ? '웹의 질문에 답하고 있어요.' : '';
     publish();
     if (update.status === 'authorization_required' && shouldExitWithoutWeb({ authorized: false, windowVisible: quietQa ? !qaWindowHidden : !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible(), autoStart: preferences.autoStart, pet: preferences.pet })) void shutdown();
   });
-  runtime.start(response.leaseExpiresAt); void runtime.tick();
-  monitoringController = new AbortController();
-  void refreshProviders(); monitorTimer = setInterval(() => { void refreshProviders(); }, 30000); monitorTimer.unref();
+  runtime.setProviders(state.providers); runtime.start(response.leaseExpiresAt); void runtime.tick();
 }
 function refreshProviders() {
   if (refreshPromise) return refreshPromise;
-  if (!runtime || !monitoringController || monitoringController.signal.aborted) return Promise.resolve({ ok: false });
-  const currentRevision = revision, currentRuntime = runtime, signal = monitoringController.signal;
-  refreshPromise = Promise.all(Object.values(adapters).map(adapter => adapter.detect(signal).catch(() => adapter.getSnapshot()))).then(providers => { if (currentRevision === revision && currentRuntime === runtime && !signal.aborted) currentRuntime.setProviders(providers); return { ok: true }; }).finally(() => { refreshPromise = null; });
-  return refreshPromise;
+  if (!monitoringController || monitoringController.signal.aborted) return Promise.resolve({ ok: false });
+  const signal = monitoringController.signal;
+  const operation = Promise.all(Object.values(adapters).map(adapter => adapter.detect(signal).catch(() => adapter.getSnapshot()))).then(providers => {
+    if (!signal.aborted) { state.providers = providers; if (runtime) runtime.setProviders(providers); else publish(); }
+    return { ok: true };
+  }).finally(() => { if (refreshPromise === operation) { refreshPromise = null; publish(); } });
+  refreshPromise = operation; publish();
+  return operation;
 }
 
 function installIpc() {
-  for (const channel of ['state', 'pair', 'open-web', 'refresh', 'pause', 'quit', 'auto-start', 'pet', 'help']) ipcMain.removeHandler(`connector:${channel}`);
+  for (const channel of ['state', 'pair', 'open-web', 'refresh', 'pause', 'quit', 'auto-start', 'pet', 'help', 'terminal']) ipcMain.removeHandler(`connector:${channel}`);
   const handle = (name, handler) => ipcMain.handle(`connector:${name}`, async (event, ...args) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return { ok: false };
     try { return await handler(...args); } catch { return { ok: false, message: '작업을 완료하지 못했어요. 다시 시도해 주세요.' }; }
   });
-  handle('state', () => ({ ...state })); handle('pair', pair); handle('open-web', openWeb); handle('refresh', refreshProviders);
-  handle('pause', () => { ++revision; requestController?.abort(); runtime?.stop(); monitoringController?.abort(); if (monitorTimer) clearInterval(monitorTimer); runtime = null; attempt = null; state = { ...state, stage: 'idle', title: '연결을 중지했어요', description: '다음에는 웹의 AI 연결 버튼으로 다시 시작할 수 있어요.', providers: [], message: '', attemptId: null }; publish(); return { ok: true }; });
+  handle('state', () => currentState()); handle('pair', pair); handle('open-web', openWeb); handle('refresh', refreshProviders);
+  handle('pause', () => { ++revision; requestController?.abort(); retireRuntime(); attempt = null; state = { ...state, stage: 'idle', title: '연결을 중지했어요', description: '다음에는 웹의 AI 연결 버튼으로 다시 시작할 수 있어요.', message: '', attemptId: null }; publish(); return { ok: true }; });
   handle('quit', () => { void shutdown(); return { ok: true }; });
   handle('auto-start', async enabled => { if (process.platform === 'linux') return { ok: false, message: 'Ubuntu에서는 데스크톱의 시작 프로그램 설정을 사용해 주세요.' }; app.setLoginItemSettings({ openAtLogin: enabled === true }); preferences.autoStart = enabled === true; state.autoStart = preferences.autoStart; await savePreferences(); publish(); return { ok: true }; });
   handle('pet', async enabled => { preferences.pet = enabled === true; state.pet = preferences.pet; if (preferences.pet) showPet(); else { petWindow?.close(); petWindow = null; } await savePreferences(); publish(); return { ok: true }; });
+  handle('terminal', provider => openProviderTerminal(provider, { resolve: resolveExecutable, directory: join(app.getPath('userData'), 'terminal-launchers'), openPath: path => shell.openPath(path) }));
   handle('help', async provider => { if (!['codex', 'claude'].includes(provider)) return { ok: false }; await shell.openExternal(provider === 'codex' ? 'https://learn.chatgpt.com/docs/codex' : 'https://code.claude.com/docs/en/setup'); return { ok: true }; });
 }
 

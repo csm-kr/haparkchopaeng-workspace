@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { LegalModal, type LegalDoc } from "./legal-modal";
 import type { ProfileView } from "./types";
 import type { Role } from "@/types";
-import { LocalAgentSettingsCard, type AgentPaperOption } from "@/components/local-agent";
+import { LocalAgentSettingsCard } from "@/components/local-agent";
 
 // 설정 — 인터랙티브 섬(ADR-015). 프로필·알림·테마·법적 링크.
 // CRITICAL: 프로필 저장은 기존 PATCH /api/me를 호출한다 — 새 엔드포인트를 만들지 않는다.
@@ -57,7 +57,7 @@ interface ApiShape<T> {
   error?: { code: string; message: string };
 }
 
-export function SettingsView({ profile, agentPapers = [] }: { profile: ProfileView; agentPapers?: AgentPaperOption[] }) {
+export function SettingsView({ profile }: { profile: ProfileView }) {
   const { theme, setTheme } = useTheme();
 
   // 프로필 폼 — 마운트 후 로컬 상태가 진실.
@@ -239,7 +239,7 @@ export function SettingsView({ profile, agentPapers = [] }: { profile: ProfileVi
         </div>
       </Card>
 
-      <LocalAgentSettingsCard papers={agentPapers} />
+      <LocalAgentSettingsCard />
 
       {/* 알림 — 인앱 기본(채널 미결 I-5). 외부 채널은 없다. */}
       <Card className="flex flex-col gap-3 p-5">

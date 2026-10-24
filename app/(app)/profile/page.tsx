@@ -4,8 +4,6 @@ import { SettingsView } from "@/components/settings";
 import type { ProfileView } from "@/components/settings";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getActiveTeam } from "@/lib/active-team";
-import { getPapers } from "@/lib/papers";
 import type { Role } from "@/types";
 
 // 설정/프로필 — RSC. 현재 멤버는 서버에서 Prisma 직접 조회(ADR-015/R32).
@@ -34,9 +32,7 @@ export default async function ProfilePage() {
       color: member.color,
       initial: member.initial,
     };
-    const team = session ? await getActiveTeam(session.memberId) : null;
-    const papers = team ? await getPapers(team.id) : [];
-    body = <SettingsView profile={profile} agentPapers={papers.map(({ id, title }) => ({ id, title }))} />;
+    body = <SettingsView profile={profile} />;
   } catch {
     // 조회 실패: 화면을 통째로 날리지 않고 인라인 에러 카드 + 다시 시도(R26/R30).
     body = (

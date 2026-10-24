@@ -87,6 +87,14 @@ function publicMetadata(value) {
     ? value : { type: typeof value, length: typeof value === 'string' ? value.length : null, omitted: true };
 }
 
+export function assertMacRejectedState(state, description) {
+  assert.equal(state.stage, 'error'); assert.equal(state.description, description);
+  assert.equal(state.attemptId, null); assert.ok(Array.isArray(state.providers));
+  assert.equal(state.connectionStatus, 'disconnected'); assert.equal(state.webReady, false);
+  assert.deepEqual(state.activity, { kind: 'idle' });
+  assert.equal(state.autoStart, false); assert.equal(state.pet, false);
+}
+
 export async function verifyMacInstallation({ configuration, context, qaRoot, evidence }) {
   assert.equal(process.platform, 'darwin', 'Installed DMG verification requires macOS.');
   assert.ok(['arm64', 'x64'].includes(process.arch), 'Unsupported native macOS architecture.');
@@ -110,7 +118,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
   evidence.limits = [...new Set([...(evidence.limits ?? []),
     'Local-build DMG copy and LaunchServices verification does not verify a browser download or Finder drag-and-drop.',
     'Developer ID signing, notarization, and quarantined-user Gatekeeper approval are not verified.',
-    'Only invalid launch URIs are submitted; authenticated pairing, production API requests, and CLI execution are outside this smoke.',
+    'Only invalid launch URIs are submitted; authenticated pairing, production API requests, and CLI inference are outside this smoke. Local CLI metadata discovery is allowed.',
     'API/CLI exclusion follows the parser-before-ack control flow; renderer CDP is not main-process network telemetry.',
   ])];
   const result = evidence.macos = { architecture: process.arch, mainPids: [], core: null,
@@ -358,9 +366,8 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
           client = await connectInstalledApp(port, join(resources, 'app.asar', 'renderer', 'index.html'));
           diagnostic.cdpConnected = true;
           const current = await client.state();
-          diagnostic.sameParserErrorObserved = current.stage === 'error'
-            && current.description === '등록된 앱의 연결 링크를 사용해 주세요.'
-            && current.attemptId === null && current.providers.length === 0;
+          assertMacRejectedState(current, '등록된 앱의 연결 링크를 사용해 주세요.');
+          diagnostic.sameParserErrorObserved = true;
         }
       }
     } catch { diagnostic.observationFailed = true; }
@@ -416,9 +423,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       const current = await connection.state();
       return current.stage === 'error' && current.description === description ? current : false;
     }, 'installed macOS app rejected invalid URI');
-    assert.equal(state.attemptId, null);
-    assert.deepEqual(state.providers, []);
-    assert.equal(state.autoStart, false); assert.equal(state.pet, false);
+    assertMacRejectedState(state, description);
     assert.equal(await exists(join(userData, 'devices.enc.json')), false, 'Invalid URI reached credential persistence.');
     assert.equal(await exists(join(userData, 'preferences.json')), false, 'Invalid cold URI opened the first-run web flow.');
     assert.equal(await exists(userData), true, 'The original runtime credential profile was not created.');
@@ -695,7 +700,7 @@ export async function verifyMacInstallation({ configuration, context, qaRoot, ev
       const current = (await swift('identity', String(launched.pid))).application;
       assert.ok(current && comparablePath(current.path) === comparablePath(launched.path) && current.started === launched.started,
         'The installed cold-start process changed identity.');
-      checked(sequence === 1 ? 'Installed cold URI launch rejected invalid host before credentials/API/CLI.'
+      checked(sequence === 1 ? 'Installed cold URI launch rejected invalid host before credentials/API/CLI inference.'
         : 'Installed app restarted after normal IPC exit and rejected another cold URI.');
 
       if (sequence === 1) {
