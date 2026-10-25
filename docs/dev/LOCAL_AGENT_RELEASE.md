@@ -14,6 +14,22 @@ Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치�
 
 상태별 ImageGen 브리를 포함한 [0.1.11 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.11-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 동일 소스 태그의 5개 CI job과 게시 workflow 3개 job이 모두 성공했고, 각 파일 SHA256·크기·공개 HTTP 200을 확인했다. Production 다운로드 설정을 갱신한 뒤 운영 API에서 세 OS 모두 0.1.11을 다시 확인했다. 정확한 소스·파일 해시·배포 영수증과 검증 범위는 [배포 기록](../../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. 기존 unsigned prerelease 채널이며 사용자 컴퓨터의 기존 설치 앱은 자동으로 교체하지 않는다.
 
+## 2026-10-25 0.1.13 게시 (웹에서 터미널 열기, ADR-034)
+
+웹 연결 창에서 연결된 PC의 Codex·Claude Code 터미널을 여는 [0.1.13 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.13-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 PR47 병합 커밋 `aff6ecd691eb4c70265773fc636a2a9c6863b498`이다. 웹을 먼저 배포했다. 같은 커밋의 Production 배포가 성공했고, 새 API 두 개가 운영에서 401(로그인 필요)로 응답하는 것을 앱 게시 전에 확인했다.
+
+같은 태그의 CI [40195205634](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40195205634)는 5개 job, 게시 workflow [40195816354](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40195816354)는 3개 job이 모두 성공했다. Windows 파일은 같은 태그 CI의 Windows job이 만들고 설치·URI 실행·제거·코어 9개 일치를 확인한 산출물이다. 세 파일의 JSON 메타데이터를 GitHub 서버의 크기·SHA256과 대조했다. 공개 후에는 인증 없이 다시 받아 HTTP 200·크기·SHA256이 같은지 확인했다.
+
+| 파일 | bytes | SHA256 |
+| --- | ---: | --- |
+| AI-Bridge-0.1.13-linux-x64.deb | 99521688 | `d59438bab16e034b30115152aeb2a5e56f4dc152537da974be72c30ba1014d1d` |
+| AI-Bridge-0.1.13-mac-arm64.dmg | 128521898 | `5f79dd05193ef726e9a5550cef476cd807d633cfef5336a13e8a0e3cb9729cba` |
+| AI-Bridge-0.1.13-win-x64.exe | 111719355 | `846658081de6cb29c21e8c7622288eda592045a206cf009770d5a95225297fd1` |
+
+Production `LOCAL_AGENT_RELEASES`만 [published-releases.json](../../phases/26-bridge-web-cli/published-releases.json)으로 덮어썼다. 앱의 실제 parser(`readLocalAgentReleases`)로 세 OS 모두 0.1.13인지 확인했다. 그 뒤 같은 커밋으로 Production을 재배포했고 `hapark.vercel.app`에 연결됐다. 로그인한 운영 다운로드 API를 다시 읽는 확인은 하지 않았다. 사용자가 연결 창에서 0.1.13 업데이트 표시를 확인한다.
+
+미검증 범위: 실제 사용자 PC에서 웹 버튼으로 터미널이 열리는지, 운영 계정 페어링 뒤의 전달은 아직 확인하지 않았다. 앱 단위 테스트와 3 OS 네이티브 스모크는 가짜 서버로 heartbeat 계약까지만 확인한다. 기존 미서명 채널이며 Developer ID·공증·Gatekeeper 승인은 없다. 사용자 PC의 설치 앱은 자동으로 교체하지 않는다.
+
 ## 2026-10-24 0.1.12 게시
 
 연결 창 통합·로컬 CLI 상태와 터미널 열기 버튼을 포함한 [0.1.12 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.12-preview.2)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 `604e8a746e161bf627852685ac328ff334dd92f2`이고 PR45 병합 커밋 `526842f`와 Git tree가 같다. PR CI 40070846181과 같은 태그 CI 40071138156이 각각 5개 job, 게시 workflow 40071844526이 3개 job 모두 성공했다. 세 파일을 익명으로 다시 받아 HTTP 200·크기·SHA256을 확인했다. Production 배포는 `dpl_DKTN8TnjRNn371ufHen9vArN7c6B`이고, 바꾼 환경 변수는 `LOCAL_AGENT_RELEASES` 하나다. 로그인한 운영 다운로드 API에서 세 OS 모두 0.1.12를 다시 확인했다.
