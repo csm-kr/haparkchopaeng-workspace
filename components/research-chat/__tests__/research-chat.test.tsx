@@ -1,5 +1,5 @@
 import * as React from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalAgentDeviceView, LocalAgentStatus } from "@/types/local-agent";
 import type { ResearchChatTurn, ResearchConversationDetail, ResearchConversationView, ResearchPaperOption } from "@/types/research-chat";
@@ -28,7 +28,7 @@ function connectorApi(connected = true): LocalAgentApi {
   };
 }
 function chatApi(): ResearchChatApi {
-  return { papers: vi.fn().mockResolvedValue(papers), presentations: vi.fn().mockResolvedValue([]), prepareSources: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]), get: vi.fn(), create: vi.fn(), send: vi.fn(), cancel: vi.fn() };
+  return { papers: vi.fn().mockResolvedValue(papers), presentations: vi.fn().mockResolvedValue([]), prepareSources: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]), get: vi.fn(), create: vi.fn(), send: vi.fn(), cancel: vi.fn(), remove: vi.fn().mockResolvedValue(undefined) };
 }
 const conversation: ResearchConversationView = { id: "conversation-a", title: "첫 연구 질문", paperIds: ["p1"], createdAt: "2026-10-17T10:00:00.000Z", updatedAt: "2026-10-17T10:00:00.000Z" };
 const turn: ResearchChatTurn = { id: "turn-a", version: 1, conversationId: conversation.id, conversationTurn: 1, canCancel: true, contextTruncated: false, paperId: "p1", provider: "codex", model: "detected", prompt: "핵심 기여가 뭔가요?", status: "queued", response: "", error: null, createdAt: conversation.createdAt, updatedAt: conversation.updatedAt };
@@ -149,7 +149,7 @@ describe("AI 연구 채팅", () => {
     let oldReply!: (value: ResearchConversationDetail) => void;
     vi.mocked(api.get).mockImplementation(() => new Promise((resolve) => { oldReply = resolve; }));
     render(<View api={api} initialDetail={detail([{ ...turn, status: "completed", response: "저장된 결과" }])} />);
-    fireEvent.click(screen.getByRole("button", { name: /첫 연구 질문/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^첫 연구 질문 \d/ }));
     expect(screen.getByText("대화를 불러오고 있어요…")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "새 대화" })[0]);
     await act(async () => { oldReply(detail([{ ...turn, status: "completed", response: "늦게 도착한 결과" }])); });
@@ -237,5 +237,76 @@ describe("AI 연구 채팅", () => {
     expect(screen.getByText("기존 답변")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "보내기" })).toBeEnabled());
     expect(api.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("대화 삭제", () => {
+  const other: ResearchConversationView = { id: "conversation-b", title: "두 번째 연구 질문", paperIds: [], createdAt: "2026-10-16T10:00:00.000Z", updatedAt: "2026-10-16T10:00:00.000Z" };
+  function renderWithList(api: ResearchChatApi) {
+    window.history.replaceState(null, "", `/ai-chat/${conversation.id}`);
+    render(<View api={api} initialDetail={detail([{ ...turn, status: "completed", canCancel: false, response: "기존 답변" }])} initialConversations={[conversation, other]} />);
+  }
+  const list = () => screen.getByRole("navigation", { name: "내 AI 대화" });
+
+  it("목록의 점 3개 메뉴에서 한 번 더 확인한 뒤 다른 대화를 지우고 지금 대화는 유지한다", async () => {
+    const api = chatApi();
+    renderWithList(api);
+    fireEvent.click(screen.getByRole("button", { name: "두 번째 연구 질문 더보기" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "삭제" }));
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(screen.getByText(/「두 번째 연구 질문」 대화를 삭제할까요\?/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith("conversation-b"));
+    await waitFor(() => expect(within(list()).queryByText("두 번째 연구 질문")).toBeNull());
+    expect(screen.getByText("기존 답변")).toBeInTheDocument();
+    expect(window.location.pathname).toBe(`/ai-chat/${conversation.id}`);
+  });
+
+  it("지금 열린 대화를 지우면 새 대화 화면으로 돌아간다", async () => {
+    const api = chatApi();
+    renderWithList(api);
+    fireEvent.click(screen.getByRole("button", { name: "현재 대화 더보기" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "삭제" }));
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/ai-chat"));
+    expect(screen.queryByText("기존 답변")).toBeNull();
+    expect(within(list()).queryByText("첫 연구 질문")).toBeNull();
+    expect(within(list()).getByText("두 번째 연구 질문")).toBeInTheDocument();
+  });
+
+  it("확인 단계에서 취소하거나 Escape를 누르면 지우지 않고 메뉴 버튼으로 포커스를 돌린다", async () => {
+    const api = chatApi();
+    renderWithList(api);
+    const trigger = screen.getByRole("button", { name: "두 번째 연구 질문 더보기" });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "삭제" }));
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    expect(screen.queryByRole("menuitem", { name: "삭제" })).toBeNull();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(await screen.findByRole("menuitem", { name: "삭제" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menuitem", { name: "삭제" })).toBeNull());
+    expect(trigger).toHaveFocus();
+    expect(api.remove).not.toHaveBeenCalled();
+  });
+
+  it("진행 중인 노트·세미나 작업 때문에 지우지 못하면 이유를 보여 주고 목록을 유지한다", async () => {
+    const api = chatApi();
+    vi.mocked(api.remove).mockRejectedValue(new ResearchChatApiError(409, "CONVERSATION_TASK_ACTIVE"));
+    renderWithList(api);
+    fireEvent.click(screen.getByRole("button", { name: "두 번째 연구 질문 더보기" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "삭제" }));
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    expect(await screen.findByText("진행 중인 노트·세미나 작업을 멈춘 뒤 대화를 삭제해 주세요.")).toBeInTheDocument();
+    expect(within(list()).getByText("두 번째 연구 질문")).toBeInTheDocument();
+  });
+
+  it("다른 곳에서 이미 지운 대화는 목록에서도 정리한다", async () => {
+    const api = chatApi();
+    vi.mocked(api.remove).mockRejectedValue(new ResearchChatApiError(404, "NOT_FOUND"));
+    renderWithList(api);
+    fireEvent.click(screen.getByRole("button", { name: "두 번째 연구 질문 더보기" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "삭제" }));
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(within(list()).queryByText("두 번째 연구 질문")).toBeNull());
   });
 });

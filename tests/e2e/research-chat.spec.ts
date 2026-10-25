@@ -78,7 +78,7 @@ test("자료나 모델 선택 단계 없이 대화하고 부분 답변·중지·
   await page.getByRole("button", { name: "새 대화", exact: true }).click();
   await expect(page.getByRole("heading", { name: "무엇을 함께 생각해 볼까요?" })).toBeVisible();
   if (await page.getByRole("button", { name: "대화 목록 열기" }).isVisible()) await page.getByRole("button", { name: "대화 목록 열기" }).click();
-  await page.getByRole("button", { name: /함께 새로운 연구 아이디어/ }).click();
+  await page.getByRole("button", { name: /^함께 새로운 연구 아이디어(?!.*더보기)/ }).click();
   await expect(page.getByText("함께 생각한 부분 답변", { exact: true })).toBeVisible();
   expect(fixture.sends()).toBe(1);
 });
@@ -154,7 +154,7 @@ test("자료를 비운 후속 질문도 같은 대화에 이어지고 이전 턴
   await expect(first.getByText("첫 자료의 가정을 정리한 답변", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "새 대화", exact: true }).click();
   if (await page.getByRole("button", { name: "대화 목록 열기" }).isVisible()) await page.getByRole("button", { name: "대화 목록 열기" }).click();
-  await page.getByRole("button", { name: /첫 자료의 가정을 정리해줘/ }).click();
+  await page.getByRole("button", { name: /^첫 자료의 가정을 정리해줘(?!.*더보기)/ }).click();
   await expect(page.getByRole("article", { name: "질문 1", exact: true })).toBeVisible();
   await expect(page.getByRole("article", { name: "질문 2", exact: true })).toBeVisible();
   await expect(page.getByText("앞선 답변에 이어서 제안한 실험", { exact: true })).toBeVisible();

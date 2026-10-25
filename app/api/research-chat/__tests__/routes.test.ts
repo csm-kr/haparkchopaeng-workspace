@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), list: vi.fn(), create: vi.fn(), detail: vi.fn(), turn: vi.fn(), cancel: vi.fn(), papers: vi.fn(), presentations: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), list: vi.fn(), create: vi.fn(), detail: vi.fn(), turn: vi.fn(), cancel: vi.fn(), remove: vi.fn(), papers: vi.fn(), presentations: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getConnectionSession: mocks.session }));
 vi.mock("@/lib/active-team", () => ({ getActiveTeam: mocks.team }));
-vi.mock("@/lib/research-chat/service", () => ({ listConversations: mocks.list, createConversation: mocks.create, getConversation: mocks.detail, createTurn: mocks.turn, cancelTurn: mocks.cancel, listResearchPapers: mocks.papers, listResearchPresentations: mocks.presentations }));
+vi.mock("@/lib/research-chat/service", () => ({ listConversations: mocks.list, createConversation: mocks.create, getConversation: mocks.detail, createTurn: mocks.turn, cancelTurn: mocks.cancel, deleteConversation: mocks.remove, listResearchPapers: mocks.papers, listResearchPresentations: mocks.presentations }));
 const { GET: list, POST: create } = await import("../conversations/route");
-const { GET: detail } = await import("../conversations/[id]/route");
+const { GET: detail, DELETE: remove } = await import("../conversations/[id]/route");
 const { POST: turn } = await import("../conversations/[id]/turns/route");
 const { POST: cancel } = await import("../conversations/[id]/turns/[jobId]/cancel/route");
 const { GET: papers } = await import("../papers/route");
@@ -26,6 +26,7 @@ beforeEach(() => {
   mocks.detail.mockResolvedValue({ conversation: { id: "conversation" }, turns: [] });
   mocks.turn.mockResolvedValue({ id: "job", status: "queued" });
   mocks.cancel.mockResolvedValue({ id: "job", status: "cancelled" });
+  mocks.remove.mockResolvedValue({ deleted: true });
 });
 
 describe("research chat API boundaries", () => {
@@ -72,5 +73,14 @@ describe("research chat API boundaries", () => {
     expect((await cancel(request({}), context)).status).toBe(200);
     expect(mocks.cancel).toHaveBeenCalledWith(expect.objectContaining({ sessionKey: "server-session" }), "conversation", "job");
     expect((await cancel(request({ jobId: "other" }), context)).status).toBe(400);
+  });
+  it("deletes only through the server scope from the same web origin", async () => {
+    const deletion = (from = origin) => new Request(origin + "/api/research-chat/conversations/conversation", { method: "DELETE", headers: { origin: from } });
+    expect((await remove(deletion("https://evil.test"), params())).status).toBe(403);
+    expect(mocks.remove).not.toHaveBeenCalled();
+    const response = await remove(deletion(), params());
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toEqual({ deleted: true });
+    expect(mocks.remove).toHaveBeenCalledWith(expect.objectContaining({ memberId: "server-owner", teamId: "server-team" }), "conversation");
   });
 });
