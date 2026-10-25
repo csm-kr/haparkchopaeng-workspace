@@ -180,6 +180,20 @@ export function useResearchChat({ initialPapers, initialPresentations = [], init
     catch (cause) { if (valid(revision)) fail(cause); }
     finally { if (valid(revision)) { cancelAtomic.current = false; setCancelling(false); } }
   }
+  /** Returns false when the conversation is still listed (the reason is shown as the chat error). */
+  async function remove(id: string): Promise<boolean> {
+    if (blocked) return false;
+    try { await api.remove(id); }
+    catch (cause) {
+      // Already gone elsewhere: tidy the list instead of reporting a failure.
+      if (!(cause instanceof ResearchChatApiError && cause.status === 404)) { if (alive.current) fail(cause); return false; }
+    }
+    if (!alive.current) return false;
+    setConversations((previous) => previous.filter((item) => item.id !== id));
+    if ((currentDetail.current?.conversation.id ?? requestedId.current) === id) newChat();
+    drafts.current.delete(id);
+    return true;
+  }
   async function prepareSources(paperIds: string[]) {
     if (sourceAtomic.current || blocked || !paperIds.length || paperIds.length > 3) return;
     const revision = epoch.current;
@@ -209,5 +223,5 @@ export function useResearchChat({ initialPapers, initialPresentations = [], init
     } catch (cause) { if (valid(revision)) fail(cause); }
     finally { if (alive.current) setMaterialsLoading(false); }
   }
-  return { papers, presentations, materialsLoading, refreshMaterials, conversations, detail, prompt, setPrompt, error, loading, sending, cancelling, blocked, blockedTarget, sourcePreparing, sourceRequestedIds, open, newChat, refresh, submit, cancel, prepareSources };
+  return { papers, presentations, materialsLoading, refreshMaterials, conversations, detail, prompt, setPrompt, error, loading, sending, cancelling, blocked, blockedTarget, sourcePreparing, sourceRequestedIds, open, newChat, refresh, submit, cancel, remove, prepareSources };
 }

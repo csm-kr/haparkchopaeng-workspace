@@ -9,6 +9,7 @@ import { useLocalAgent } from "@/components/local-agent/provider";
 import { chatSelection } from "@/components/local-agent/chat-selection";
 import { useResearchChat } from "./use-research-chat";
 import { ConversationList } from "./conversation-list";
+import { ConversationMenu } from "./conversation-menu";
 import { ChatDialog } from "./dialog";
 import { Transcript } from "./transcript";
 import type { ResearchChatApi } from "./client";
@@ -129,13 +130,15 @@ function ScopedResearchChat(props: ResearchChatProps) {
     if (await work.start({ ...execution, paperId: taskPapers[0].id, goal, kind: "seminar", completion: "saved_presentation" })) chat.setPrompt("");
   }
   function open(id: string) { void chat.open(id); setListOpen(false); closeMention(); }
-  const list = <ConversationList conversations={chat.conversations} selectedId={chat.detail?.conversation.id} onSelect={open} onNew={newChat} />;
+  async function remove(id: string) { const removed = await chat.remove(id); if (removed) setSelections(previous => { const { [id]: _, ...rest } = previous; return rest; }); return removed; }
+  const list = <ConversationList conversations={chat.conversations} selectedId={chat.detail?.conversation.id} onSelect={open} onNew={newChat} onDelete={remove} />;
   return <section aria-label="AI 연구 채팅" className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
     <aside aria-label="대화 목록" className="hidden w-[232px] shrink-0 flex-col border-r border-border-token bg-bg-elevated p-3 xl:flex">{list}</aside>
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center gap-2 px-3 py-2 sm:px-5">
         <Button variant="ghost" size="sm" aria-label="대화 목록 열기" className="min-h-10 xl:hidden" onClick={() => setListOpen(true)}><List size={17} aria-hidden="true" /></Button>
         <h1 className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg-muted">{chat.detail?.conversation.title ?? "새 대화"}</h1>
+        {chat.detail && <ConversationMenu title={chat.detail.conversation.title} triggerLabel="현재 대화 더보기" onDelete={() => remove(chat.detail!.conversation.id)} className="size-10" />}
         <Button variant="ghost" size="sm" aria-label="새 대화" className="min-h-10 xl:hidden" onClick={newChat}><Plus size={17} aria-hidden="true" /></Button>
       </header>
       <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${empty ? "justify-center" : ""}`}>

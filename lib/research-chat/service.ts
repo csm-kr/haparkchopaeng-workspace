@@ -159,6 +159,20 @@ export async function createTurn(scope: LocalAgentScope, id: string, candidate: 
     return sameTurn(existing, scope, id, input);
   }
 }
+export async function deleteConversation(scope: LocalAgentScope, id: string): Promise<{ deleted: true }> {
+  return prisma.$transaction(async (tx) => {
+    await ownedConversation(tx, scope, id);
+    const tasks = await tx.agentTask.findMany({ where: { ...owner(scope), conversationId: id }, select: { id: true, status: true } });
+    if (tasks.some(task => ["queued", "running"].includes(task.status))) throw new HttpError(409, "CONVERSATION_TASK_ACTIVE", "진행 중인 노트·세미나 작업을 멈춘 뒤 대화를 삭제해 주세요.");
+    const taskJobIds = (await tx.agentOperation.findMany({ where: { taskId: { in: tasks.map(task => task.id) }, jobId: { not: null } }, select: { jobId: true } })).flatMap(op => op.jobId ? [op.jobId] : []);
+    // A claimed answer stays as an empty cancelled row: the next desktop heartbeat reports it so the CLI stops.
+    await tx.localAgentJob.updateMany({ where: { ...owner(scope), conversationId: id, status: { in: active } }, data: { status: "cancelled", prompt: "", response: "", context: "{}", error: "대화를 삭제했어요.", conversationId: null, conversationTurn: null, version: { increment: 1 } } });
+    await tx.localAgentJob.deleteMany({ where: { ...owner(scope), OR: [{ conversationId: id }, { id: { in: taskJobIds }, status: { notIn: active } }] } });
+    await tx.agentTask.deleteMany({ where: { id: { in: tasks.map(task => task.id) } } });
+    await tx.researchConversation.delete({ where: { id } });
+    return { deleted: true as const };
+  });
+}
 export async function cancelTurn(scope: LocalAgentScope, conversationId: string, jobId: string): Promise<ResearchChatTurn> {
   await ownedConversation(prisma, scope, conversationId);
   const row = await prisma.localAgentJob.findFirst({ where: { id: jobId, conversationId, purpose: "chat", ...owner(scope), sessionKey: scope.sessionKey } });
