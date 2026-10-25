@@ -22,10 +22,13 @@ function exactKeys(body, keys) {
 }
 function validHeartbeatInput(body) {
   if (!body || typeof body !== 'object' || !Array.isArray(body.providers)
-    || !Object.keys(body).every(key => ['providers', 'bridgeVersion', 'bridgeArchitecture'].includes(key))) return false;
+    || !Object.keys(body).every(key => ['providers', 'bridgeVersion', 'bridgeArchitecture', 'bridgeCapabilities'].includes(key))) return false;
   if (Object.hasOwn(body, 'bridgeVersion') && (typeof body.bridgeVersion !== 'string' || body.bridgeVersion.length > 64
     || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/.test(body.bridgeVersion))) return false;
   if (Object.hasOwn(body, 'bridgeArchitecture') && !['arm64', 'x64'].includes(body.bridgeArchitecture)) return false;
+  // Mirrors the server: up to 8 lowercase capability names (ADR-034).
+  if (Object.hasOwn(body, 'bridgeCapabilities') && (!Array.isArray(body.bridgeCapabilities) || body.bridgeCapabilities.length > 8
+    || !body.bridgeCapabilities.every(value => typeof value === 'string' && /^[a-z0-9_]{1,32}$/.test(value)))) return false;
   return true;
 }
 
@@ -66,7 +69,7 @@ async function runtimePreparationTests() {
   const { test } = await import('node:test');
   await test('the native fixture accepts real legacy and versioned runtime heartbeats without queuing work', async () => {
     const { ConnectorSession } = await import('../core/runtime.mjs');
-    for (const metadata of [{}, { bridgeVersion: '0.1.5', bridgeArchitecture: 'x64' }, { bridgeVersion: '0.1.5-preview.1+build.2', bridgeArchitecture: 'arm64' }]) {
+    for (const metadata of [{}, { bridgeVersion: '0.1.5', bridgeArchitecture: 'x64' }, { bridgeVersion: '0.1.5-preview.1+build.2', bridgeArchitecture: 'arm64' }, { bridgeVersion: '0.1.13', openTerminal: async () => ({ ok: true }) }]) {
       let heartbeatCount = 0, claimCount = 0;
       const api = { post: async (route, body) => {
         if (route === 'heartbeat') {
@@ -85,7 +88,8 @@ async function runtimePreparationTests() {
     for (const body of [null, [], {}, { providers: {} }, { providers: [], privateField: 'never-forward' },
       { providers: [], bridgeVersion: null }, { providers: [], bridgeVersion: 'latest' }, { providers: [], bridgeVersion: '01.1.5' },
       { providers: [], bridgeVersion: '0.1.5-01' }, { providers: [], bridgeVersion: '0.1.5\n' }, { providers: [], bridgeVersion: '0.1.5-' + 'a'.repeat(64) },
-      { providers: [], bridgeArchitecture: null }, { providers: [], bridgeArchitecture: 'ia32' }]) assert.equal(validHeartbeatInput(body), false);
+      { providers: [], bridgeArchitecture: null }, { providers: [], bridgeArchitecture: 'ia32' },
+      { providers: [], bridgeCapabilities: 'terminal_v1' }, { providers: [], bridgeCapabilities: ['rm -rf'] }, { providers: [], bridgeCapabilities: Array(9).fill('terminal_v1') }]) assert.equal(validHeartbeatInput(body), false);
   });
   const missing = () => Object.assign(new Error('Missing native runtime'), { code: 'ENOENT' });
   const packageDirectory = join(tmpdir(), 'runtime-preparation-unit');

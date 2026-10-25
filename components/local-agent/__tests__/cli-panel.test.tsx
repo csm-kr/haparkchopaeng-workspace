@@ -98,3 +98,12 @@ it("작업이 없으면 빈 상태를, 조회에 실패하면 다시 시도를 �
   fireEvent.click(within(region).getByRole("button", { name: "다시 시도" }));
   expect(await within(region).findByText("지금 실행 중인 작업이 없어요.")).toBeInTheDocument();
 });
+
+it("예상과 다른 응답을 받아도 연결 창을 유지하고 조회 실패로 보인다", async () => {
+  const api = setup();
+  vi.mocked(api.activeJobs).mockResolvedValue({ releases: [] } as unknown as LocalAgentActiveJobView[]);
+  const dialog = await open();
+  const region = await within(dialog).findByRole("region", { name: "실행 중인 작업" });
+  expect(await within(region).findByText("실행 중인 작업을 확인하지 못했어요.")).toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Codex 터미널 열기" })).toBeInTheDocument();
+});

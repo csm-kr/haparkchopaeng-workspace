@@ -56,7 +56,12 @@ export function ActiveJobs() {
   const [stopping, setStopping] = React.useState<string | null>(null);
   const load = React.useCallback(async () => {
     if (!api) return;
-    try { setJobs(await api.activeJobs()); setFailed(false); } catch { setFailed(true); }
+    try {
+      const next = await api.activeJobs();
+      // A malformed response must not take down the whole connection window.
+      if (!Array.isArray(next)) throw new Error("Unexpected active jobs response");
+      setJobs(next); setFailed(false);
+    } catch { setFailed(true); }
   }, [api]);
   React.useEffect(() => {
     void load();
