@@ -14,6 +14,18 @@ Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치�
 
 상태별 ImageGen 브리를 포함한 [0.1.11 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.11-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 동일 소스 태그의 5개 CI job과 게시 workflow 3개 job이 모두 성공했고, 각 파일 SHA256·크기·공개 HTTP 200을 확인했다. Production 다운로드 설정을 갱신한 뒤 운영 API에서 세 OS 모두 0.1.11을 다시 확인했다. 정확한 소스·파일 해시·배포 영수증과 검증 범위는 [배포 기록](../../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. 기존 unsigned prerelease 채널이며 사용자 컴퓨터의 기존 설치 앱은 자동으로 교체하지 않는다.
 
+## 2026-10-24 0.1.12 게시
+
+연결 창 통합·로컬 CLI 상태와 터미널 열기 버튼을 포함한 [0.1.12 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.12-preview.2)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 `604e8a746e161bf627852685ac328ff334dd92f2`이고 PR45 병합 커밋 `526842f`와 Git tree가 같다. PR CI 40070846181과 같은 태그 CI 40071138156이 각각 5개 job, 게시 workflow 40071844526이 3개 job 모두 성공했다. 세 파일을 익명으로 다시 받아 HTTP 200·크기·SHA256을 확인했다. Production 배포는 `dpl_DKTN8TnjRNn371ufHen9vArN7c6B`이고, 바꾼 환경 변수는 `LOCAL_AGENT_RELEASES` 하나다. 로그인한 운영 다운로드 API에서 세 OS 모두 0.1.12를 다시 확인했다.
+
+| 파일 | bytes | SHA256 |
+| --- | ---: | --- |
+| AI-Bridge-0.1.12-linux-x64.deb | 99521112 | `e97147bc316fbcced560aafe09788b04bce25f808048dd1584ac916e5c511f72` |
+| AI-Bridge-0.1.12-mac-arm64.dmg | 128512934 | `496dad30ca9e8f024a7580c0762db8f609f5e0db45d7bdb7dd6185831b2e2acd` |
+| AI-Bridge-0.1.12-win-x64.exe | 111719001 | `a0d80e95b03b3fdec70a838567eb01006cb219159c2f9512af0c5c2448f1f708` |
+
+실제 CLI 확인 범위: Codex 요청 1건은 정상 응답을 받았고 Claude 요청 1건은 `RATE_LIMITED`로 끝나 Claude 완료는 확인하지 못했다. Mac은 ad hoc 서명 무결성만 확인했으며 Developer ID·공증·Gatekeeper 승인은 아니다. 게시 당시 사용자 PC의 설치 앱은 0.1.11이었고 자동으로 교체하지 않았다. 원본 영수증은 게시 세션의 로컬 임시 폴더에만 있었으므로 이 절을 정본 기록으로 삼는다.
+
 ## 2026-10-18 운영 반영 기록
 
 사용자의 운영 배포 요청에 따라 Supabase `ocprfnjuakugiraimeoo`의 `postgres/public`을 확인하고 두 20261017 SQL을 한 트랜잭션으로 반영했다. 반영 전 실제 Prisma schema diff는 예정한 6테이블·7컬럼 추가와 일치했고, 반영 후 `prisma migrate diff --exit-code`는 **0 / No difference detected**다. 새 PK 6개·FK 12개·PK 포함 인덱스 19개와 기존 논문 11개·분석 22개·Figure 63개·멤버 12명·팀 4개를 확인했다.

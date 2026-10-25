@@ -96,6 +96,10 @@
       "completed_at": "2026-10-18T14:28:52+0900"
     },
     {
+      "dir": "20-agent-centric-foundation",
+      "status": "completed"
+    },
+    {
       "dir": "20-ai-connection-controls",
       "status": "completed",
       "completed_at": "2026-10-18T16:12:50+0900",
@@ -103,13 +107,38 @@
     },
     {
       "dir": "21-ai-bridge-pet",
-      "status": "in_progress",
-      "summary": "Local Harness passed: Node 211 passed/1 skipped; pet native 9 checks and desktop flow passed. Exact-source multi-OS CI and 0.1.6 release pending."
+      "status": "completed",
+      "summary": "Both steps completed; the pet shipped in later AI Bridge preview releases (latest 0.1.12)."
+    },
+    {
+      "dir": "21-paper-pt-workspace",
+      "status": "completed"
+    },
+    {
+      "dir": "22-ai-connection-ux",
+      "status": "completed"
+    },
+    {
+      "dir": "22-paper-pt-release",
+      "status": "error",
+      "summary": "Step production-integration-regression recorded AC failure (local-agent-verify all); see phases/22-paper-pt-release/index.json."
+    },
+    {
+      "dir": "23-bri-antenna-outline",
+      "status": "completed"
+    },
+    {
+      "dir": "24-scanned-pdf-reading",
+      "status": "completed"
     },
     {
       "dir": "25-bri-stateful-companion",
       "status": "completed",
       "summary": "0.1.11 stateful ImageGen Bri published for Windows x64, Mac arm64 and Ubuntu x64; exact-source CI and native publication passed; production download API verified."
+    },
+    {
+      "dir": "26-bridge-web-cli",
+      "status": "pending"
     }
   ]
 }
