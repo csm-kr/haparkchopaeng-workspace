@@ -36,7 +36,14 @@
     {
       "step": 5,
       "name": "release-0-1-13",
-      "status": "pending"
+      "status": "completed",
+      "summary": "0.1.13 three-OS prerelease published from aff6ecd (exact-tag CI 40195205634, publisher 40195816354); public downloads re-hashed; Production LOCAL_AGENT_RELEASES overwritten and redeployed. Logged-in production readback left to the user."
     }
-  ]
+  ],
+  "releaseVersion": "0.1.13",
+  "releaseTag": "ai-bridge-v0.1.13-preview.1",
+  "releaseSource": "aff6ecd691eb4c70265773fc636a2a9c6863b498",
+  "validationRunId": 40195205634,
+  "assetWorkflowRunId": 40195816354,
+  "installedUpgradeVerified": false
 }

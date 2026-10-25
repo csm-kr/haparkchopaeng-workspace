@@ -138,7 +138,8 @@
     },
     {
       "dir": "26-bridge-web-cli",
-      "status": "pending"
+      "status": "completed",
+      "summary": "Web terminal-open requests and active-work list (ADR-034); AI Bridge 0.1.13 published for three OS; production download catalogue updated."
     }
   ]
 }
