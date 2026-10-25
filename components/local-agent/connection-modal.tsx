@@ -12,6 +12,7 @@ import { Button } from "@/components/ui";
 import { ConnectionDialog } from "./connection-dialog";
 import { useLocalAgent } from "./provider";
 import { InstallHelp } from "./install-help";
+import { ActiveJobs, TerminalButton } from "./cli-panel";
 
 export function ConnectionModal({ onClose }: { onClose: () => void }) {
   const agent = useLocalAgent();
@@ -126,6 +127,7 @@ function ConnectedControls() {
           <QuotaBadge windows={quotaWindows(provider)} />
         </div>}
         {unavailable && <p className="text-[12px] leading-relaxed text-fg-muted">{unavailable}</p>}
+        <TerminalButton provider={active} />
         <label className="flex flex-col gap-2 text-[12px] font-medium text-fg-muted">모델
           <select aria-label="모델" value={current ? `${active}:${current.model}` : ""} disabled={!canSelect} onChange={event => {
             const model = models.find(item => `${active}:${item.id}` === event.target.value);
@@ -144,6 +146,6 @@ function ConnectedControls() {
           </label>)}</div>
         </fieldset>}
       </div>
-
+      <ActiveJobs />
   </>;
 }

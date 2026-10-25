@@ -1,14 +1,16 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), status: vi.fn(), create: vi.fn(), ack: vi.fn(), result: vi.fn(), heartbeat: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), team: vi.fn(), status: vi.fn(), create: vi.fn(), ack: vi.fn(), result: vi.fn(), heartbeat: vi.fn(), terminal: vi.fn(), activeJobs: vi.fn(), createJob: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getConnectionSession: mocks.session }));
 vi.mock("@/lib/active-team", () => ({ getActiveTeam: mocks.team }));
-vi.mock("@/lib/local-agent/service", () => ({ getStatus: mocks.status, createAttempt: mocks.create, acknowledgeDesktop: mocks.ack, submitResult: mocks.result, desktopHeartbeat: mocks.heartbeat }));
+vi.mock("@/lib/local-agent/service", () => ({ getStatus: mocks.status, createAttempt: mocks.create, acknowledgeDesktop: mocks.ack, submitResult: mocks.result, desktopHeartbeat: mocks.heartbeat, requestTerminal: mocks.terminal, listActiveJobs: mocks.activeJobs, createJob: mocks.createJob }));
 const { GET: status } = await import("../status/route");
 const { POST: create } = await import("../attempts/route");
 const { POST: ack } = await import("../desktop/ack/route");
 const { POST: result } = await import("../desktop/result/route");
 const { POST: heartbeat } = await import("../desktop/heartbeat/route");
+const { POST: terminal } = await import("../devices/[id]/terminal/route");
+const { GET: jobs } = await import("../jobs/route");
 const webRequest = (body: unknown, origin = "https://research.test") => new Request("https://research.test/api/local-agent/attempts", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body) });
 const deviceToken = Buffer.alloc(32, 6).toString("base64url");
 const heartbeatRequest = (body: unknown, authenticated = true) => new Request("https://research.test/api/local-agent/desktop/heartbeat", { method: "POST", headers: { "content-type": "application/json", ...(authenticated ? { authorization: `Bearer ${deviceToken}`, "x-local-agent-device": "device" } : {}) }, body: JSON.stringify(body) });
@@ -73,5 +75,32 @@ describe("local agent API authentication", () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: { code: "DEVICE_UNAUTHORIZED", message: "AI 브릿지 승인이 필요해요." } });
     expect(mocks.result).not.toHaveBeenCalled();
+  });
+  it("forwards app capabilities and lets unknown future values reach the filter", async () => {
+    expect((await heartbeat(heartbeatRequest({ providers: [], bridgeCapabilities: ["terminal_v1", "future_feature"] }))).status).toBe(200);
+    expect(mocks.heartbeat).toHaveBeenLastCalledWith({ deviceId: "device", deviceToken }, [], { bridgeCapabilities: ["terminal_v1", "future_feature"] });
+    expect((await heartbeat(heartbeatRequest({ providers: [], bridgeCapabilities: ["rm -rf"] }))).status).toBe(400);
+  });
+  it("accepts only a provider name for a same-origin terminal request", async () => {
+    mocks.terminal.mockResolvedValue({ requestId: "request", expiresAt: "2026-10-25T12:00:30.000Z" });
+    const params = { params: Promise.resolve({ id: "device" }) };
+    const terminalRequest = (body: unknown, origin = "https://research.test") => new Request("https://research.test/api/local-agent/devices/device/terminal", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect((await terminal(terminalRequest({ provider: "codex" }, "https://evil.test"), params)).status).toBe(403);
+    for (const body of [{ provider: "codex", command: "whoami" }, { provider: "codex", args: ["--yolo"] }, { provider: "bash" }, {}]) expect((await terminal(terminalRequest(body), params)).status).toBe(400);
+    expect(mocks.terminal).not.toHaveBeenCalled();
+    const response = await terminal(terminalRequest({ provider: "claude" }), params);
+    expect(response.status).toBe(202);
+    expect((await response.json()).data).toEqual({ requestId: "request", expiresAt: "2026-10-25T12:00:30.000Z" });
+    expect(mocks.terminal).toHaveBeenCalledWith(expect.objectContaining({ memberId: "ha", teamId: "team-a", sessionKey: "server-session-fingerprint" }), "device", "claude");
+  });
+  it("lists active jobs only with the explicit active query", async () => {
+    mocks.activeJobs.mockResolvedValue([]);
+    expect((await jobs(new Request("https://research.test/api/local-agent/jobs"))).status).toBe(400);
+    const response = await jobs(new Request("https://research.test/api/local-agent/jobs?active=1"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(mocks.activeJobs).toHaveBeenCalledWith(expect.objectContaining({ sessionKey: "server-session-fingerprint" }));
+    mocks.session.mockResolvedValue(null);
+    expect((await jobs(new Request("https://research.test/api/local-agent/jobs?active=1"))).status).toBe(401);
   });
 });

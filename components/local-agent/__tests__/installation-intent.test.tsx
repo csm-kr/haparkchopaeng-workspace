@@ -13,7 +13,7 @@ function fixture() {
   const attempt = { id: "new-attempt", version: 1, status: "awaiting_app" as const, code: "123456", device: null,
     expiresAt: new Date(Date.now() + 300_000).toISOString(), launchToken: "token", deepLink: "hapark-connect://connect?attemptId=new-attempt&launchToken=token" };
   const api = { status: vi.fn().mockResolvedValue({ device: null, devices: [] }), downloads: vi.fn().mockResolvedValue({ releases: [release] }),
-    createAttempt: vi.fn().mockResolvedValue(attempt), getAttempt: vi.fn(), cancelAttempt: vi.fn(), heartbeat: vi.fn(), disconnect: vi.fn(), createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn() } satisfies LocalAgentApi;
+    createAttempt: vi.fn().mockResolvedValue(attempt), getAttempt: vi.fn(), cancelAttempt: vi.fn(), heartbeat: vi.fn(), disconnect: vi.fn(), createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(), openTerminal: vi.fn(), activeJobs: vi.fn().mockResolvedValue([]) } satisfies LocalAgentApi;
   const launch = vi.fn(() => true);
   render(<LocalAgentProvider teamId="team" api={api} launchConnector={launch}><ConnectionSettings /><LocalAgentSettingsCard /></LocalAgentProvider>);
   return { api, launch, attempt };

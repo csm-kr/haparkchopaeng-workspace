@@ -64,3 +64,18 @@ REST v1의 ACK/pair/claim/result DTO는 유지한다. 자유 대화는 자료가
 provider snapshot은 `capabilities?: ["agent_step_v1"]`을 광고한다. 필드가 없는 기존 브릿지는 일반 채팅·분석을 계속 지원하지만 `purpose=agent_step`은 claim하지 못한다. 서버는 생성·enqueue·claim에서 capability와 최신 snapshot을 확인한다.
 
 context는 `{version:1,kind:"agent_task",decisionContract,task,observation,results,previousDecisionInvalid,execution:{effort}}`다. 어댑터는 전용 JSON 행동 지침을 사용하고 기존 CLI 도구·셸·브라우저·MCP 제한을 유지한다. 모델에 쓰기 도구·검토 승인을 제공하지 않는다. 기존 grant·sequence·취소·실제 모델 카탈로그 계약을 따른다.
+
+## 터미널 열기 요청과 실행 현황 (ADR-034, 2026-10-25)
+
+| Method / path | Input | data |
+| --- | --- | --- |
+| POST `/devices/:id/terminal` | `{provider:"codex"\|"claude"}` | `{requestId, expiresAt}` (202) |
+| GET `/jobs?active=1` | — | `LocalAgentActiveJobView[]` |
+
+터미널 요청은 같은 origin·현재 세션·팀·기기의 사용 가능한 grant가 있어야 하며 실패하면 `403 PAIRING_REQUIRED`다. 기기가 online이고 20초 이내 앱 정보에 `terminal_v1`이 있어야 하며 아니면 `409 CONNECTOR_UPDATE_REQUIRED`다. 해당 도구 snapshot이 없거나 `not_installed`면 `409 PROVIDER_NOT_INSTALLED`다. 본문은 provider 하나뿐이며 명령·인자·경로 필드는 400이다.
+
+요청은 예약 snapshot 행 `_terminal`의 `{version:1, requests:[{id, provider, expiresAt}]}`에 30초 만료로 저장한다. 같은 도구의 미만료 요청이 있으면 그 요청을 돌려준다. 이 행은 CLI 목록·모델·한도에 포함하지 않으며 `providers: []` heartbeat도 지우지 않는다.
+
+연결기 heartbeat 입력은 선택 필드 `bridgeCapabilities?: string[]`(최대 8개, `^[a-z0-9_]{1,32}$`)를 받는다. 서버는 알려진 `terminal_v1`만 `_bridge` 행에 저장하고 `LocalAgentDeviceView.bridgeCapabilities`로 fresh일 때만 돌려준다. heartbeat 응답의 `terminalRequests?: {id, provider}[]`는 미만료 요청을 한 번만 전달하고 `_terminal` 행을 지운다. 이번 heartbeat가 `terminal_v1`을 보고하지 않으면 전달하지 않고 지운다. 앱은 id·provider를 검증하고 이미 처리한 id는 무시하며, 서버 문자열을 명령·경로로 쓰지 않는다.
+
+실행 현황은 현재 세션의 활성 작업(`preparing`·`queued`·`running`, 만료 전)을 최신순 10개까지 돌려준다. 항목은 `{id, kind, provider, model, status, createdAt, href, canCancel}`이며 prompt·response·context는 넣지 않는다. `canCancel`은 `chat`만 true이고 멈추기는 기존 `POST /jobs/:id/cancel`을 쓴다.

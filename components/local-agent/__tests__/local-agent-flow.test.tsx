@@ -27,7 +27,7 @@ function makeApi(): LocalAgentApi {
     heartbeat: vi.fn().mockResolvedValue({ leaseExpiresAt: new Date(Date.now() + 45000).toISOString() }),
     disconnect: vi.fn().mockResolvedValue({ revoked: true }),
     downloads: vi.fn().mockResolvedValue({ releases: [] }),
-    createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(),
+    createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(), openTerminal: vi.fn(), activeJobs: vi.fn().mockResolvedValue([]),
   };
 }
 function View({ api, teamId = "team-a", launch = vi.fn(() => true) }: { api: LocalAgentApi; teamId?: string; launch?: (url: string) => boolean }) {

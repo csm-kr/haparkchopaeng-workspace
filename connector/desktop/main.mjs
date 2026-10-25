@@ -28,6 +28,8 @@ mkdirSync(userDataDirectory, { recursive: true, mode: 0o700 });
 app.setPath('userData', userDataDirectory);
 const coreRoot = app.isPackaged ? join(process.resourcesPath, 'core') : join(directory, '..', 'core');
 const [{ normalizeOrigin, parseLaunchUrl, createDeviceIdentity }, { createApiClient }, { createCredentialStore }, { createProviderAdapter }, { resolveExecutable }, { ConnectorSession }, { desktopAckInput, desktopPairInput }, { shouldExitWithoutWeb, shouldOpenFirstWeb, stopBeforeExit }] = await Promise.all(['security', 'api', 'storage', 'adapters', 'discovery', 'runtime', 'protocol', 'lifetime'].map(name => import(pathToFileURL(join(coreRoot, `${name}.mjs`)).href)));
+// The tray button and web requests (ADR-034) share one opener; only the provider name crosses in.
+const openTerminalFor = provider => openProviderTerminal(provider, { resolve: resolveExecutable, directory: join(app.getPath('userData'), 'terminal-launchers'), openPath: path => shell.openPath(path) });
 const development = !app.isPackaged && process.argv.includes('--connector-dev');
 const suppressAutoOpen = !app.isPackaged && process.argv.includes('--no-auto-open');
 const quietQa = !app.isPackaged && process.argv.includes('--connector-qa');
@@ -201,7 +203,7 @@ async function connected(response, currentRevision) {
   identity = { ...identity, deviceId: response.deviceId }; await store.save(selectedApp.id, identity);
   if (currentRevision !== revision) return;
   state = { ...state, stage: 'connected', title: '웹과 이 PC가 연결됐어요', description: '웹에서 선택한 CLI와 모델로 요청을 자동 실행해요.', message: '', expiresAt: null }; publish();
-  runtime = new ConnectorSession({ api: api(), identity, adapters, ...bridgeMetadata });
+  runtime = new ConnectorSession({ api: api(), identity, adapters, ...bridgeMetadata, openTerminal: openTerminalFor });
   runtime.on('state', update => {
     if (currentRevision !== revision) return;
     state.providers = update.providers;
@@ -211,6 +213,7 @@ async function connected(response, currentRevision) {
     publish();
     if (update.status === 'authorization_required' && shouldExitWithoutWeb({ authorized: false, windowVisible: quietQa ? !qaWindowHidden : !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible(), autoStart: preferences.autoStart, pet: preferences.pet })) void shutdown();
   });
+  runtime.on('terminal', provider => { if (currentRevision !== revision) return; state.message = `웹 요청으로 ${provider === 'codex' ? 'Codex' : 'Claude Code'} 터미널을 열었어요. 터미널의 작업은 직접 관리해 주세요.`; publish(); });
   runtime.setProviders(state.providers); runtime.start(response.leaseExpiresAt); void runtime.tick();
 }
 function refreshProviders() {
@@ -236,7 +239,7 @@ function installIpc() {
   handle('quit', () => { void shutdown(); return { ok: true }; });
   handle('auto-start', async enabled => { if (process.platform === 'linux') return { ok: false, message: 'Ubuntu에서는 데스크톱의 시작 프로그램 설정을 사용해 주세요.' }; app.setLoginItemSettings({ openAtLogin: enabled === true }); preferences.autoStart = enabled === true; state.autoStart = preferences.autoStart; await savePreferences(); publish(); return { ok: true }; });
   handle('pet', async enabled => { preferences.pet = enabled === true; state.pet = preferences.pet; if (preferences.pet) showPet(); else { petWindow?.close(); petWindow = null; } await savePreferences(); publish(); return { ok: true }; });
-  handle('terminal', provider => openProviderTerminal(provider, { resolve: resolveExecutable, directory: join(app.getPath('userData'), 'terminal-launchers'), openPath: path => shell.openPath(path) }));
+  handle('terminal', openTerminalFor);
   handle('help', async provider => { if (!['codex', 'claude'].includes(provider)) return { ok: false }; await shell.openExternal(provider === 'codex' ? 'https://learn.chatgpt.com/docs/codex' : 'https://code.claude.com/docs/en/setup'); return { ok: true }; });
 }
 

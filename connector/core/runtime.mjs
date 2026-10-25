@@ -5,11 +5,12 @@ const MAX_RESPONSE = 80000;
 const LAPSED_MESSAGE = '웹 연결을 다시 확인하고 있어요.';
 const BRIDGE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/;
 export class ConnectorSession extends EventEmitter {
-  constructor({ api, identity, adapters, bridgeVersion, bridgeArchitecture, now = Date.now, setIntervalFn = setInterval, clearIntervalFn = clearInterval, maxJobMs = 600000, recoveryMs = 600000 }) {
+  constructor({ api, identity, adapters, bridgeVersion, bridgeArchitecture, openTerminal, now = Date.now, setIntervalFn = setInterval, clearIntervalFn = clearInterval, maxJobMs = 600000, recoveryMs = 600000 }) {
     super(); this.api = api; this.identity = identity; this.adapters = adapters; this.now = now;
     if (bridgeVersion !== undefined && (typeof bridgeVersion !== 'string' || bridgeVersion.length > 64 || !BRIDGE_VERSION_PATTERN.test(bridgeVersion))) throw new Error('Invalid bridge version.');
     if (bridgeArchitecture !== undefined && !['arm64', 'x64'].includes(bridgeArchitecture)) throw new Error('Invalid bridge architecture.');
-    this.bridgeMetadata = { ...(bridgeVersion !== undefined ? { bridgeVersion } : {}), ...(bridgeArchitecture !== undefined ? { bridgeArchitecture } : {}) };
+    this.openTerminal = typeof openTerminal === 'function' ? openTerminal : null; this.openedTerminals = [];
+    this.bridgeMetadata = { ...(bridgeVersion !== undefined ? { bridgeVersion } : {}), ...(bridgeArchitecture !== undefined ? { bridgeArchitecture } : {}), ...(this.openTerminal ? { bridgeCapabilities: ['terminal_v1'] } : {}) };
     this.setIntervalFn = setIntervalFn; this.clearIntervalFn = clearIntervalFn; this.maxJobMs = maxJobMs; this.recoveryMs = recoveryMs; this.lapsedAt = null;
     this.state = { status: 'disconnected', providers: [], currentJobId: null, activity: { kind: 'idle' }, message: '' };
     this.leaseExpiresAt = 0; this.timer = null; this.busy = false; this.lastHeartbeat = -Infinity; this.lastClaim = -Infinity;
@@ -69,6 +70,7 @@ export class ConnectorSession extends EventEmitter {
         this.lapsedAt = null;
         if (this.activeJob && Array.isArray(heartbeat?.cancelJobIds) && heartbeat.cancelJobIds.includes(this.activeJob.id)) this.activeJob.controller.abort();
         this.state.status = 'connected'; this.state.message = ''; this.emitState();
+        this.openTerminals(heartbeat?.terminalRequests);
       }
       if (!this.activeJob && this.now() - this.lastClaim >= 2000 && this.checkLease()) {
         this.lastClaim = this.now();
@@ -87,6 +89,16 @@ export class ConnectorSession extends EventEmitter {
     } catch (error) {
       if (controller === this.controller && !controller.signal.aborted && !this.denied(error) && this.checkLease()) { this.state.status = 'recovering'; this.state.message = '연결을 복구하고 있어요.'; this.emitState(); }
     } finally { this.busy = false; }
+  }
+  // Web requests carry only a provider name (ADR-034); the opener resolves the CLI itself and never runs server text.
+  openTerminals(requests) {
+    if (!this.openTerminal || !Array.isArray(requests)) return;
+    for (const request of requests.slice(0, 2)) {
+      if (!ID_PATTERN.test(request?.id ?? '') || !['codex', 'claude'].includes(request.provider) || this.openedTerminals.includes(request.id)) continue;
+      this.openedTerminals = [...this.openedTerminals, request.id].slice(-50);
+      this.emit('terminal', request.provider);
+      try { void Promise.resolve(this.openTerminal(request.provider)).catch(() => {}); } catch {}
+    }
   }
   validClaim(claim) {
     return claim?.job && ID_PATTERN.test(claim.job.id ?? '') && ['claude', 'codex'].includes(claim.job.provider) && typeof claim.job.model === 'string' && typeof claim.job.prompt === 'string' && claim.job.prompt.length <= 12000 && typeof claim.context === 'string' && claim.context.length <= 250000 && typeof claim.claimToken === 'string' && claim.claimToken.length <= 256 && Date.parse(claim.leaseExpiresAt) > this.now();

@@ -258,3 +258,7 @@ Node **139개**, 실제 Mac builder 구현 회귀 **5개**, 각 Mac의 installed
 ## 2026-10-24 · 0.1.11 상태별 ImageGen 브리 배포
 
 제품 소스 `c65c73c846fbeadb6aa8899e494bb242a11b7fca`의 동일 태그 CI 40066225682는 최종 5개 job 모두 성공했고, 게시 workflow 40067055378도 3개 job 모두 성공했다. Windows·Mac arm64·Ubuntu의 검증된 설치 파일을 공개하고 Production 다운로드 목록의 0.1.11을 운영 API에서 재확인했다. 파일별 SHA256·크기·실행 링크와 첫 Mac cleanup 실패/재실행의 구분은 [배포 기록](../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. CI 설치·정리와 신규 격리 프로필 범위이며 실제 계정 추론·기존 사용자 업그레이드·정식 게시자 서명은 포함하지 않는다.
+
+## 2026-10-25 · 0.1.13 웹 터미널 열기 요청 (ADR-034) · 로컬 단위 검증
+
+macOS arm64·Node 26.4.0에서 `npm --prefix connector test`를 실행했고 247 통과·7 건너뜀·0 실패다. 새 단위 검증은 세 가지다. 첫째, 터미널 열기 함수가 있는 앱만 heartbeat에 `bridgeCapabilities: ['terminal_v1']`를 보고한다. 둘째, `terminalRequests`는 형식이 맞는 id와 `codex`·`claude`만, 한 번에 앞의 2개까지, 같은 id는 한 번만 연다. 셋째, 열기 함수의 동기·비동기 실패가 연결을 멈추지 않는다. 설치본 패키징, 실제 터미널 창 표시, 3 OS CI와 게시는 이 절의 범위가 아니며 게시 기록에 따로 남긴다.

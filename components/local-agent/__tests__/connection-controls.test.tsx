@@ -33,7 +33,7 @@ function setup(collapsed = false, initial: LocalAgentDeviceView | null = device(
     status: vi.fn().mockResolvedValue({ device: initial, devices: initial ? [initial] : [] }),
     heartbeat: vi.fn().mockResolvedValue({ leaseExpiresAt: "2099-01-01T00:00:00Z" }),
     createAttempt: vi.fn().mockResolvedValue(attempt), getAttempt: vi.fn().mockResolvedValue(attempt), cancelAttempt: vi.fn(), disconnect: vi.fn(),
-    downloads: vi.fn().mockResolvedValue({ releases: [] }), createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(),
+    downloads: vi.fn().mockResolvedValue({ releases: [] }), createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(), openTerminal: vi.fn(), activeJobs: vi.fn().mockResolvedValue([]),
   };
   render(<LocalAgentProvider teamId="team" api={api} launchConnector={() => true}><ConnectionSettings collapsed={collapsed} /><Selection /></LocalAgentProvider>);
   return api;

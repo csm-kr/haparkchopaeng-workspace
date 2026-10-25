@@ -267,3 +267,51 @@ test('callbacks from a completed old run cannot change a newer job activity or h
   assert.ok(requests.filter(value => value.path === 'heartbeat').every(value => Object.keys(value.body).join() === 'providers'));
   session.stop(); runs[1].resolve(); await session.whenIdle();
 });
+
+test('apps with a terminal opener report support and open each valid web request once', async () => {
+  const opened = [], bodies = [];
+  const responses = [
+    { terminalRequests: [{ id: 'req-1', provider: 'codex' }] },
+    { terminalRequests: [{ id: 'req-1', provider: 'codex' }, { id: 'req-2', provider: 'claude' }] },
+    { terminalRequests: [{ id: 'bad id!', provider: 'codex' }, { id: 'req-3', provider: 'bash' }, null] },
+    { terminalRequests: [{ id: 'a', provider: 'codex' }, { id: 'b', provider: 'codex' }, { id: 'c', provider: 'codex' }] },
+  ];
+  let now = 1000;
+  const api = { post: async (route, body) => {
+    if (route !== 'heartbeat') return null;
+    bodies.push(body);
+    return { leaseExpiresAt: new Date(now + 45000).toISOString(), cancelJobIds: [], ...(responses.shift() ?? {}) };
+  } };
+  const session = new ConnectorSession({ api, identity, adapters: {}, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {},
+    openTerminal: async provider => { opened.push(provider); return { ok: true }; } });
+  session.start(new Date(now + 45000).toISOString());
+  try {
+    for (let beat = 0; beat < 4; beat += 1) { await session.tick(); now += 5000; }
+    assert.deepEqual(bodies[0], { providers: [], bridgeCapabilities: ['terminal_v1'] });
+    assert.deepEqual(opened, ['codex', 'claude', 'codex', 'codex']);
+  } finally { session.stop(); }
+});
+
+test('a failing terminal opener never stops the connection', async () => {
+  for (const openTerminal of [() => { throw new Error('no terminal app'); }, async () => { throw new Error('no terminal app'); }]) {
+    let now = 1000, beats = 0;
+    const api = { post: async route => route === 'heartbeat'
+      ? (beats += 1, { leaseExpiresAt: new Date(now + 45000).toISOString(), cancelJobIds: [], terminalRequests: [{ id: `req-${beats}`, provider: 'codex' }] })
+      : null };
+    const session = new ConnectorSession({ api, identity, adapters: {}, now: () => now, setIntervalFn: () => 1, clearIntervalFn() {}, openTerminal });
+    session.start(new Date(now + 45000).toISOString());
+    try {
+      await session.tick(); now += 5000; await session.tick();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(beats, 2);
+      assert.equal(session.getState().status, 'connected');
+    } finally { session.stop(); }
+  }
+});
+
+test('apps without a terminal opener ignore terminal requests', async () => {
+  const api = { post: async route => route === 'heartbeat' ? { leaseExpiresAt: new Date(46000).toISOString(), cancelJobIds: [], terminalRequests: [{ id: 'req-1', provider: 'codex' }] } : null };
+  const session = new ConnectorSession({ api, identity, adapters: {}, now: () => 1000, setIntervalFn: () => 1, clearIntervalFn() {} });
+  session.start(new Date(46000).toISOString());
+  try { await session.tick(); assert.equal(session.getState().status, 'connected'); } finally { session.stop(); }
+});

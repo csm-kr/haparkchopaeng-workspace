@@ -1,6 +1,6 @@
 import type {
-  LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentJobCreateInput,
-  LocalAgentJobView, LocalAgentPlatform, LocalAgentStatus,
+  LocalAgentActiveJobView, LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentJobCreateInput,
+  LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentStatus, LocalAgentTerminalRequest,
 } from "@/types/local-agent";
 
 export interface ConnectorRelease {
@@ -27,6 +27,8 @@ export interface LocalAgentApi {
   createJob(input: LocalAgentJobCreateInput): Promise<LocalAgentJobView>;
   getJob(id: string): Promise<LocalAgentJobView>;
   cancelJob(id: string): Promise<LocalAgentJobView>;
+  openTerminal(deviceId: string, provider: LocalAgentProvider): Promise<LocalAgentTerminalRequest>;
+  activeJobs(): Promise<LocalAgentActiveJobView[]>;
 }
 
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
@@ -52,6 +54,8 @@ export const localAgentApi: LocalAgentApi = {
   createJob: (input) => request("/jobs", "POST", input),
   getJob: (id) => request(`/jobs/${encodeURIComponent(id)}`),
   cancelJob: (id) => request(`/jobs/${encodeURIComponent(id)}/cancel`, "POST", {}),
+  openTerminal: (deviceId, provider) => request(`/devices/${encodeURIComponent(deviceId)}/terminal`, "POST", { provider }),
+  activeJobs: () => request("/jobs?active=1"),
 };
 
 /** URI 값은 명령이나 서버 주소로 해석하지 않는다. 브라우저가 등록된 앱에 전달한다. */
