@@ -13,11 +13,12 @@ export interface ResearchChatApi {
   create(input: ResearchConversationCreateInput): Promise<ResearchConversationView>;
   send(id: string, input: ResearchChatTurnInput): Promise<ResearchChatTurn>;
   cancel(id: string, jobId: string): Promise<ResearchChatTurn>;
+  remove(id: string): Promise<void>;
 }
 
-async function request<T>(path: string, body?: unknown): Promise<T> {
+async function request<T>(path: string, body?: unknown, method = body === undefined ? "GET" : "POST"): Promise<T> {
   const res = await fetch(`/api/research-chat${path}`, {
-    method: body === undefined ? "GET" : "POST", credentials: "same-origin", cache: "no-store",
+    method, credentials: "same-origin", cache: "no-store",
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
   const json = await res.json().catch(() => null);
@@ -33,6 +34,7 @@ export const researchChatApi: ResearchChatApi = {
   create: (input) => request("/conversations", input),
   send: (id, input) => request(`/conversations/${encodeURIComponent(id)}/turns`, input),
   cancel: (id, jobId) => request(`/conversations/${encodeURIComponent(id)}/turns/${encodeURIComponent(jobId)}/cancel`, {}),
+  remove: async (id) => { await request(`/conversations/${encodeURIComponent(id)}`, undefined, "DELETE"); },
 };
 
 export function chatError(error: unknown): string {
@@ -41,6 +43,7 @@ export function chatError(error: unknown): string {
     if (error.status === 403) return "이 팀의 대화 권한을 다시 확인해 주세요.";
     if (error.status === 404) return "현재 팀에서 열 수 없는 대화예요.";
     if (error.code === "SOURCE_NOT_READY") return "논문 본문을 준비하고 있어요. 잠시 뒤 다시 확인해 주세요.";
+    if (error.code === "CONVERSATION_TASK_ACTIVE") return "진행 중인 노트·세미나 작업을 멈춘 뒤 대화를 삭제해 주세요.";
     if (error.code === "CONVERSATION_BUSY") return "이 대화의 앞선 답변이 진행 중이에요. 상태를 다시 확인해 주세요.";
     if (error.code === "EFFORT_UNAVAILABLE") return "연결 설정에서 이 모델이 지원하는 effort를 선택해주세요.";
     if (error.status === 409) return "AI 연결과 선택한 모델을 다시 확인해 주세요.";

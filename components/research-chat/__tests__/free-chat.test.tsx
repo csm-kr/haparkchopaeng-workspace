@@ -11,7 +11,7 @@ const presentations = [{ id: "s1", title: "토요일 세미나", date: "2026-10-
 const conversation = { id: "chat", title: "자유 대화", paperIds: [], createdAt: "2026-10-18T00:00:00Z", updatedAt: "2026-10-18T00:00:00Z" };
 function api(): ResearchChatApi {
   return { papers: vi.fn().mockResolvedValue(papers), presentations: vi.fn().mockResolvedValue(presentations), list: vi.fn().mockResolvedValue([]), get: vi.fn(), prepareSources: vi.fn(),
-    create: vi.fn().mockResolvedValue(conversation), send: vi.fn().mockResolvedValue({ id: "turn", version: 1, conversationId: "chat", conversationTurn: 1, status: "queued", prompt: "안녕", response: "", createdAt: conversation.createdAt, updatedAt: conversation.updatedAt }), cancel: vi.fn() };
+    create: vi.fn().mockResolvedValue(conversation), send: vi.fn().mockResolvedValue({ id: "turn", version: 1, conversationId: "chat", conversationTurn: 1, status: "queued", prompt: "안녕", response: "", createdAt: conversation.createdAt, updatedAt: conversation.updatedAt }), cancel: vi.fn(), remove: vi.fn() };
 }
 beforeEach(() => { window.history.replaceState(null, "", "/ai-chat"); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });

@@ -26,7 +26,7 @@ vi.mock("@/lib/prisma", async () => {
 });
 import { prisma } from "@/lib/prisma";
 import { acknowledgeDesktop, claimJob, createAttempt, desktopHeartbeat, pairDesktop, revokeSession, submitResult, type LocalAgentScope } from "@/lib/local-agent/service";
-import { cancelTurn, createConversation, createTurn, getConversation, listConversations, listResearchPapers } from "../service";
+import { cancelTurn, createConversation, createTurn, deleteConversation, getConversation, listConversations, listResearchPapers } from "../service";
 import { assertChatPreparation, beginChatPreparation, finishChatPreparation } from "../preparation";
 import type { PreparedPdfSource } from "@/worker/prepare-pdf-source";
 const enabled = Boolean(process.env.LOCAL_AGENT_TEST_CLIENT_MODULE);
@@ -244,5 +244,38 @@ describe.skipIf(!enabled)("private research conversations on the isolated databa
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
     expect(await prisma.localAgentJob.count({ where: { conversationId: thread.id, status: { in: ["queued", "running"] } } })).toBe(1);
+  });
+  it("deletes an owned conversation with its stored turns and stops a running answer on the device", async () => {
+    const identity = await readyDevice();
+    const thread = await conversation();
+    const first = await createTurn(scope(), thread.id, target(identity.deviceId));
+    const firstClaim = await claimJob(identity);
+    await submitResult(identity, { jobId: first.id, claimToken: firstClaim!.claimToken, sequence: 1, status: "completed", response: "지워져야 하는 답변" });
+    const second = await createTurn(scope(), thread.id, target(identity.deviceId));
+    const secondClaim = await claimJob(identity);
+    await expect(deleteConversation({ ...scope(), memberId: "chat-test-other" }, thread.id)).rejects.toMatchObject({ status: 404 });
+    await expect(deleteConversation({ ...scope(), teamId: "chat-test-b" }, thread.id)).rejects.toMatchObject({ status: 404 });
+    expect(await deleteConversation(scope("another-session"), thread.id)).toEqual({ deleted: true });
+    expect(await listConversations(scope())).toEqual([]);
+    await expect(getConversation(scope(), thread.id)).rejects.toMatchObject({ status: 404 });
+    expect(await prisma.localAgentJob.findUnique({ where: { id: first.id } })).toBeNull();
+    // The claimed answer stays only as an empty cancelled row so the device heartbeat can stop the CLI.
+    const stopped = await prisma.localAgentJob.findUniqueOrThrow({ where: { id: second.id } });
+    expect(stopped).toMatchObject({ status: "cancelled", conversationId: null, prompt: "", response: "", context: "{}" });
+    const heartbeat = await desktopHeartbeat(identity, [{ provider: "codex", status: "ready", models: [{ id: "actual-model", name: "Actual fixture model" }], quota: null, observedAt: new Date().toISOString() }]);
+    expect(heartbeat.cancelJobIds).toContain(second.id);
+    await expect(submitResult(identity, { jobId: second.id, claimToken: secondClaim!.claimToken, sequence: 1, status: "completed", response: "늦은 답변" })).rejects.toMatchObject({ code: "JOB_CANCELLED" });
+    await expect(deleteConversation(scope(), thread.id)).rejects.toMatchObject({ status: 404 });
+  });
+  it("keeps a conversation while its note or seminar task is still running and removes finished tasks with it", async () => {
+    const thread = await conversation();
+    const task = (status: string) => prisma.agentTask.create({ data: { teamId: scope().teamId, memberId: scope().memberId, requestId: crypto.randomUUID(), conversationId: thread.id, sessionKey: "chat-session", sessionExpiresAt: new Date(Date.now() + 3_600_000), deviceId: "fixture-device", provider: "codex", model: "actual-model", paperId: ids[0], goal: "노트 초안", status } });
+    const finished = await task("completed");
+    const running = await task("running");
+    await expect(deleteConversation(scope(), thread.id)).rejects.toMatchObject({ status: 409, code: "CONVERSATION_TASK_ACTIVE" });
+    expect(await listConversations(scope())).toHaveLength(1);
+    await prisma.agentTask.update({ where: { id: running.id }, data: { status: "cancelled" } });
+    await deleteConversation(scope(), thread.id);
+    expect(await prisma.agentTask.count({ where: { id: { in: [finished.id, running.id] } } })).toBe(0);
   });
 });
