@@ -23,7 +23,7 @@ function apiFixture() {
     heartbeat: vi.fn().mockResolvedValue({ leaseExpiresAt: "2099-01-01T00:00:00Z" }),
     downloads: vi.fn().mockResolvedValue({ releases: [] }),
     createAttempt: vi.fn(), getAttempt: vi.fn(), cancelAttempt: vi.fn(), disconnect: vi.fn(),
-    createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(),
+    createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(), openTerminal: vi.fn(), activeJobs: vi.fn().mockResolvedValue([]),
   } satisfies LocalAgentApi;
 }
 

@@ -41,7 +41,7 @@ function fixture() {
     downloads: vi.fn<LocalAgentApi["downloads"]>().mockResolvedValue({ releases: [] }),
     createJob: vi.fn<LocalAgentApi["createJob"]>(),
     getJob: vi.fn<LocalAgentApi["getJob"]>(),
-    cancelJob: vi.fn<LocalAgentApi["cancelJob"]>(),
+    cancelJob: vi.fn<LocalAgentApi["cancelJob"]>(), openTerminal: vi.fn<LocalAgentApi["openTerminal"]>(), activeJobs: vi.fn<LocalAgentApi["activeJobs"]>().mockResolvedValue([]),
   } satisfies LocalAgentApi;
 }
 

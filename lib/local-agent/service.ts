@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Prisma, LocalAgentAttempt, LocalAgentDevice, LocalAgentGrant, LocalAgentJob } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { HttpError } from "@/lib/http";
-import type { LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentBridgeMetadata, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus } from "@/types/local-agent";
+import type { LocalAgentActiveJobView, LocalAgentAttemptCreated, LocalAgentAttemptView, LocalAgentBridgeCapability, LocalAgentBridgeMetadata, LocalAgentClaim, LocalAgentDesktopAckInput, LocalAgentDesktopAttempt, LocalAgentDesktopHeartbeat, LocalAgentDesktopPairInput, LocalAgentDeviceView, LocalAgentEffort, LocalAgentJobCreateInput, LocalAgentJobResultInput, LocalAgentJobView, LocalAgentPlatform, LocalAgentProvider, LocalAgentProviderSnapshot, LocalAgentStatus, LocalAgentTerminalDelivery, LocalAgentTerminalRequest } from "@/types/local-agent";
 import { ATTEMPT_MS, DESKTOP_HEARTBEAT_SECONDS, DESKTOP_LEASE_MS, LEASE_MS, MAX_JOB_MS, MAX_PAIR_FAILURES, SNAPSHOT_FRESH_MS, WEB_HEARTBEAT_SECONDS, assertGrantUsable, hashCredential, pairingCode, sameCredential, validateDeviceToken } from "./security";
 import { BridgeMetadataSchema, BridgeVersionSchema, EffortSchema, JobCreateSchema, ProviderSnapshotSchema, sanitizeProviderSnapshot } from "./validation";
 
@@ -15,7 +15,16 @@ const activeJobStatuses = ["preparing", "queued", "running"];
 // Reserved server-only snapshot row; it is never a CLI provider or model catalogue.
 const BRIDGE_SNAPSHOT_PROVIDER = "_bridge";
 const BRIDGE_ONLINE_MS = 20_000;
-const BridgeSnapshotSchema = z.object({ version: z.literal(1), bridgeVersion: BridgeVersionSchema.nullable(), bridgeArchitecture: z.enum(["arm64", "x64"]).nullable() }).strict();
+const BRIDGE_CAPABILITIES: LocalAgentBridgeCapability[] = ["terminal_v1"];
+const BridgeSnapshotSchema = z.object({ version: z.literal(1), bridgeVersion: BridgeVersionSchema.nullable(), bridgeArchitecture: z.enum(["arm64", "x64"]).nullable(), bridgeCapabilities: z.array(z.enum(BRIDGE_CAPABILITIES)).optional() }).strict();
+// Reserved row for pending web terminal requests (ADR-034); delivered once by the desktop heartbeat.
+const TERMINAL_SNAPSHOT_PROVIDER = "_terminal";
+const TERMINAL_REQUEST_MS = 30_000;
+const TerminalSnapshotSchema = z.object({ version: z.literal(1), requests: z.array(z.object({ id: z.string(), provider: z.enum(["codex", "claude"]), expiresAt: z.iso.datetime() }).strict()).max(2) }).strict();
+function pendingTerminals(payload: Prisma.JsonValue | undefined, now: Date) {
+  const parsed = TerminalSnapshotSchema.safeParse(payload);
+  return parsed.success ? parsed.data.requests.filter((request) => Date.parse(request.expiresAt) > now.getTime()) : [];
+}
 const ChatPreparedSchema = JobCreateSchema.extend({ paperId: z.string().max(150) });
 const ChatExecutionSchema = z.object({ version: z.literal(1), kind: z.literal("research_chat"), execution: z.object({ effort: EffortSchema }).strict().optional() });
 const AgentExecutionSchema = z.object({ version: z.literal(1), kind: z.literal("agent_task"), execution: z.object({ effort: EffortSchema.optional() }).strict() });
@@ -34,7 +43,7 @@ async function assertMembership(db: Database, memberId: string, teamId: string):
 
 function snapshotRows(rows: { provider?: string; payload: Prisma.JsonValue }[], now: Date): LocalAgentProviderSnapshot[] {
   return rows.flatMap(({ provider, payload }) => {
-    if (provider === BRIDGE_SNAPSHOT_PROVIDER) return [];
+    if (provider === BRIDGE_SNAPSHOT_PROVIDER || provider === TERMINAL_SNAPSHOT_PROVIDER) return [];
     const parsed = ProviderSnapshotSchema.safeParse(payload);
     if (!parsed.success || new Date(parsed.data.observedAt).getTime() > now.getTime() + 30_000) return [];
     return [sanitizeProviderSnapshot(parsed.data)];
@@ -55,6 +64,7 @@ async function deviceView(db: Database, device: LocalAgentDevice, grant: LocalAg
     leaseExpiresAt: grant && !grant.revokedAt ? grant.leaseExpiresAt.toISOString() : null,
     bridgeVersion: metadata?.success ? metadata.data.bridgeVersion : null,
     bridgeArchitecture: metadata?.success ? metadata.data.bridgeArchitecture : null,
+    bridgeCapabilities: metadata?.success ? metadata.data.bridgeCapabilities ?? [] : [],
     providers: snapshotRows(rows, now),
   };
 }
@@ -274,10 +284,15 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
       if (previous && previous.observedAt > observedAt) continue;
       await tx.localAgentSnapshot.upsert({ where: { deviceId_provider: { deviceId: device.id, provider: payload.provider } }, create: { deviceId: device.id, teamId: device.teamId, memberId: device.memberId, provider: payload.provider, payload: payload as unknown as Prisma.InputJsonValue, observedAt }, update: { payload: payload as unknown as Prisma.InputJsonValue, observedAt } });
     }
-    const bridgePayload = { version: 1, bridgeVersion: parsedMetadata.data.bridgeVersion ?? null, bridgeArchitecture: parsedMetadata.data.bridgeArchitecture ?? null };
+    const bridgeCapabilities = BRIDGE_CAPABILITIES.filter((capability) => parsedMetadata.data.bridgeCapabilities?.includes(capability));
+    const bridgePayload = { version: 1, bridgeVersion: parsedMetadata.data.bridgeVersion ?? null, bridgeArchitecture: parsedMetadata.data.bridgeArchitecture ?? null, bridgeCapabilities };
     await tx.localAgentSnapshot.upsert({ where: { deviceId_provider: { deviceId: device.id, provider: BRIDGE_SNAPSHOT_PROVIDER } }, create: { deviceId: device.id, teamId: device.teamId, memberId: device.memberId, provider: BRIDGE_SNAPSHOT_PROVIDER, payload: bridgePayload, observedAt: now }, update: { payload: bridgePayload, observedAt: now } });
+    const terminalRow = await tx.localAgentSnapshot.findUnique({ where: { deviceId_provider: { deviceId: device.id, provider: TERMINAL_SNAPSHOT_PROVIDER } } });
+    const terminalRequests: LocalAgentTerminalDelivery[] = bridgeCapabilities.includes("terminal_v1") ? pendingTerminals(terminalRow?.payload, now).map(({ id, provider }) => ({ id, provider })) : [];
+    // Compare-and-delete: a request written after this read keeps its row for the next heartbeat.
+    if (terminalRow) await tx.localAgentSnapshot.deleteMany({ where: { deviceId: device.id, provider: TERMINAL_SNAPSHOT_PROVIDER, observedAt: terminalRow.observedAt } });
     // Omitted CLI providers are no longer usable. Keep app metadata even for [].
-    await tx.localAgentSnapshot.deleteMany({ where: { deviceId: device.id, provider: { notIn: [BRIDGE_SNAPSHOT_PROVIDER, ...providers.map((row) => row.provider)] } } });
+    await tx.localAgentSnapshot.deleteMany({ where: { deviceId: device.id, provider: { notIn: [BRIDGE_SNAPSHOT_PROVIDER, TERMINAL_SNAPSHOT_PROVIDER, ...providers.map((row) => row.provider)] } } });
     // Logout/uninstall/limit must also stop that provider's queued/running work;
     // otherwise an unusable first job would block the other provider's queue.
     const stored = snapshotRows(await tx.localAgentSnapshot.findMany({ where: { deviceId: device.id } }), now);
@@ -288,7 +303,7 @@ export async function desktopHeartbeat(identity: DesktopIdentity, providers: Loc
     }
     await expireDeviceJobs(tx, device.id, now);
     const cancelled = await tx.localAgentJob.findMany({ where: { deviceId: device.id, status: "cancelled", claimedAt: { not: null }, updatedAt: { gt: new Date(now.getTime() - MAX_JOB_MS) } }, select: { id: true }, take: 100 });
-    return { leaseExpiresAt: desktopLease(grant.leaseExpiresAt, now), cancelJobIds: cancelled.map((row) => row.id), heartbeatIntervalSeconds: DESKTOP_HEARTBEAT_SECONDS };
+    return { leaseExpiresAt: desktopLease(grant.leaseExpiresAt, now), cancelJobIds: cancelled.map((row) => row.id), heartbeatIntervalSeconds: DESKTOP_HEARTBEAT_SECONDS, terminalRequests };
   });
 }
 
@@ -437,6 +452,52 @@ export async function cancelJob(scope: LocalAgentScope, id: string): Promise<Loc
   if (!job) throw new HttpError(404, "NOT_FOUND", "질문을 찾을 수 없어요.");
   await prisma.localAgentJob.updateMany({ where: { id, ...scopeWhere(scope), status: { in: activeJobStatuses } }, data: { status: "cancelled", error: "질문을 취소했어요.", version: { increment: 1 } } });
   return getJob(scope, id);
+}
+
+/** Queues a one-time "open this CLI's terminal" request for the connected app (ADR-034). It carries no command. */
+export async function requestTerminal(scope: LocalAgentScope, deviceId: string, provider: LocalAgentProvider): Promise<LocalAgentTerminalRequest> {
+  await assertMembership(prisma, scope.memberId, scope.teamId);
+  return prisma.$transaction(async (tx) => {
+    const now = new Date();
+    const device = await tx.localAgentDevice.findFirst({ where: { id: deviceId, memberId: scope.memberId, teamId: scope.teamId, revokedAt: null } });
+    const grant = device ? await tx.localAgentGrant.findFirst({ where: { ...scopeWhere(scope), deviceId, revokedAt: null } }) : null;
+    if (!device || !grant) throw new HttpError(403, "PAIRING_REQUIRED", "먼저 내 PC를 연결해주세요.");
+    assertGrantUsable(grant, now);
+    const view = await deviceView(tx, device, grant, now);
+    if (!view.online || !view.bridgeCapabilities?.includes("terminal_v1")) throw new HttpError(409, "CONNECTOR_UPDATE_REQUIRED", "터미널을 열려면 AI 브릿지를 업데이트해 주세요.");
+    const cli = view.providers.find((row) => row.provider === provider);
+    if (!cli || cli.status === "not_installed") throw new HttpError(409, "PROVIDER_NOT_INSTALLED", "연결된 PC에 이 CLI가 설치돼 있지 않아요.");
+    const row = await tx.localAgentSnapshot.findUnique({ where: { deviceId_provider: { deviceId, provider: TERMINAL_SNAPSHOT_PROVIDER } } });
+    const pending = pendingTerminals(row?.payload, now);
+    // A double click before delivery opens one terminal, not two.
+    const existing = pending.find((request) => request.provider === provider);
+    if (existing) return { requestId: existing.id, expiresAt: existing.expiresAt };
+    const next = { id: randomUUID(), provider, expiresAt: new Date(now.getTime() + TERMINAL_REQUEST_MS).toISOString() };
+    const payload = { version: 1, requests: [...pending, next] };
+    await tx.localAgentSnapshot.upsert({ where: { deviceId_provider: { deviceId, provider: TERMINAL_SNAPSHOT_PROVIDER } }, create: { deviceId, teamId: device.teamId, memberId: device.memberId, provider: TERMINAL_SNAPSHOT_PROVIDER, payload, observedAt: now }, update: { payload, observedAt: now } });
+    return { requestId: next.id, expiresAt: next.expiresAt };
+  });
+}
+
+/** This web session's queued/running work for the connection window. Status only (ADR-034). */
+export async function listActiveJobs(scope: LocalAgentScope): Promise<LocalAgentActiveJobView[]> {
+  await assertMembership(prisma, scope.memberId, scope.teamId);
+  const now = new Date();
+  const devices = await prisma.localAgentJob.findMany({ where: { ...scopeWhere(scope), status: { in: activeJobStatuses } }, select: { deviceId: true }, distinct: ["deviceId"] });
+  for (const { deviceId } of devices) await expireDeviceJobs(prisma, deviceId, now);
+  const jobs = await prisma.localAgentJob.findMany({ where: { ...scopeWhere(scope), status: { in: activeJobStatuses }, expiresAt: { gt: now } }, orderBy: { createdAt: "desc" }, take: 10,
+    select: { id: true, purpose: true, provider: true, model: true, status: true, createdAt: true, conversationId: true, paperId: true } });
+  const stepIds = jobs.filter((job) => job.purpose === "agent_step").map((job) => job.id);
+  const operations = stepIds.length ? await prisma.agentOperation.findMany({ where: { jobId: { in: stepIds } }, select: { jobId: true, task: { select: { conversationId: true } } } }) : [];
+  const taskConversation = new Map(operations.map((operation) => [operation.jobId, operation.task.conversationId]));
+  return jobs.map((job) => {
+    const kind: LocalAgentActiveJobView["kind"] = job.purpose === "chat" ? "chat" : job.purpose === "paper_analysis" ? "paper_analysis" : job.purpose === "agent_step" ? "agent_task" : "question";
+    const conversationId = kind === "agent_task" ? taskConversation.get(job.id) : job.conversationId;
+    const href = kind === "chat" || kind === "agent_task" ? conversationId ? `/ai-chat/${encodeURIComponent(conversationId)}` : "/ai-chat"
+      : kind === "paper_analysis" ? `/papers/${encodeURIComponent(job.paperId)}#local-paper-analysis` : null;
+    // Paper analysis and note/seminar tasks have their own stop flows; cancelling only the job would desync them.
+    return { id: job.id, kind, provider: job.provider as LocalAgentProvider, model: job.model, status: job.status as LocalAgentActiveJobView["status"], createdAt: job.createdAt.toISOString(), href, canCancel: kind === "chat" };
+  });
 }
 
 export async function claimJob(identity: DesktopIdentity): Promise<LocalAgentClaim | null> {

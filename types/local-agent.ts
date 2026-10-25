@@ -24,7 +24,10 @@ export interface LocalAgentProviderSnapshot {
 export interface LocalAgentBridgeMetadata {
   bridgeVersion?: string;
   bridgeArchitecture?: "arm64" | "x64";
+  /** Features the running app supports; the server keeps only the ones it knows. */
+  bridgeCapabilities?: string[];
 }
+export type LocalAgentBridgeCapability = "terminal_v1";
 export interface LocalAgentDesktopHeartbeatInput extends LocalAgentBridgeMetadata {
   providers: LocalAgentProviderSnapshot[];
 }
@@ -38,6 +41,7 @@ export interface LocalAgentDeviceView {
   /** Unknown for old apps, an expired grant or a stale desktop heartbeat. */
   bridgeVersion?: string | null;
   bridgeArchitecture?: "arm64" | "x64" | null;
+  bridgeCapabilities?: LocalAgentBridgeCapability[];
   providers: LocalAgentProviderSnapshot[];
 }
 export type LocalAgentAttemptStatus = "awaiting_app" | "awaiting_code" | "connected" | "cancelled" | "expired";
@@ -120,6 +124,21 @@ export interface LocalAgentDesktopHeartbeat {
   leaseExpiresAt: string;
   cancelJobIds: string[];
   heartbeatIntervalSeconds: number;
+  /** One-time web requests to open a user-managed CLI terminal. Never a command. */
+  terminalRequests?: LocalAgentTerminalDelivery[];
+}
+export interface LocalAgentTerminalDelivery { id: string; provider: LocalAgentProvider }
+export interface LocalAgentTerminalRequest { requestId: string; expiresAt: string }
+/** Status-only view of this web session's work; never includes prompts, answers or context. */
+export interface LocalAgentActiveJobView {
+  id: string;
+  kind: "chat" | "paper_analysis" | "agent_task" | "question";
+  provider: LocalAgentProvider;
+  model: string;
+  status: "preparing" | "queued" | "running";
+  createdAt: string;
+  href: string | null;
+  canCancel: boolean;
 }
 export interface LocalAgentJobResultInput {
   jobId: string;

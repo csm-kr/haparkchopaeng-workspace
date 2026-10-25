@@ -24,7 +24,7 @@ function connectorApi(connected = true): LocalAgentApi {
   return {
     status: vi.fn().mockResolvedValue(status), heartbeat: vi.fn().mockResolvedValue({ leaseExpiresAt: device.leaseExpiresAt }),
     createAttempt: vi.fn(), getAttempt: vi.fn(), cancelAttempt: vi.fn(), disconnect: vi.fn(), downloads: vi.fn(),
-    createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(),
+    createJob: vi.fn(), getJob: vi.fn(), cancelJob: vi.fn(), openTerminal: vi.fn(), activeJobs: vi.fn().mockResolvedValue([]),
   };
 }
 function chatApi(): ResearchChatApi {

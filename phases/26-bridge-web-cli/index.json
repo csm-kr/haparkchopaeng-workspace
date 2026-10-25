@@ -1,0 +1,42 @@
+{
+  "project": "hapark",
+  "phase": "26-bridge-web-cli",
+  "execution": "manual AC execution in the active Claude Code session",
+  "steps": [
+    {
+      "step": 0,
+      "name": "contract-docs",
+      "status": "completed",
+      "summary": "ADR-034, PROTOCOL.md terminal/active-jobs contract, AI_BRIDGE_PLATFORM and AI_CONNECTION_CONTROLS updated; no code changes."
+    },
+    {
+      "step": 1,
+      "name": "server-terminal-request",
+      "status": "completed",
+      "summary": "requestTerminal + _terminal reserved snapshot row delivered once via desktop heartbeat terminalRequests; bridgeCapabilities (terminal_v1) stored in _bridge and exposed on LocalAgentDeviceView; POST /api/local-agent/devices/[id]/terminal (provider only, 202)."
+    },
+    {
+      "step": 2,
+      "name": "server-active-jobs",
+      "status": "completed",
+      "summary": "listActiveJobs(scope) + GET /api/local-agent/jobs?active=1: session-scoped status-only rows with kind/href; canCancel only for chat."
+    },
+    {
+      "step": 3,
+      "name": "desktop-terminal-request",
+      "status": "completed",
+      "summary": "ConnectorSession openTerminal option reports bridgeCapabilities terminal_v1 and opens each valid heartbeat terminalRequest once (max 2, codex|claude, id dedupe); main.mjs shares openTerminalFor with the tray button; version 0.1.13; connector 247 pass."
+    },
+    {
+      "step": 4,
+      "name": "web-cli-panel",
+      "status": "completed",
+      "summary": "components/local-agent/cli-panel.tsx: TerminalButton (terminal_v1 + installed CLI only, 0.1.12 notice) and ActiveJobs (5s/focus polling, loading/empty/error, chat-only stop, links) wired into ConnectedControls; RTL 6 tests; E2E 360/1440px pass."
+    },
+    {
+      "step": 5,
+      "name": "release-0-1-13",
+      "status": "pending"
+    }
+  ]
+}

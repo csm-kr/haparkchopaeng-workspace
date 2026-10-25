@@ -18,7 +18,7 @@ vi.mock("@/lib/prisma", async () => {
 });
 vi.mock("@/lib/auth", () => ({ requireAuth: async () => ({ memberId: "la-test-ha", role: "관리자" }) }));
 import { prisma } from "@/lib/prisma";
-import { acknowledgeDesktop, cancelAttempt, cancelJob, claimJob, createAttempt, createJob, desktopHeartbeat, getAttempt, getJob, getStatus, pairDesktop, renewWebPermission, revokeDevice, revokeSession, submitResult, type LocalAgentScope } from "../service";
+import { acknowledgeDesktop, cancelAttempt, cancelJob, claimJob, createAttempt, createJob, desktopHeartbeat, getAttempt, getJob, getStatus, listActiveJobs, pairDesktop, renewWebPermission, requestTerminal, revokeDevice, revokeSession, submitResult, type LocalAgentScope } from "../service";
 import type { LocalAgentProviderSnapshot } from "@/types/local-agent";
 const enabled = Boolean(process.env.LOCAL_AGENT_TEST_CLIENT_MODULE);
 const key = Buffer.alloc(32, 1).toString("base64url");
@@ -384,5 +384,76 @@ describe.skipIf(!enabled)("local connector durable database lifecycle", () => {
     const rejected = lastSlot.find((result) => result.status === "rejected");
     if (rejected?.status === "rejected") expect(rejected.reason).toMatchObject({ status: 429, code: "QUEUE_FULL" });
     expect(await prisma.localAgentJob.count({ where: { status: { in: ["queued", "running"] } } })).toBe(5);
+  });
+  it("delivers a web terminal request once to a capable app and never lists it as a CLI", async () => {
+    const { identity } = await pair();
+    const capable = { bridgeVersion: "0.1.13", bridgeCapabilities: ["terminal_v1", "future_feature"] };
+    await desktopHeartbeat(identity, [snapshot()], capable);
+    expect((await getStatus(scope(), identity.deviceId)).device).toMatchObject({ bridgeCapabilities: ["terminal_v1"] });
+    const first = await requestTerminal(scope(), identity.deviceId, "codex");
+    expect(Date.parse(first.expiresAt) - Date.now()).toBeGreaterThan(25_000);
+    expect(await requestTerminal(scope(), identity.deviceId, "codex")).toEqual(first);
+    expect((await getStatus(scope(), identity.deviceId)).device?.providers.map((row) => row.provider)).toEqual(["codex"]);
+    expect((await desktopHeartbeat(identity, [snapshot()], capable)).terminalRequests).toEqual([{ id: first.requestId, provider: "codex" }]);
+    expect((await desktopHeartbeat(identity, [snapshot()], capable)).terminalRequests).toEqual([]);
+    const second = await requestTerminal(scope(), identity.deviceId, "codex");
+    expect(second.requestId).not.toBe(first.requestId);
+    // The same heartbeat that drops the CLI catalogue still delivers the reserved request row.
+    expect((await desktopHeartbeat(identity, [], capable)).terminalRequests).toEqual([{ id: second.requestId, provider: "codex" }]);
+  });
+
+  it("drops terminal requests after 30 seconds or when the app stops reporting terminal support", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime("2026-10-25T12:00:00.000Z");
+    const { identity } = await pair();
+    const capable = { bridgeCapabilities: ["terminal_v1"] };
+    await desktopHeartbeat(identity, [snapshot()], capable);
+    await requestTerminal(scope(), identity.deviceId, "codex");
+    vi.setSystemTime(Date.now() + 31_000);
+    expect((await desktopHeartbeat(identity, [snapshot()], capable)).terminalRequests).toEqual([]);
+    await requestTerminal(scope(), identity.deviceId, "codex");
+    expect((await desktopHeartbeat(identity, [snapshot()])).terminalRequests).toEqual([]);
+    expect((await desktopHeartbeat(identity, [snapshot()], capable)).terminalRequests).toEqual([]);
+  });
+
+  it("refuses terminal requests for old apps, missing CLIs and other sessions or teams", async () => {
+    const { identity } = await pair();
+    await desktopHeartbeat(identity, [snapshot()], { bridgeVersion: "0.1.12" });
+    await expect(requestTerminal(scope(), identity.deviceId, "codex")).rejects.toMatchObject({ status: 409, code: "CONNECTOR_UPDATE_REQUIRED" });
+    await desktopHeartbeat(identity, [snapshot({ provider: "claude", status: "not_installed", models: [] })], { bridgeCapabilities: ["terminal_v1"] });
+    await expect(requestTerminal(scope(), identity.deviceId, "codex")).rejects.toMatchObject({ status: 409, code: "PROVIDER_NOT_INSTALLED" });
+    await expect(requestTerminal(scope(), identity.deviceId, "claude")).rejects.toMatchObject({ status: 409, code: "PROVIDER_NOT_INSTALLED" });
+    await expect(requestTerminal({ ...scope(), sessionKey: "another-session" }, identity.deviceId, "codex")).rejects.toMatchObject({ status: 403 });
+    await expect(requestTerminal({ ...scope(), teamId: "la-test-b" }, identity.deviceId, "codex")).rejects.toMatchObject({ status: 403 });
+    await expect(requestTerminal({ ...scope(), memberId: "la-test-bob", teamId: "la-test-b" }, identity.deviceId, "codex")).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("lists only this session's active jobs with links and without their content", async () => {
+    const { identity } = await pair();
+    await desktopHeartbeat(identity, [snapshot()]);
+    const question = await job(identity.deviceId);
+    const chat = await job(identity.deviceId);
+    const analysis = await job(identity.deviceId);
+    const step = await job(identity.deviceId);
+    const finished = await job(identity.deviceId);
+    const conversation = await prisma.researchConversation.create({ data: { teamId: "la-test-a", memberId: "la-test-ha", title: "실행 현황 대화", paperIds: [] } });
+    await prisma.localAgentJob.update({ where: { id: chat.id }, data: { purpose: "chat", conversationId: conversation.id, conversationTurn: 1 } });
+    await prisma.localAgentJob.update({ where: { id: analysis.id }, data: { purpose: "paper_analysis" } });
+    await prisma.localAgentJob.update({ where: { id: step.id }, data: { purpose: "agent_step" } });
+    await prisma.localAgentJob.update({ where: { id: finished.id }, data: { status: "completed" } });
+    const task = await prisma.agentTask.create({ data: { teamId: "la-test-a", memberId: "la-test-ha", requestId: crypto.randomUUID(), conversationId: conversation.id, sessionKey: scope().sessionKey, sessionExpiresAt: scope().sessionExpiresAt, deviceId: identity.deviceId, provider: "codex", model: "actual-codex-model", paperId: "la-test-paper-a", goal: "노트 초안", status: "running" } });
+    await prisma.agentOperation.create({ data: { id: crypto.randomUUID(), taskId: task.id, revision: 0, key: "step-1", kind: "model", tool: "model.decide", status: "running", input: {}, jobId: step.id } });
+    const rows = await listActiveJobs(scope());
+    expect(rows.map((row) => row.id).sort()).toEqual([question.id, chat.id, analysis.id, step.id].sort());
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(question.id)).toMatchObject({ kind: "question", provider: "codex", model: "actual-codex-model", status: "queued", href: null, canCancel: false });
+    expect(byId.get(chat.id)).toMatchObject({ kind: "chat", href: `/ai-chat/${conversation.id}`, canCancel: true });
+    expect(byId.get(analysis.id)).toMatchObject({ kind: "paper_analysis", href: "/papers/la-test-paper-a#local-paper-analysis", canCancel: false });
+    expect(byId.get(step.id)).toMatchObject({ kind: "agent_task", href: `/ai-chat/${conversation.id}`, canCancel: false });
+    for (const row of rows) for (const secret of ["prompt", "response", "context"]) expect(row).not.toHaveProperty(secret);
+    expect(await listActiveJobs({ ...scope(), sessionKey: "another-session" })).toEqual([]);
+    await expect(listActiveJobs({ ...scope(), memberId: "la-test-bob", teamId: "la-test-a" })).rejects.toMatchObject({ status: 403 });
+    await cancelJob(scope(), chat.id);
+    expect((await listActiveJobs(scope())).map((row) => row.id)).not.toContain(chat.id);
   });
 });

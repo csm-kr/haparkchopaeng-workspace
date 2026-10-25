@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { LocalAgentAttemptCreated, LocalAgentDeviceView } from "../../types/local-agent";
+import type { LocalAgentActiveJobView, LocalAgentAttemptCreated, LocalAgentDeviceView } from "../../types/local-agent";
 import type { ConnectorRelease } from "../../components/local-agent/client";
 
 // 연결/작업 API는 전부 격리한다. 실제 설치·CLI 검증을 이 화면 테스트로 대체하지 않는다.
@@ -23,6 +23,8 @@ async function mockConnector(page: Page, connected = false, currentDevice: Local
   let serverNow = Date.now();
   currentDevice = { ...currentDevice, lastSeenAt: new Date(serverNow).toISOString(), leaseExpiresAt: new Date(serverNow + 45_000).toISOString() };
   let attempt: LocalAgentAttemptCreated | null = null;
+  let jobs: LocalAgentActiveJobView[] = [];
+  const terminals: string[] = [];
   // Date는 서버 fixture와 함께 이동하고, 실제 폴링·카운트다운 interval은 계속 실행한다.
   await page.clock.setFixedTime(serverNow);
   await page.addInitScript(() => {
@@ -36,6 +38,9 @@ async function mockConnector(page: Page, connected = false, currentDevice: Local
     if (path.endsWith("/status")) data = { devices: connected ? [currentDevice] : [], device: connected ? currentDevice : null, leaseDurationSeconds: 45, heartbeatIntervalSeconds: 15 };
     else if (path.endsWith("/web-heartbeat")) data = { leaseExpiresAt: new Date(serverNow + 45000).toISOString() };
     else if (path.endsWith("/downloads")) { downloadRequests += 1; data = { releases }; }
+    else if (path.endsWith("/jobs") && method === "GET") data = jobs;
+    else if (/\/jobs\/[^/]+\/cancel$/.test(path) && method === "POST") { const id = path.split("/").at(-2); jobs = jobs.filter(job => job.id !== id); data = {}; }
+    else if (path.endsWith("/terminal") && method === "POST") { terminals.push(route.request().postDataJSON().provider); data = { requestId: `ui-terminal-${terminals.length}`, expiresAt: new Date(serverNow + 30_000).toISOString() }; }
     else if (path.endsWith("/attempts") && method === "POST") {
       attempts += 1;
       cancelled = false;
@@ -60,6 +65,8 @@ async function mockConnector(page: Page, connected = false, currentDevice: Local
     attempts: () => attempts,
     cancelled: () => cancelled,
     downloadRequests: () => downloadRequests,
+    terminals: () => [...terminals],
+    setJobs: (next: LocalAgentActiveJobView[]) => { jobs = next; },
     updateDevice: (patch: Partial<LocalAgentDeviceView>) => { currentDevice = { ...currentDevice, ...patch }; },
     acknowledge: () => {
       if (!attempt) throw new Error("연결 시도를 만든 뒤 앱 ACK를 보내야 합니다.");
@@ -325,3 +332,33 @@ test("설치 앱의 웹 복귀는 한 번만 시작하고 만료 뒤 새 번호�
   await expect(timer).toHaveText("05:00 남음");
   await expect(progress).toHaveAttribute("aria-valuenow", "300");
 });
+
+for (const width of [360, 1440]) {
+  test(`연결 창에서 연결된 PC의 터미널을 열고 실행 중인 채팅 답변을 멈춘다 (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await login(page);
+    const connector = await mockConnector(page, true, { ...device, bridgeVersion: "0.1.13", bridgeCapabilities: ["terminal_v1"] });
+    const createdAt = new Date().toISOString();
+    connector.setJobs([
+      { id: "ui-chat-job", kind: "chat", provider: "codex", model: "detected-model", status: "running", createdAt, href: "/ai-chat/ui-conversation", canCancel: true },
+      { id: "ui-analysis-job", kind: "paper_analysis", provider: "codex", model: "detected-model", status: "queued", createdAt, href: "/papers/ui-paper#local-paper-analysis", canCancel: false },
+    ]);
+    await page.goto("/profile");
+    await page.getByRole("region", { name: "AI 연결", exact: true }).getByRole("button", { name: "AI 연결 관리", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "AI 연결", exact: true });
+    expect(connector.terminals()).toEqual([]);
+    await dialog.getByRole("button", { name: "Codex 터미널 열기", exact: true }).click();
+    await expect(dialog.getByText("연결된 PC(내 연구용 PC)에서 터미널을 여는 중이에요. 몇 초 안에 열려요.")).toBeVisible();
+    expect(connector.terminals()).toEqual(["codex"]);
+    const region = dialog.getByRole("region", { name: "실행 중인 작업" });
+    await expect(region.getByRole("listitem")).toHaveCount(2);
+    await expect(region.getByRole("listitem", { name: /논문 분석/ }).getByRole("button", { name: "멈추기" })).toHaveCount(0);
+    await region.getByRole("listitem", { name: /AI 채팅/ }).getByRole("button", { name: "멈추기" }).click();
+    await expect(region.getByRole("listitem")).toHaveCount(1);
+    const box = await dialog.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await dialog.screenshot({ path: test.info().outputPath(`cli-panel-${width}.png`) });
+  });
+}
