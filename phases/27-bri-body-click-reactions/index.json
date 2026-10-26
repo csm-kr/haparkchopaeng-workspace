@@ -20,8 +20,23 @@
       "name": "native-verification",
       "status": "completed",
       "summary": "Isolated macOS Electron pet QA 12 checks pass, including real input-event clicks; connector unit suite re-run."
+    },
+    {
+      "step": 3,
+      "name": "release-0-1-14",
+      "status": "completed",
+      "summary": "0.1.14 three-OS prerelease published from 9cada2b (PR CI 40318780723, exact-tag CI 40320615470, publisher 40321853936); public downloads re-hashed; Production LOCAL_AGENT_RELEASES overwritten and redeployed; logged-in production downloads API read back 0.1.14 for all three OS."
     }
   ],
   "sourceImplementationComplete": true,
-  "targetReleasePublished": false
+  "targetReleasePublished": true,
+  "installedUpgradeVerified": false,
+  "releaseVersion": "0.1.14",
+  "releaseTag": "ai-bridge-v0.1.14-preview.1",
+  "releaseUrl": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.14-preview.1",
+  "releaseSource": "9cada2bcf0d981a4a1e34f03470352f96242a461",
+  "validationRunId": 40320615470,
+  "assetWorkflowRunId": 40321853936,
+  "productionCatalogVerified": true,
+  "productionDeployment": "dpl_6a7E92w86ngRPg2oXtKV4eoVGCiU"
 }

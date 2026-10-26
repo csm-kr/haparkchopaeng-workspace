@@ -144,7 +144,7 @@
     {
       "dir": "27-bri-body-click-reactions",
       "status": "completed",
-      "summary": "Full-body ImageGen Bri with random click reactions and a hover-revealed move handle; source and isolated macOS Electron QA only, not released."
+      "summary": "Full-body ImageGen Bri with random click reactions and a hover-revealed move handle; AI Bridge 0.1.14 published for three OS; production download catalogue updated and read back."
     }
   ]
 }
