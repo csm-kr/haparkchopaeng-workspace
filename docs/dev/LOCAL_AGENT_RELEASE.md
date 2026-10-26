@@ -14,6 +14,24 @@ Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치�
 
 상태별 ImageGen 브리를 포함한 [0.1.11 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.11-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 동일 소스 태그의 5개 CI job과 게시 workflow 3개 job이 모두 성공했고, 각 파일 SHA256·크기·공개 HTTP 200을 확인했다. Production 다운로드 설정을 갱신한 뒤 운영 API에서 세 OS 모두 0.1.11을 다시 확인했다. 정확한 소스·파일 해시·배포 영수증과 검증 범위는 [배포 기록](../../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. 기존 unsigned prerelease 채널이며 사용자 컴퓨터의 기존 설치 앱은 자동으로 교체하지 않는다.
 
+## 2026-10-26 0.1.14 게시 (몸이 생긴 브리와 클릭 반응)
+
+짧은 다리 몸과 클릭 랜덤 반응, ✥ 이동 손잡이를 넣은 [0.1.14 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.14-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 PR50 병합 커밋 `9cada2bcf0d981a4a1e34f03470352f96242a461`이며 PR 마지막 커밋 `fdcbd78`과 Git tree가 같다. 웹·서버 계약 변경은 없다. 같은 커밋의 Production 배포가 성공한 뒤 앱을 게시했다.
+
+PR CI [40318780723](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40318780723)과 같은 태그 CI [40320615470](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40320615470)이 각각 5개 job, 게시 workflow [40321853936](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40321853936)이 3개 job 모두 성공했다. Windows CI의 펫 검사는 실제 OS 커서 호버로 손잡이 표시를 확인했다. Windows 파일은 같은 태그 CI의 Windows job이 만들고 설치·URI 실행·제거·코어 9개 일치를 확인한 산출물이며, CI 로그의 해시와 같다. 세 파일의 JSON 메타데이터를 GitHub 서버의 크기·SHA256과 대조했다. 공개 후에는 인증 없이 다시 받아 HTTP 200·크기·SHA256이 같은지 확인했다.
+
+| 파일 | bytes | SHA256 |
+| --- | ---: | --- |
+| AI-Bridge-0.1.14-linux-x64.deb | 99621872 | `ebf79f5d6643c2aef0deb6a46f31371d183602668144d3fd40b46c246d9b6a28` |
+| AI-Bridge-0.1.14-mac-arm64.dmg | 128598988 | `2537674fa3b46b20e7691d1bae06b060e657d02a0faf2c5c3bf0324ca1626fbb` |
+| AI-Bridge-0.1.14-win-x64.exe | 111818918 | `c7bf96398f1cdb304d856ebcc350f4c5dbf788f5a40f806434622a4fff797932` |
+
+Production `LOCAL_AGENT_RELEASES`만 [published-releases.json](../../phases/27-bri-body-click-reactions/published-releases.json)으로 덮어썼다(갱신 시각 2026-10-26 21:26 KST). 덮어쓰기 전 앱의 실제 parser(`readLocalAgentReleases`)로 세 OS 모두 0.1.14인지 확인했다. 그 뒤 병합 커밋의 운영 배포를 재배포했고(`dpl_6a7E92w86ngRPg2oXtKV4eoVGCiU`), `hapark.vercel.app`에 연결됐다. 로그인한 브라우저에서 운영 `/api/local-agent/downloads`를 다시 읽어 HTTP 200, 세 OS 모두 0.1.14와 정확한 파일 이름을 확인했다. 개인 세션·쿠키는 기록하지 않았다.
+
+게시 중 확인 명령 `vercel env run`이 의도와 달리 로컬 확인 스크립트 한 개를 같은 팀의 새 프로젝트 `read-releases`로 배포했다. 내용은 환경 변수를 읽는 2줄 스크립트이며 비밀 값은 없다. `hapark` 프로젝트와는 무관하다.
+
+미검증 범위: 실제 사용자 PC에서 OS 포인터로 클릭·손잡이 드래그하는 동작은 확인하지 않았다. 기존 미서명 채널이며 Developer ID·공증·Gatekeeper 승인은 없다. 사용자 PC의 설치 앱은 자동으로 교체하지 않는다.
+
 ## 2026-10-25 0.1.13 게시 (웹에서 터미널 열기, ADR-034)
 
 웹 연결 창에서 연결된 PC의 Codex·Claude Code 터미널을 여는 [0.1.13 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.13-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 PR47 병합 커밋 `aff6ecd691eb4c70265773fc636a2a9c6863b498`이다. 웹을 먼저 배포했다. 같은 커밋의 Production 배포가 성공했고, 새 API 두 개가 운영에서 401(로그인 필요)로 응답하는 것을 앱 게시 전에 확인했다.
