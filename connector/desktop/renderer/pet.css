@@ -7,22 +7,42 @@
   --warning: #F2C14E;
 }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { position: relative; display: grid; place-items: center; -webkit-app-region: drag; }
-.bri { position: relative; width: 88px; height: 88px; transform-origin: center 75%; animation: bri-float 6s ease-in-out infinite; }
+/* Only the move handle drags the window; everything else receives clicks. */
+body { position: relative; }
+.move-handle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity .15s ease-out;
+  -webkit-app-region: drag;
+}
+.move-handle svg { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+body:hover .move-handle { opacity: 1; }
+.bri { position: absolute; left: 2px; top: 4px; width: 100px; height: 120px; cursor: pointer; animation: bri-float 6s ease-in-out infinite; }
+.pose { position: absolute; inset: 0; transform-origin: 50% 95%; }
 .sprite, .bri-greeting {
   position: absolute;
   inset: 0;
-  background-image: url('../assets/bri/sprites-v1.webp');
-  background-size: 400% 200%;
+  background-image: url('../assets/bri/sprites-v2.webp');
+  background-size: 400% 300%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 1px 1px var(--bg));
 }
 .sprite { background-position: 0 0; animation: bri-blink 6s steps(1, end) infinite, bri-neutral 14s steps(1, end) infinite; }
-.bri-greeting { background-position: 66.666667% 0; opacity: 0; animation: bri-smile 14s steps(1, end) infinite; pointer-events: none; }
-.expression-target { position: absolute; left: 30px; top: 34px; width: 28px; height: 26px; -webkit-app-region: no-drag; }
+.bri-greeting { background-position: 100% 50%; opacity: 0; animation: bri-smile 14s steps(1, end) infinite; pointer-events: none; }
 .pet-status {
   position: absolute;
-  bottom: 1px;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
   box-sizing: border-box;
@@ -39,17 +59,29 @@ body { position: relative; display: grid; place-items: center; -webkit-app-regio
 }
 body:is([data-mode='idle'], [data-mode='ready']) .pet-status { opacity: 0; }
 body:is([data-mode='idle'], [data-mode='ready']):hover .pet-status { opacity: 1; }
-body:is([data-mode='idle'], [data-mode='ready']) .bri:hover .bri-greeting { animation: none; opacity: 1; }
-body:is([data-mode='idle'], [data-mode='ready']) .bri:hover .sprite { animation: none; opacity: 0; }
 body:not(:is([data-mode='idle'], [data-mode='ready'])) .bri-greeting { animation: none; opacity: 0; }
 body:not(:is([data-mode='idle'], [data-mode='ready'])) .sprite { animation: none; }
-body[data-mode='connecting'] .sprite { background-position: 100% 0; animation: bri-listen 4s ease-in-out infinite; }
-body[data-mode='working'] .sprite { background-position: 0 100%; animation: bri-type .9s steps(1, end) infinite, bri-work 2s ease-in-out infinite; }
+body[data-mode='connecting'] .sprite { background-position: 66.666667% 0; animation: bri-listen 4s ease-in-out infinite; }
+body[data-mode='working'] .sprite { background-position: 0 50%; animation: bri-type .9s steps(1, end) infinite, bri-work 2s ease-in-out infinite; }
 body[data-mode='working'] .pet-status { color: var(--accent); }
-body[data-mode='recovering'] .sprite { background-position: 66.666667% 100%; animation: bri-search 6s ease-in-out infinite; }
+body[data-mode='recovering'] .sprite { background-position: 100% 0; animation: bri-search 6s ease-in-out infinite; }
 body:is([data-mode='recovering'], [data-mode='disconnected'], [data-mode='error']) .pet-status { color: var(--warning); }
 body:is([data-mode='disconnected'], [data-mode='error']) .bri { animation-play-state: paused; }
-body:is([data-mode='disconnected'], [data-mode='error']) .sprite { background-position: 100% 100%; transform: translateY(2px) rotate(-2deg); }
+body:is([data-mode='disconnected'], [data-mode='error']) .sprite { background-position: 66.666667% 50%; transform: translateY(2px) rotate(-2deg); }
+/* Click reactions: a pose cell on .sprite, the motion on .pose so the float track keeps its phase. */
+body[data-reaction] .bri-greeting { animation: none; opacity: 0; }
+body:is([data-mode='idle'], [data-mode='ready'])[data-reaction] .sprite { animation: none; opacity: 1; }
+body[data-reaction='wave'] .sprite { background-position: 100% 50%; }
+body[data-reaction='jump'] .sprite { background-position: 0 100%; }
+body[data-reaction='giggle'] .sprite { background-position: 33.333333% 100%; }
+body[data-reaction='dance'] .sprite { background-position: 66.666667% 100%; }
+body[data-reaction='wink'] .sprite { background-position: 100% 100%; }
+body[data-reaction='wave'] .pose { animation: bri-wave 1.2s ease-in-out; }
+body[data-reaction='jump'] .pose { animation: bri-jump 1.2s ease-in-out; }
+body[data-reaction='giggle'] .pose { animation: bri-giggle 1.2s ease-in-out; }
+body[data-reaction='dance'] .pose { animation: bri-dance 1.2s ease-in-out; }
+body[data-reaction='wink'] .pose { animation: bri-pop 1.2s ease-out; }
+body[data-reaction='boop'] .pose { animation: bri-boop .45s ease-out; }
 @keyframes bri-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
@@ -62,8 +94,21 @@ body:is([data-mode='disconnected'], [data-mode='error']) .sprite { background-po
 @keyframes bri-neutral { 0%, 85%, 94%, 100% { opacity: 1; } 86%, 93% { opacity: 0; } }
 @keyframes bri-listen { 0%, 100% { transform: rotate(0); } 50% { transform: translateY(-1px) rotate(3deg); } }
 @keyframes bri-work { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1px); } }
-@keyframes bri-type { 0%, 100% { background-position: 0 100%; } 50% { background-position: 33.333333% 100%; } }
+@keyframes bri-type { 0%, 100% { background-position: 0 50%; } 50% { background-position: 33.333333% 50%; } }
 @keyframes bri-search { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes bri-wave { 0%, 100% { transform: rotate(0); } 20%, 60% { transform: rotate(4deg); } 40%, 80% { transform: rotate(-2deg); } }
+@keyframes bri-jump {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  12% { transform: translateY(0) scale(1.06, .92); }
+  40% { transform: translateY(-12px) scale(.97, 1.03); }
+  70% { transform: translateY(0) scale(1.04, .95); }
+  85% { transform: translateY(0) scale(1, 1); }
+}
+@keyframes bri-giggle { 0%, 100% { transform: translateX(0); } 15%, 45%, 75% { transform: translateX(-2px) rotate(-1deg); } 30%, 60%, 90% { transform: translateX(2px) rotate(1deg); } }
+@keyframes bri-dance { 0%, 100% { transform: rotate(0); } 25%, 75% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes bri-pop { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.06); } 50% { transform: scale(1); } }
+@keyframes bri-boop { 0%, 100% { transform: scale(1, 1); } 35% { transform: scale(1.06, .92); } 70% { transform: scale(.98, 1.02); } }
 @media (prefers-reduced-motion: reduce) {
-  .bri, .sprite, .bri-greeting { animation: none !important; }
+  .bri, .pose, .sprite, .bri-greeting { animation: none !important; }
+  .move-handle { transition: none; }
 }

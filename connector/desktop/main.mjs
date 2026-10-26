@@ -246,7 +246,7 @@ function installIpc() {
 function showPet() {
   if (petWindow && !petWindow.isDestroyed()) return;
   const bounds = screen.getPrimaryDisplay().workArea;
-  const window = new BrowserWindow({ width: 104, height: 112, x: bounds.x + bounds.width - 130, y: bounds.y + bounds.height - 140, show: false, focusable: false, frame: false, transparent: true, resizable: false, skipTaskbar: true, alwaysOnTop: process.platform !== 'linux', webPreferences: { preload: join(directory, 'pet-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const window = new BrowserWindow({ width: 104, height: 144, x: bounds.x + bounds.width - 130, y: bounds.y + bounds.height - 172, show: false, focusable: false, acceptFirstMouse: true, frame: false, transparent: true, resizable: false, skipTaskbar: true, alwaysOnTop: process.platform !== 'linux', webPreferences: { preload: join(directory, 'pet-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   petWindow = window;
   window.setMenu(null); window.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('did-finish-load', publish);

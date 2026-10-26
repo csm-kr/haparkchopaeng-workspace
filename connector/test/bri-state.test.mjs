@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BRI_PRESENTATIONS, selectBriMode } from '../desktop/renderer/bri-state.mjs';
+import { BRI_PRESENTATIONS, BRI_REACTIONS, selectBriMode, selectBriReaction } from '../desktop/renderer/bri-state.mjs';
 
 test('Bri follows actual job occupancy without inferring success after a job ends', () => {
   const session = { status: 'connected', currentJobId: null };
@@ -30,4 +30,24 @@ test('each mode has a short fixed label and an accessible description', () => {
     assert.match(BRI_PRESENTATIONS[mode].accessibleLabel, /브리/);
   }
   assert.equal(BRI_PRESENTATIONS.working.label, '일하는 중');
+});
+
+test('a click picks a random pose reaction while idle or ready and never repeats the previous one', () => {
+  assert.deepEqual([...BRI_REACTIONS], ['wave', 'jump', 'giggle', 'dance', 'wink']);
+  for (const mode of ['idle', 'ready']) {
+    const seen = new Set();
+    for (const previous of [undefined, ...BRI_REACTIONS]) {
+      for (const value of [0, .2, .4, .6, .8, .999999]) {
+        const reaction = selectBriReaction({ mode, previous, random: () => value });
+        assert.ok(BRI_REACTIONS.includes(reaction)); assert.notEqual(reaction, previous); seen.add(reaction);
+      }
+    }
+    assert.equal(seen.size, BRI_REACTIONS.length);
+  }
+});
+
+test('a click in a status mode only boops so the work or connection pose stays visible', () => {
+  for (const mode of ['connecting', 'working', 'recovering', 'disconnected', 'error']) {
+    assert.equal(selectBriReaction({ mode, previous: 'boop', random: () => .5 }), 'boop');
+  }
 });

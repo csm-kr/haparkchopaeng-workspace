@@ -140,6 +140,11 @@
       "dir": "26-bridge-web-cli",
       "status": "completed",
       "summary": "Web terminal-open requests and active-work list (ADR-034); AI Bridge 0.1.13 published for three OS; production download catalogue updated."
+    },
+    {
+      "dir": "27-bri-body-click-reactions",
+      "status": "completed",
+      "summary": "Full-body ImageGen Bri with random click reactions and a hover-revealed move handle; source and isolated macOS Electron QA only, not released."
     }
   ]
 }

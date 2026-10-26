@@ -18,3 +18,12 @@ export function selectBriMode({ stage, runtime }) {
   if (runtime.status !== 'connected') return 'disconnected';
   return runtime.currentJobId ? 'working' : 'ready';
 }
+
+export const BRI_REACTIONS = Object.freeze(['wave', 'jump', 'giggle', 'dance', 'wink']);
+
+// Pose reactions would hide the work or connection pose, so status modes only get a squash.
+export function selectBriReaction({ mode, previous, random = Math.random }) {
+  if (mode !== 'idle' && mode !== 'ready') return 'boop';
+  const choices = BRI_REACTIONS.filter(reaction => reaction !== previous);
+  return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))];
+}

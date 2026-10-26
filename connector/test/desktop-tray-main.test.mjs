@@ -158,6 +158,9 @@ try {
     assert.equal(pet.options.webPreferences.contextIsolation, true);
     assert.equal(pet.options.webPreferences.nodeIntegration, false);
     assert.equal(pet.options.focusable, false); assert.equal(pet.options.show, false);
+    // The pet never becomes active, so without this a macOS click would only try to activate it.
+    assert.equal(pet.options.acceptFirstMouse, true, 'PET_CLICK_REACHES_PAGE_WITHOUT_FOCUS');
+    assert.deepEqual([pet.options.width, pet.options.height], [104, 144], 'PET_WINDOW_FITS_FULL_BODY');
     assert.equal(pet.inactiveCalls, quiet ? 0 : 1);
     assert.equal(pet.focusCalls, 0);
     assert.equal(petStates.at(-1), 'ready');
