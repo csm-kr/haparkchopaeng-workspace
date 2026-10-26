@@ -35,7 +35,7 @@ export async function runPetRendererQa({ evidenceDirectory = join(connector, 'ar
   const taskPart = relative(taskTemporary, evidenceDirectory);
   const evidenceParent = taskPart.startsWith('..') || isAbsolute(taskPart) ? await safeDirectory(artifacts, connector) : taskTemporary;
   evidenceDirectory = await safeDirectory(evidenceDirectory, evidenceParent);
-  for (const name of ['result.json', 'light-neutral.png', 'dark-neutral.png', 'light-tip-quarter.png', 'dark-tip-quarter.png', 'eyes-closed.png', 'spontaneous-smile.png', 'hover-handle.png', 'native-hover.png', 'reduced-motion-reaction.png']) await unlink(join(evidenceDirectory, name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  for (const name of ['result.json', 'light-neutral.png', 'dark-neutral.png', 'light-tip-quarter.png', 'dark-tip-quarter.png', 'eyes-closed.png', 'spontaneous-smile.png', 'hover-cursor.png', 'native-hover.png', 'reduced-motion-reaction.png']) await unlink(join(evidenceDirectory, name)).catch(error => { if (error.code !== 'ENOENT') throw error; });
   const owned = await mkdtemp(join(temporaryRoot, 'renderer-')); await mkdir(join(owned, 'profile')); await mkdir(join(owned, 'session'));
   let child, exited = false, closed = false, forcedCleanup = false, receipt, exitCode = null, profileRemoved = false;
   try {
@@ -80,7 +80,7 @@ export async function runPetRendererQa({ evidenceDirectory = join(connector, 'ar
 }
 
 async function nativePetQa() {
-  const { app, BrowserWindow, screen } = await import('electron');
+  const { app, BrowserWindow, ipcMain, screen } = await import('electron');
   const flagIndex = process.argv.indexOf('--pet-native-qa');
   assert.ok(flagIndex >= 0 && process.argv.length === flagIndex + 3, 'Expected exactly two native QA directories.');
   const owned = resolve(process.argv[flagIndex + 1]), evidenceDirectory = resolve(process.argv[flagIndex + 2]);
@@ -93,7 +93,7 @@ async function nativePetQa() {
       nativePointer: { supported: process.platform === 'win32', observed: false, cursorRestored: false },
       limits: ['Synthetic display modes, not authenticated execution or an installed app.',
         'Native cursor hover is observed on Windows; other platforms use explicit Chromium hover state.',
-        'Clicks are Chromium input events sent to the window, not OS pointer clicks.',
+        'Clicks and drags are Chromium input events sent to the window, not OS pointer input; window movement belongs to the product main.',
         'Physical OS dragging is not performed.'] };
     let win;
     const check = async (name, callback) => {
@@ -106,6 +106,10 @@ async function nativePetQa() {
         frame: false, transparent: true, show: false, focusable: false, acceptFirstMouse: true, alwaysOnTop: true, skipTaskbar: true,
         webPreferences: { preload: join(connector, 'desktop/pet-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
       win.on('focus', () => { receipt.focusObserved = true; });
+      // Count the pet's outgoing signals; this QA has no product main, so nothing moves or opens.
+      const signals = { 'pet-drag-start': 0, 'pet-drag-end': 0, 'pet-open-app': 0 };
+      for (const name of Object.keys(signals)) ipcMain.on(`connector:${name}`, event => { if (event.sender === win.webContents) signals[name] += 1; });
+      const signalCount = () => ({ ...signals });
       win.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_request, done) => { receipt.rendererNetworkRequests += 1; done({ cancel: true }); });
       win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', event => event.preventDefault());
       await win.loadFile(join(connector, 'desktop/renderer/pet.html')); win.showInactive();
@@ -138,10 +142,10 @@ async function nativePetQa() {
       const doc = await win.webContents.debugger.sendCommand('DOM.getDocument');
       const hoverNodes = await Promise.all(['body', '.bri'].map(selector => win.webContents.debugger.sendCommand('DOM.querySelector', { nodeId: doc.root.nodeId, selector })));
       const hover = value => Promise.all(hoverNodes.map(({ nodeId }) => win.webContents.debugger.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: value ? ['hover'] : [] })));
-      const handleOpacity = () => js("Number(getComputedStyle(document.querySelector('.move-handle')).opacity)");
       const reaction = () => js('document.body.dataset.reaction ?? null');
       const click = async (x = 52, y = 72) => {
         const before = await reaction();
+        win.webContents.sendInputEvent({ type: 'mouseMove', x, y });
         for (const type of ['mouseDown', 'mouseUp']) win.webContents.sendInputEvent({ type, x, y, button: 'left', clickCount: 1 });
         for (let n = 0; n < 30; n++) { await frame(); const now = await reaction(); if (now && now !== before) return now; await delay(10); }
         assert.fail('A click on Bri did not reach the page.');
@@ -155,15 +159,15 @@ async function nativePetQa() {
       await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
       await setMode('idle'); await pause(0); await frame();
       Object.assign(receipt.motionEnvironment, await js(`({normalPrefersReducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,normalAnimationCount:document.getAnimations().length,normalAnimationsPending:document.getAnimations().filter(a=>a.pending).length})`));
-      await check('PET_RECEIVE_ONLY_SANDBOX_AND_LOCAL_ASSETS', async () => {
+      await check('PET_FIXED_SIGNALS_SANDBOX_AND_LOCAL_ASSETS', async () => {
         const observed = await js(`({node:typeof require,connector:typeof window.connector,api:Object.keys(window.bri),scripts:[...document.scripts].map(s=>s.getAttribute('src')),csp:document.querySelector('meta[http-equiv="Content-Security-Policy"]').content,drag:getComputedStyle(document.body).webkitAppRegion,loaded:performance.getEntriesByType('resource').map(r=>r.name)})`);
         const prefs = win.webContents.getLastWebPreferences();
         assert.equal(prefs.sandbox, true); assert.equal(prefs.contextIsolation, true); assert.equal(prefs.nodeIntegration, false);
-        assert.equal(observed.node, 'undefined'); assert.equal(observed.connector, 'undefined'); assert.deepEqual(observed.api, ['onState']);
+        assert.equal(observed.node, 'undefined'); assert.equal(observed.connector, 'undefined'); assert.deepEqual(observed.api, ['onState', 'startDrag', 'endDrag', 'openApp']);
         assert.deepEqual(observed.scripts, ['pet.js']); assert.match(observed.csp, /connect-src 'none'/); assert.match(observed.csp, /script-src 'self'/);
         assert.notEqual(observed.drag, 'drag'); assert.match(await js("getComputedStyle(document.querySelector('.sprite')).backgroundImage"), /sprites-v2\.webp/);
         assert.equal(receipt.rendererNetworkRequests, 0);
-        return { readOnlyApi: observed.api, remoteRequests: 0 };
+        return { petApi: observed.api, remoteRequests: 0 };
       });
       await check('PET_FACE_AND_SILHOUETTE_ON_LIGHT_AND_DARK_AT_NATIVE_SCALE', async () => {
         const samples = [];
@@ -187,10 +191,10 @@ async function nativePetQa() {
         await pause(12320); await frame(); assert.ok((await mouth()).smile > .9); assert.ok(Number(await js("getComputedStyle(document.querySelector('.sprite')).opacity")) < .05); await screenshot('spontaneous-smile.png');
         await pause(0); await neutralMouth(); return { periodMs: 14000 };
       });
-      await check('PET_HOVER_SHOWS_MOVE_HANDLE_WITHOUT_REACTING', async () => {
-        assert.ok(await handleOpacity() < .05);
-        await hover(true); await delay(200); await frame(); assert.ok(await handleOpacity() > .95); await neutralMouth(); assert.equal(await reaction(), null); await screenshot('hover-handle.png');
-        await hover(false); await delay(200); await frame(); assert.ok(await handleOpacity() < .05); return { chromiumHoverState: true, handleHiddenAfterHover: true };
+      await check('PET_HOVER_SHOWS_MOVE_CURSOR_WITHOUT_REACTING', async () => {
+        assert.equal(await js("getComputedStyle(document.querySelector('.bri')).cursor"), 'move');
+        await hover(true); await frame(); await neutralMouth(); assert.equal(await reaction(), null); await screenshot('hover-cursor.png');
+        await hover(false); await frame(); return { chromiumHoverState: true, cursor: 'move' };
       });
       await check('PET_CLICK_PLAYS_A_RANDOM_REACTION_AND_RETURNS', async () => {
         const reactions = ['wave', 'jump', 'giggle', 'dance', 'wink'], seen = [];
@@ -199,7 +203,22 @@ async function nativePetQa() {
         await frame(); const posed = await screenshot(`reaction-${first}.png`); assert.ok(changed(idle, posed) > 8);
         const second = await click(); assert.ok(reactions.includes(second)); assert.notEqual(second, first); seen.push(second);
         await reactionEnded(); await pointerLeave(); await pause(0); await frame(); assert.ok(changed(idle, await screenshot('reaction-after.png')) <= 8, 'Bri must return to the idle pose.');
+        assert.deepEqual(signalCount(), { 'pet-drag-start': 0, 'pet-drag-end': 0, 'pet-open-app': 0 }, 'A click neither drags nor opens the app.');
         return { seen, returnedToIdle: true };
+      });
+      await check('PET_DRAG_ANYWHERE_AND_RIGHT_CLICK_SIGNALS', async () => {
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: 52, y: 72 });
+        win.webContents.sendInputEvent({ type: 'mouseDown', x: 52, y: 72, button: 'left', clickCount: 1 });
+        for (const [x, y] of [[54, 73], [64, 84], [80, 100]]) { win.webContents.sendInputEvent({ type: 'mouseMove', x, y, button: 'left', modifiers: ['leftButtonDown'] }); await frame(); }
+        win.webContents.sendInputEvent({ type: 'mouseUp', x: 80, y: 100, button: 'left', clickCount: 1 });
+        for (let n = 0; n < 30 && signals['pet-drag-end'] < 1; n++) { await frame(); await delay(10); }
+        assert.deepEqual(signalCount(), { 'pet-drag-start': 1, 'pet-drag-end': 1, 'pet-open-app': 0 });
+        assert.equal(await reaction(), null, 'A drag never plays a reaction.');
+        for (const type of ['mouseDown', 'mouseUp']) win.webContents.sendInputEvent({ type, x: 52, y: 72, button: 'right', clickCount: 1 });
+        for (let n = 0; n < 30 && signals['pet-open-app'] < 1; n++) { await frame(); await delay(10); }
+        assert.deepEqual(signalCount(), { 'pet-drag-start': 1, 'pet-drag-end': 1, 'pet-open-app': 1 });
+        assert.equal(await reaction(), null); await pointerLeave();
+        return { signals: signalCount(), dragWithoutReaction: true, rightClickOpensApp: true };
       });
       if (process.platform === 'win32') await check('PET_WINDOWS_NATIVE_CURSOR_HOVER', async () => {
         const nativeCursor = async point => { const source = `Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class PetQaCursor{[StructLayout(LayoutKind.Sequential)]public struct Point{public int X;public int Y;}[DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);[DllImport("user32.dll")]public static extern bool GetCursorPos(out Point p);}'; ${point ? `if(-not [PetQaCursor]::SetCursorPos(${point.x},${point.y})){exit 1};` : ''}$p=New-Object PetQaCursor+Point;if(-not [PetQaCursor]::GetCursorPos([ref]$p)){exit 1};[Console]::Write(('{"x":'+$p.X+',"y":'+$p.Y+'}'))`; const result = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], { windowsHide: true, shell: false, timeout: 10_000 }); return JSON.parse(result.stdout); };
@@ -209,8 +228,8 @@ async function nativePetQa() {
         try {
           await nativeCursor(targetPhysical); await delay(100); await frame();
           receipt.nativePointer.observed = await js(`document.querySelector('[role="img"]').matches(':hover')`);
-          await delay(200); receipt.nativePointer.handleObserved = await handleOpacity() > .95;
-          await screenshot('native-hover.png'); assert.equal(receipt.nativePointer.observed, true); assert.equal(receipt.nativePointer.handleObserved, true);
+          receipt.nativePointer.moveCursor = await js("getComputedStyle(document.querySelector('.bri')).cursor") === 'move';
+          await screenshot('native-hover.png'); assert.equal(receipt.nativePointer.observed, true); assert.equal(receipt.nativePointer.moveCursor, true);
         } finally {
           const current = screen.getCursorScreenPoint();
           if (Math.abs(current.x - target.x) <= 1 && Math.abs(current.y - target.y) <= 1) { const restored = await nativeCursor(originalPhysical); receipt.nativePointer.cursorRestored = restored.x === originalPhysical.x && restored.y === originalPhysical.y; }
@@ -249,8 +268,7 @@ async function nativePetQa() {
         assert.equal(await js('document.getAnimations().filter(a=>a.playState==="running").length'), 0);
         assert.notEqual(await js("getComputedStyle(document.querySelector('.sprite')).backgroundPosition"), '0% 0%');
         await screenshot('reduced-motion-reaction.png'); await reactionEnded(); await pointerLeave();
-        await hover(true); await frame(); assert.ok(await handleOpacity() > .95); await hover(false);
-        return { repeatingAnimations: 0, staticWorkAndDisconnect: true, staticReaction: posed, handleWithoutTransition: true };
+        return { repeatingAnimations: 0, staticWorkAndDisconnect: true, staticReaction: posed };
       });
       await check('PET_REAL_ELAPSED_BLINK_AND_GREETING_CYCLE', async () => {
         await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
@@ -276,12 +294,12 @@ async function nativePetQa() {
         assert.ok(changed(start, end) <= 8, 'The idle loop seam must return to the same rendered pose.');
         return { phasePreserved: true, loopSeamChangedPixels: changed(start, end) };
       });
-      await check('PET_DRAG_AREA_FOCUS_AND_TRANSPARENT_MARGIN', async () => {
+      await check('PET_NO_DRAG_REGION_FOCUS_AND_TRANSPARENT_MARGIN', async () => {
         await pause(0); await js("document.body.style.background='transparent'"); await frame(); const image = await screenshot('transparent-idle.png');
-        const value = await js(`(()=>{const regions=[...document.querySelectorAll('*')].filter(e=>getComputedStyle(e).webkitAppRegion==='drag'&&getComputedStyle(e.parentElement).webkitAppRegion!=='drag');return {drag:regions.map(e=>e.className),area:regions.map(e=>e.offsetWidth*e.offsetHeight).reduce((a,b)=>a+b,0)}})()`);
-        assert.deepEqual(value.drag, ['move-handle']); assert.ok(Math.abs(value.area - 484) < 1); assert.equal(receipt.focusObserved, false); assert.equal(win.isFocused(), false);
+        const drag = await js(`[...document.querySelectorAll('*')].filter(e=>getComputedStyle(e).webkitAppRegion==='drag').length`);
+        assert.equal(drag, 0, 'An OS drag region would swallow clicks.'); assert.equal(receipt.focusObserved, false); assert.equal(win.isFocused(), false);
         assert.ok(pixel(image, 2, 2)[3] < 10);
-        return { dragAreaRatio: Number((value.area / (104 * 144)).toFixed(3)), physicalDragPerformed: false, transparentCorner: true };
+        return { osDragRegions: 0, physicalDragPerformed: false, transparentCorner: true };
       });
       receipt.passed = receipt.checks.every(item => item.passed);
     } catch (error) { receipt.bootstrapFailed = { message: error.message.slice(0, 320) }; }

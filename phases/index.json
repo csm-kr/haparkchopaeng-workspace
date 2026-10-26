@@ -145,6 +145,11 @@
       "dir": "27-bri-body-click-reactions",
       "status": "completed",
       "summary": "Full-body ImageGen Bri with random click reactions and a hover-revealed move handle; AI Bridge 0.1.14 published for three OS; production download catalogue updated and read back."
+    },
+    {
+      "dir": "28-bri-drag-anywhere",
+      "status": "completed",
+      "summary": "Drag Bri from anywhere (move cursor), left click reacts, right click opens the AI Bridge window; replaces the 0.1.14 move handle. Source and isolated macOS Electron QA; not released."
     }
   ]
 }

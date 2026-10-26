@@ -1,0 +1,21 @@
+{
+  "project": "hapark",
+  "phase": "28-bri-drag-anywhere",
+  "execution": "manual AC execution in the active Claude Code session",
+  "steps": [
+    {
+      "step": 0,
+      "name": "drag-anywhere-and-right-click",
+      "status": "completed",
+      "summary": "Removed the 0.1.14 move handle; pet.js tells a left click (reaction) from a 4px drag and sends payload-free startDrag/endDrag/openApp; main follows the real cursor while dragging and opens the main window on right click; version 0.1.15."
+    },
+    {
+      "step": 1,
+      "name": "native-verification",
+      "status": "completed",
+      "summary": "Connector 252 pass/7 skip; isolated macOS Electron pet QA 13/13 including drag and right-click signals."
+    }
+  ],
+  "sourceImplementationComplete": true,
+  "targetReleasePublished": false
+}

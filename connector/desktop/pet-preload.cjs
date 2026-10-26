@@ -14,4 +14,8 @@ contextBridge.exposeInMainWorld('bri', {
     if (latestMode !== undefined) listener(latestMode);
     return () => listeners.delete(listener);
   },
+  // Payload-free signals: main decides what they do and follows the real cursor while dragging.
+  startDrag() { ipcRenderer.send('connector:pet-drag-start'); },
+  endDrag() { ipcRenderer.send('connector:pet-drag-end'); },
+  openApp() { ipcRenderer.send('connector:pet-open-app'); },
 });

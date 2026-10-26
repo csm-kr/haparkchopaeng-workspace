@@ -23,7 +23,8 @@ const configPath = join(fixture.root, 'connector/desktop/apps.generated.json');
 const readFile = fs.readFile;
 fs.readFile = (path, ...options) => path === configPath ? Promise.resolve(JSON.stringify(packagedConfig)) : readFile(path, ...options);
 syncBuiltinESMExports();
-const windows = [], trays = [], states = [], petStates = [], external = [], events = [], requests = [], handlers = new Map();
+const windows = [], trays = [], states = [], petStates = [], external = [], events = [], requests = [], handlers = new Map(), listeners = new Map();
+const cursor = { x: 0, y: 0 };
 let protocolCalls = 0;
 const app = Object.assign(new EventEmitter(), {
   isPackaged: fixture.packaged === true, getVersion: () => fixture.version ?? '0.1.5', setName() {}, setPath(_key, value) { this.userData = value; },
@@ -32,12 +33,13 @@ const app = Object.assign(new EventEmitter(), {
   setAsDefaultProtocolClient: () => { protocolCalls += 1; return false; }, exit(code) { events.push('exit'); this.exitCode = code; }, quit() {},
 });
 class BrowserWindow extends EventEmitter {
-  constructor(options) { super(); this.options = options; this.visible = false; this.focusCalls = 0; this.inactiveCalls = 0; windows.push(this);
+  constructor(options) { super(); this.options = options; this.visible = false; this.focusCalls = 0; this.inactiveCalls = 0; this.position = [options.x ?? 0, options.y ?? 0]; windows.push(this);
     this.webContents = Object.assign(new EventEmitter(), { mainFrame: {}, send(channel, state) { if (channel === 'connector:pet-state') petStates.push(state); else states.push(state); }, setWindowOpenHandler() {} }); }
   isDestroyed() { return this.closed === true; } isVisible() { return this.visible; }
   show() { this.visible = true; } hide() { this.visible = false; } focus() { this.focusCalls += 1; }
   showInactive() { this.visible = true; this.inactiveCalls += 1; }
   setMenu() {}
+  getPosition() { return [...this.position]; } setPosition(x, y) { this.position = [x, y]; }
   close() { this.closed = true; this.emit('closed'); }
   loadFile() { queueMicrotask(() => { this.webContents.emit('did-finish-load'); this.emit('ready-to-show'); }); }
 }
@@ -49,10 +51,11 @@ class Tray extends EventEmitter {
 }
 const electron = { app, BrowserWindow, Tray, Menu: { buildFromTemplate: value => value },
   nativeImage: { createFromPath: () => ({ isEmpty: () => false, resize() { return this; }, setTemplateImage() {} }) },
-  ipcMain: { removeHandler(name) { handlers.delete(name); }, handle(name, handler) { handlers.set(name, handler); } },
+  ipcMain: { removeHandler(name) { handlers.delete(name); }, handle(name, handler) { handlers.set(name, handler); },
+    removeAllListeners(name) { listeners.delete(name); }, on(name, listener) { listeners.set(name, listener); } },
   nativeTheme: {}, safeStorage: { isEncryptionAvailable: () => true, getSelectedStorageBackend: () => 'test',
     encryptString: value => Buffer.from(value), decryptString: value => value.toString() }, shell: { openExternal: async url => external.push(url) },
-  screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } }) },
+  screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } }), getCursorScreenPoint: () => ({ ...cursor }) },
 };
 globalThis.__trayElectron = electron;
 const moduleText = Object.keys(electron).map(key => 'export const ' + key + '=globalThis.__trayElectron.' + key + ';').join('\n');
@@ -164,6 +167,22 @@ try {
     assert.equal(pet.inactiveCalls, quiet ? 0 : 1);
     assert.equal(pet.focusCalls, 0);
     assert.equal(petStates.at(-1), 'ready');
+    const fromPet = { sender: pet.webContents, senderFrame: pet.webContents.mainFrame }, stranger = { sender: {}, senderFrame: {} };
+    const signal = (name, from = fromPet) => listeners.get('connector:' + name)?.(from, { x: -9999, y: -9999 });
+    const settle = () => new Promise(resolve => setTimeout(resolve, 60));
+    window.hide(); const focusBefore = window.focusCalls;
+    signal('pet-open-app', stranger); assert.equal(window.visible, false, 'PET_SIGNALS_ONLY_FROM_THE_PET');
+    signal('pet-open-app');
+    if (!quiet) { assert.equal(window.visible, true, 'PET_RIGHT_CLICK_OPENS_APP'); assert.equal(window.focusCalls, focusBefore + 1); }
+    assert.equal(pet.focusCalls, 0);
+    pet.position = [1000, 600]; Object.assign(cursor, { x: 1040, y: 650 });
+    signal('pet-drag-start', stranger); cursor.x = 900; await settle();
+    assert.deepEqual(pet.position, [1000, 600], 'PET_DRAG_ONLY_FROM_THE_PET');
+    Object.assign(cursor, { x: 1040, y: 650 }); signal('pet-drag-start');
+    Object.assign(cursor, { x: 900, y: 500 });
+    await until(() => pet.position[0] === 860 && pet.position[1] === 450, 'pet follows the real cursor, not the page');
+    signal('pet-drag-end'); cursor.x = 100; await settle();
+    assert.deepEqual(pet.position, [860, 450], 'PET_DRAG_STOPS_ON_RELEASE');
     if (fixture.navigation) {
       await handlers.get('connector:open-web')(event, 'https://attacker.test');
       assert.equal(external.at(-1), 'http://localhost:3000/ai-chat');
