@@ -1,0 +1,27 @@
+{
+  "project": "hapark",
+  "phase": "27-bri-body-click-reactions",
+  "execution": "manual AC execution in the active Claude Code session",
+  "steps": [
+    {
+      "step": 0,
+      "name": "click-and-handle",
+      "status": "completed",
+      "summary": "selectBriReaction (random, no repeat; boop outside idle/ready), pet.js click reactions cleared on mode change, acceptFirstMouse and 104x144 pet window; drag limited to a hover-revealed move handle."
+    },
+    {
+      "step": 1,
+      "name": "imagegen-body-sprites",
+      "status": "completed",
+      "summary": "Codex ImageGen 12-cell full-body atlas, cleaned and aligned into sprites-v2.webp (800x720); v1 atlas removed from the pet."
+    },
+    {
+      "step": 2,
+      "name": "native-verification",
+      "status": "completed",
+      "summary": "Isolated macOS Electron pet QA 12 checks pass, including real input-event clicks; connector unit suite re-run."
+    }
+  ],
+  "sourceImplementationComplete": true,
+  "targetReleasePublished": false
+}
