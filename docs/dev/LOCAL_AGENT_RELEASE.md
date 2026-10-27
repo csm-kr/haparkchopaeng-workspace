@@ -14,6 +14,22 @@ Windows 파일은 정확한 소스와 실제 NSIS 설치·제거·코어 일치�
 
 상태별 ImageGen 브리를 포함한 [0.1.11 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.11-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 동일 소스 태그의 5개 CI job과 게시 workflow 3개 job이 모두 성공했고, 각 파일 SHA256·크기·공개 HTTP 200을 확인했다. Production 다운로드 설정을 갱신한 뒤 운영 API에서 세 OS 모두 0.1.11을 다시 확인했다. 정확한 소스·파일 해시·배포 영수증과 검증 범위는 [배포 기록](../../phases/25-bri-stateful-companion/RELEASE.md)을 따른다. 기존 unsigned prerelease 채널이며 사용자 컴퓨터의 기존 설치 앱은 자동으로 교체하지 않는다.
 
+## 2026-10-27 0.1.15 게시 (브리 어디든 끌기와 우클릭 앱 열기)
+
+✥ 손잡이를 없애고 브리 어디든 끌어 옮기며, 좌클릭은 반응만 하고 우클릭은 AI 브릿지 창을 여는 [0.1.15 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.15-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 PR52 병합 커밋 `2643343942826cf1076749c4c6f4f1d7b94a229a`이며 PR 마지막 커밋 `3ec8270`과 Git tree가 같다. 웹·서버 계약 변경은 없다. 같은 커밋의 Production 배포가 성공한 뒤 앱을 게시했다.
+
+PR CI [40396285322](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40396285322)와 같은 태그 CI [40470954621](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40470954621)이 각각 5개 job, 게시 workflow [40471851680](https://github.com/csm-kr/haparkchopaeng-workspace/actions/runs/40471851680)이 3개 job 모두 성공했다. PR CI와 게시 workflow의 Ubuntu job은 첫 시도에서 `apt-get install`이 Ubuntu 미러(`azure.archive.ubuntu.com`)에서 103 MB를 30분 안에 받지 못해 job 시간 제한으로 취소됐고, 코드 변경 없이 그 job만 재실행해 성공했다. 같은 태그 CI에서 Windows는 실제 OS 커서 호버를 포함한 펫 검사 12개, Mac·Ubuntu는 각 11개가 통과했다. Windows 파일은 같은 태그 CI의 Windows job이 만들고 설치·URI 실행·제거·코어 9개 일치를 확인한 산출물이며, CI 로그의 해시와 같다. 세 파일의 JSON 메타데이터를 GitHub 서버의 크기·SHA256과 대조했다. 공개 후에는 인증 없이 다시 받아 크기·SHA256이 같은지 확인했다.
+
+| 파일 | bytes | SHA256 |
+| --- | ---: | --- |
+| AI-Bridge-0.1.15-linux-x64.deb | 99622128 | `0b5bf5c93898b518df107cc5e68addc637109f4a47b1803d28d1ca846b5e0206` |
+| AI-Bridge-0.1.15-mac-arm64.dmg | 128605821 | `3f72ceb2c35f5285fbc91f004addffc59370de8dd24a080ed33bc13409763e23` |
+| AI-Bridge-0.1.15-win-x64.exe | 111819489 | `075def0c8b7c7fa09a6db98d55402bf1b894c8f59ca50c13a81c28ff437d51cf` |
+
+Production `LOCAL_AGENT_RELEASES`만 [published-releases.json](../../phases/28-bri-drag-anywhere/published-releases.json)으로 덮어썼다(갱신 시각 2026-10-27 17:49 KST). 덮어쓰기 전 앱의 실제 parser(`readLocalAgentReleases`)로 세 OS 모두 0.1.15인지 확인했다. 그 뒤 병합 커밋의 운영 배포를 재배포했고(`dpl_6Qbn1DSeZBkUyVpWS3sMGNRFJewt`), `hapark.vercel.app`에 연결됐다. 로그인 없이 운영 `/api/local-agent/downloads`는 401이다. 로그인한 브라우저로 다시 읽는 확인은 브라우저 프로필이 연결되지 않아 아직 하지 못했다.
+
+미검증 범위: 로그인한 운영 다운로드 API의 0.1.15 응답, 실제 사용자 PC에서 OS 포인터로 끌기·우클릭하는 동작, Windows·Linux(특히 Wayland)의 창 이동은 확인하지 않았다. 기존 미서명 채널이며 Developer ID·공증·Gatekeeper 승인은 없다. 사용자 PC의 설치 앱은 자동으로 교체하지 않는다.
+
 ## 2026-10-26 0.1.14 게시 (몸이 생긴 브리와 클릭 반응)
 
 짧은 다리 몸과 클릭 랜덤 반응, ✥ 이동 손잡이를 넣은 [0.1.14 테스트 릴리스](https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.14-preview.1)를 Windows x64·Mac Apple Silicon·Ubuntu x64로 공개했다. 소스는 PR50 병합 커밋 `9cada2bcf0d981a4a1e34f03470352f96242a461`이며 PR 마지막 커밋 `fdcbd78`과 Git tree가 같다. 웹·서버 계약 변경은 없다. 같은 커밋의 Production 배포가 성공한 뒤 앱을 게시했다.
