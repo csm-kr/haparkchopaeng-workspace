@@ -34,7 +34,7 @@ const development = !app.isPackaged && process.argv.includes('--connector-dev');
 const suppressAutoOpen = !app.isPackaged && process.argv.includes('--no-auto-open');
 const quietQa = !app.isPackaged && process.argv.includes('--connector-qa');
 const qaTray = !app.isPackaged && process.argv.includes('--connector-qa-tray');
-let applications = [], mainWindow, petWindow, selectedApp, store, attempt = null, identity = null, runtime = null, adapters = {}, revision = 0, requestController = null, monitoringController = null, monitorTimer = null, refreshPromise = null;
+let applications = [], mainWindow, petWindow, petDrag = null, selectedApp, store, attempt = null, identity = null, runtime = null, adapters = {}, revision = 0, requestController = null, monitoringController = null, monitorTimer = null, refreshPromise = null;
 let preferences = { autoStart: false, pet: false, firstBrowserOpened: false };
 let quitting = false, qaWindowHidden = false, tray;
 let runtimeCleanup = Promise.resolve();
@@ -240,6 +240,10 @@ function installIpc() {
   handle('auto-start', async enabled => { if (process.platform === 'linux') return { ok: false, message: 'Ubuntu에서는 데스크톱의 시작 프로그램 설정을 사용해 주세요.' }; app.setLoginItemSettings({ openAtLogin: enabled === true }); preferences.autoStart = enabled === true; state.autoStart = preferences.autoStart; await savePreferences(); publish(); return { ok: true }; });
   handle('pet', async enabled => { preferences.pet = enabled === true; state.pet = preferences.pet; if (preferences.pet) showPet(); else { petWindow?.close(); petWindow = null; } await savePreferences(); publish(); return { ok: true }; });
   handle('terminal', openTerminalFor);
+  for (const channel of ['pet-drag-start', 'pet-drag-end', 'pet-open-app']) ipcMain.removeAllListeners(`connector:${channel}`);
+  // The pet only sends payload-free signals, so the page never chooses where its window goes.
+  const fromPet = (name, handler) => ipcMain.on(`connector:${name}`, event => { if (event.sender === petWindow?.webContents && event.senderFrame === petWindow.webContents.mainFrame) handler(); });
+  fromPet('pet-drag-start', startPetDrag); fromPet('pet-drag-end', stopPetDrag); fromPet('pet-open-app', showWindow);
   handle('help', async provider => { if (!['codex', 'claude'].includes(provider)) return { ok: false }; await shell.openExternal(provider === 'codex' ? 'https://learn.chatgpt.com/docs/codex' : 'https://code.claude.com/docs/en/setup'); return { ok: true }; });
 }
 
@@ -251,6 +255,19 @@ function showPet() {
   window.setMenu(null); window.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('did-finish-load', publish);
   window.once('ready-to-show', () => { if (!quietQa && !window.isDestroyed()) window.showInactive(); });
-  window.on('closed', () => { if (petWindow === window) petWindow = null; });
+  window.on('closed', () => { if (petWindow === window) { petWindow = null; stopPetDrag(); } });
   window.loadFile(join(directory, 'renderer', 'pet.html'));
 }
+
+// Follows the real cursor while the pet reports a left-button drag; a lost release still stops after a minute.
+function startPetDrag() {
+  if (!petWindow || petWindow.isDestroyed() || petDrag) return;
+  const window = petWindow, start = screen.getCursorScreenPoint(), [x, y] = window.getPosition(), startedAt = Date.now();
+  petDrag = setInterval(() => {
+    if (window.isDestroyed() || Date.now() - startedAt > 60_000) return stopPetDrag();
+    const point = screen.getCursorScreenPoint();
+    window.setPosition(x + point.x - start.x, y + point.y - start.y);
+  }, 16);
+}
+
+function stopPetDrag() { clearInterval(petDrag); petDrag = null; }

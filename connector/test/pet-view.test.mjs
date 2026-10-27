@@ -42,31 +42,62 @@ test('pet applies only known modes, avoids duplicate announcements and releases 
   } finally { globalThis.document = previous.document; globalThis.window = previous.window; }
 });
 
-test('clicking Bri plays one short reaction, varies it on the next click and clears it on mode change', async () => {
+test('a left click plays one short reaction, varies it on the next click and clears it on mode change', async () => {
   const previous = { document: globalThis.document, window: globalThis.window, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
   const { BRI_REACTIONS } = await import('../desktop/renderer/bri-state.mjs');
-  let listener, onClick;
+  let listener;
+  const handlers = new Map(), signals = [];
   const timers = new Map(); let nextTimer = 0;
-  const character = { offsetWidth: 88, setAttribute() {}, addEventListener(name, callback) { assert.equal(name, 'click'); onClick = callback; } };
+  const character = { offsetWidth: 88, setAttribute() {}, setPointerCapture() {}, addEventListener(name, callback) { handlers.set(name, callback); } };
   const body = { dataset: {} };
+  const pointer = (type, clientX = 10, clientY = 10, button = 0) => handlers.get(type)({ type, button, pointerId: 1, clientX, clientY, preventDefault() { signals.push('prevented'); } });
+  const click = () => { pointer('pointerdown'); pointer('pointerup'); };
   try {
     globalThis.setTimeout = (callback, ms) => { timers.set(++nextTimer, { callback, ms }); return nextTimer; };
     globalThis.clearTimeout = id => { timers.delete(id); };
     globalThis.document = { body, querySelector: () => character, getElementById: () => ({ textContent: '' }) };
-    globalThis.window = { bri: { onState(callback) { listener = callback; return () => {}; } }, addEventListener() {} };
-    await import('../desktop/renderer/pet.js?click');
-    assert.equal(typeof onClick, 'function');
-    onClick();
+    globalThis.window = { bri: { onState(callback) { listener = callback; return () => {}; },
+      startDrag() { signals.push('start'); }, endDrag() { signals.push('end'); }, openApp() { signals.push('open'); } }, addEventListener() {} };
+    await import('../desktop/renderer/pet.js?pointer');
+    click();
     const first = body.dataset.reaction;
     assert.ok(BRI_REACTIONS.includes(first));
-    onClick();
+    click();
     assert.ok(BRI_REACTIONS.includes(body.dataset.reaction)); assert.notEqual(body.dataset.reaction, first);
     assert.equal(timers.size, 1, 'A new click replaces the pending reset.');
     const [{ callback, ms }] = timers.values();
     assert.ok(ms >= 800 && ms <= 1600); callback();
     assert.equal(body.dataset.reaction, undefined);
-    onClick(); listener('working');
+    click(); listener('working');
     assert.equal(body.dataset.reaction, undefined, 'A real status change ends the decorative reaction.');
-    onClick(); assert.equal(body.dataset.reaction, 'boop');
+    click(); assert.equal(body.dataset.reaction, 'boop');
+    assert.deepEqual(signals, [], 'A click neither drags nor opens the app.');
+  } finally { Object.assign(globalThis, previous); }
+});
+
+test('dragging anywhere on Bri moves the pet without a reaction, and a right click opens the app', async () => {
+  const previous = { document: globalThis.document, window: globalThis.window };
+  const handlers = new Map(), signals = [];
+  const character = { offsetWidth: 88, setAttribute() {}, setPointerCapture(id) { signals.push(`capture:${id}`); }, addEventListener(name, callback) { handlers.set(name, callback); } };
+  const body = { dataset: {} };
+  const pointer = (type, clientX = 10, clientY = 10, button = 0) => handlers.get(type)({ type, button, pointerId: 7, clientX, clientY, screenX: 0, screenY: 0, preventDefault() { signals.push('prevented'); } });
+  try {
+    globalThis.document = { body, querySelector: () => character, getElementById: () => ({ textContent: '' }) };
+    globalThis.window = { bri: { onState() { return () => {}; },
+      startDrag(...args) { signals.push(['start', ...args]); }, endDrag(...args) { signals.push(['end', ...args]); }, openApp(...args) { signals.push(['open', ...args]); } }, addEventListener() {} };
+    await import('../desktop/renderer/pet.js?drag');
+    pointer('pointerdown', 10, 10); pointer('pointermove', 12, 11);
+    assert.deepEqual(signals, ['capture:7'], 'A tiny wobble is still a click.');
+    pointer('pointermove', 30, 40); pointer('pointermove', 60, 80);
+    pointer('pointerup', 60, 80); pointer('lostpointercapture', 60, 80);
+    assert.deepEqual(signals, ['capture:7', ['start'], ['end']]);
+    assert.equal(body.dataset.reaction, undefined, 'A drag never plays a reaction.');
+    signals.length = 0;
+    pointer('pointerdown', 10, 10, 2); pointer('pointermove', 90, 90, 2); pointer('pointerup', 90, 90, 2);
+    handlers.get('contextmenu')({ preventDefault() { signals.push('prevented'); } });
+    assert.deepEqual(signals, ['prevented', ['open']], 'Only the left button drags; the right button opens the app.');
+    assert.equal(body.dataset.reaction, undefined);
+    pointer('pointerdown', 10, 10); pointer('pointermove', 50, 50); pointer('pointercancel', 50, 50);
+    assert.deepEqual(signals.slice(-2), [['start'], ['end']], 'A cancelled drag still ends.');
   } finally { Object.assign(globalThis, previous); }
 });
