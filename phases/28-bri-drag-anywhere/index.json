@@ -14,8 +14,23 @@
       "name": "native-verification",
       "status": "completed",
       "summary": "Connector 252 pass/7 skip; isolated macOS Electron pet QA 13/13 including drag and right-click signals."
+    },
+    {
+      "step": 2,
+      "name": "release-0-1-15",
+      "status": "completed",
+      "summary": "0.1.15 three-OS prerelease published from 2643343 (PR CI 40396285322, exact-tag CI 40470954621, publisher 40471851680; Ubuntu jobs rerun after apt mirror timeouts); public downloads re-hashed; Production LOCAL_AGENT_RELEASES overwritten and redeployed. Logged-in downloads API readback still pending (browser profile not connected)."
     }
   ],
   "sourceImplementationComplete": true,
-  "targetReleasePublished": false
+  "targetReleasePublished": true,
+  "installedUpgradeVerified": false,
+  "releaseVersion": "0.1.15",
+  "releaseTag": "ai-bridge-v0.1.15-preview.1",
+  "releaseUrl": "https://github.com/csm-kr/haparkchopaeng-workspace/releases/tag/ai-bridge-v0.1.15-preview.1",
+  "releaseSource": "2643343942826cf1076749c4c6f4f1d7b94a229a",
+  "validationRunId": 40470954621,
+  "assetWorkflowRunId": 40471851680,
+  "productionCatalogVerified": false,
+  "productionDeployment": "dpl_6Qbn1DSeZBkUyVpWS3sMGNRFJewt"
 }

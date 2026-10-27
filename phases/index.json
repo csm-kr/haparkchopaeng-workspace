@@ -149,7 +149,7 @@
     {
       "dir": "28-bri-drag-anywhere",
       "status": "completed",
-      "summary": "Drag Bri from anywhere (move cursor), left click reacts, right click opens the AI Bridge window; replaces the 0.1.14 move handle. Source and isolated macOS Electron QA; not released."
+      "summary": "Drag Bri from anywhere (move cursor), left click reacts, right click opens the AI Bridge window; replaces the 0.1.14 move handle. Released as 0.1.15 (three-OS prerelease, production catalogue updated; logged-in readback pending)."
     }
   ]
 }
